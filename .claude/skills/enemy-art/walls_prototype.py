@@ -145,39 +145,56 @@ def gallery_tile():
 # C - THE RELIQUARY (feature wall, emissive): a Cradle print bay. A recessed glass capsule lit by the
 #     rendered soul, a half-formed body curled inside, feed lines from the ceiling. Heavy riveted steel.
 # ===================================================================================================
-def cradle_bay():
+def reliquary_plate():
+    """C hall BASE: heavy riveted plate in uneven widths, a fuel manifold under the ceiling, a floor channel
+    with a thin trickle of rendered soul. No focal object - it must repeat along a run without a beat."""
     L0 = [backing("darkmetal", bevel=0.5)]
-    L0 += riveted_plate([(-12, -4), (70, -4), (70, H + 4), (-12, H + 4)], "gunmetal", spacing=26, inset=6, rivet_r=1.6, bevel=3, k=0, prio=1)
-    L0 += riveted_plate([(186, -4), (W + 12, -4), (W + 12, H + 4), (186, H + 4)], "gunmetal", spacing=26, inset=6, rivet_r=1.6, bevel=3, k=0, prio=1)
-    L0.append(slab(chamfer_rect(78, 26, 178, 236, 16), "darkmetal", bevel=6, slope=0.7, op="carve"))
-    # the soul light filling the capsule: hottest at its centre (emissive = the shape's own height)
-    L1 = [slab(chamfer_rect(88, 38, 168, 226, 12), "capsule", bevel=3, slope=0.5, k=0),
-          blob(128, 132, 36, 90, "soul", depth=20, glow=1.0, k=0, prio=5)]
-    # the print: a half-formed body, knees drawn up, head bowed - a dark shape against the light
-    body = "rubber"
-    L2 = [blob(128, 84, 9, 10, body, depth=5),                            # head bowed
-          limb(128, 94, 126, 104, 4, 4, body),                             # neck
-          blob(124, 126, 13, 24, body, depth=7, angle=0.15),               # torso, curled
-          limb(118, 150, 142, 154, 8, 7, body), limb(142, 154, 136, 186, 7, 5, body),   # thigh up, shin down
-          limb(120, 108, 110, 132, 4.5, 3.5, body), limb(110, 132, 132, 146, 3.5, 3, body),  # arm hugging the knees
-          limb(136, 186, 146, 192, 3.5, 3, body),                          # foot
-          limb(128, 40, 128, 76, 1.6, 1.6, "darkmetal"),                  # the feed line to the skull
-          limb(128, 210, 128, 226, 1.6, 1.6, "darkmetal")]
-    L3 = [slab(chamfer_rect(84, 34, 172, 46, 4), "gunmetal", bevel=3, k=0),
-          slab(chamfer_rect(84, 218, 172, 232, 4), "gunmetal", bevel=3, k=0),
-          limb(96, 52, 96, 210, 1.2, 1.2, "livery", op="union"),          # a glint down the glass
-          limb(-20, 12, W + 20, 12, 5, 5, "gunmetal"),
-          limb(108, 12, 108, 36, 3.2, 3.2, "gunmetal"), limb(148, 12, 148, 36, 3.2, 3.2, "gunmetal"),
-          blob(184, 60, 3.5, 3.5, "cyan", depth=3)]
-    stencils = [("KR-03", 18, 236, (120, 128, 140))]
-    return bake([L0, L1, L2, L3], seed=45, stencils=stencils)
+    for x0, x1 in ((-12, 92), (96, 168), (172, W + 12)):
+        L0 += riveted_plate([(x0, 40), (x1, 40), (x1, 226), (x0, 226)], "gunmetal", spacing=24, inset=6, rivet_r=1.6, bevel=3, k=0, prio=1)
+    L0.append(slab([(-12, 230), (W + 12, 230), (W + 12, H + 4), (-12, H + 4)], "darkmetal", bevel=2, k=0, prio=2))
+    L0.append(limb(-20, 243, W + 20, 243, 3.0, 3.0, "darkmetal", op="carve"))
+    L1 = [limb(-20, 243, W + 20, 243, 1.3, 1.3, "soul", glow=0.85),               # the soul trickle in the channel
+          limb(-20, 14, W + 20, 14, 7, 7, "gunmetal"), limb(-20, 30, W + 20, 30, 3.5, 3.5, "rust")]
+    for x in (60, 188):                                                            # manifold clamps
+        L1.append(slab([(x - 7, 4), (x + 7, 4), (x + 7, 36), (x - 7, 36)], "darkmetal", bevel=2, k=0))
+    stencils = [("KR-03", 104, 210, (120, 128, 140))]
+    return bake([L0, L1], seed=45, stencils=stencils)
+
+
+def soul_condenser():
+    """C SIGNATURE ACCENT (replaces the rejected cradle bay - no body, no figure): a refinery condenser. A
+    glass column of rendered soul, coiled filtration line around it, valves and a pressure gauge. The light is
+    the story: this is what the Cradles burn."""
+    L0 = [backing("darkmetal", bevel=0.5)]
+    L0 += riveted_plate([(-12, -4), (64, -4), (64, H + 4), (-12, H + 4)], "gunmetal", spacing=26, inset=6, rivet_r=1.6, bevel=3, k=0, prio=1)
+    L0 += riveted_plate([(192, -4), (W + 12, -4), (W + 12, H + 4), (192, H + 4)], "gunmetal", spacing=26, inset=6, rivet_r=1.6, bevel=3, k=0, prio=1)
+    L0.append(slab(chamfer_rect(70, 20, 186, 240, 14), "darkmetal", bevel=6, slope=0.7, op="carve"))
+    # the column: glass with the soul inside, hottest in the middle, settling dregs at the bottom
+    L1 = [slab(chamfer_rect(98, 44, 158, 214, 10), "capsule", bevel=3, slope=0.5, k=0),
+          blob(128, 124, 22, 76, "soul", depth=16, glow=1.0, k=0, prio=5),
+          blob(128, 200, 24, 10, "soul", depth=6, glow=0.6, k=0, prio=5)]
+    # filtration coil wound around the column (in front), valves, gauge
+    L2 = []
+    for i in range(6):
+        y = 64 + i * 26
+        L2.append(limb(94, y, 162, y + 12, 3.2, 3.2, "gunmetal"))
+    L2 += [slab(chamfer_rect(88, 30, 168, 50, 5), "gunmetal", bevel=3, k=0),            # top cap
+           slab(chamfer_rect(88, 208, 168, 230, 5), "gunmetal", bevel=3, k=0),          # base
+           limb(128, -4, 128, 30, 6, 6, "gunmetal"),                                     # feed from the manifold
+           limb(168, 220, W + 20, 220, 4, 4, "gunmetal"),                                # outflow to the next bay
+           blob(178, 120, 9, 9, "darkmetal", depth=5), blob(178, 120, 5, 5, "livery", depth=3, op="add"),   # gauge
+           limb(178, 120, 181, 115, 1.0, 1.0, "darkmetal", op="add"),
+           blob(78, 170, 6, 6, "rust", depth=4), limb(78, 170, 78, 220, 2.5, 2.5, "gunmetal"),             # valve + line
+           blob(178, 70, 3.5, 3.5, "cyan", depth=3)]                                    # status lamp
+    stencils = [("KR-03", 16, 236, (120, 128, 140))]
+    return bake([L0, L1, L2], seed=46, stencils=stencils)
 
 
 # ===================================================================================================
 # D - THE WOUND: the facility gives way to the being's body. Plating torn and pushed aside, living
 #     tissue bulging through, ichor veins in the seams, a drill bit still buried in it.
 # ===================================================================================================
-def wound_breach():
+def wound_breach(drill=False):
     rnd = random.Random(5)
     L0 = [backing("flesh_dk", bevel=0.5)]
     # tissue: dense swollen fibre bundles filling the face, bound by creases - muscle under strain
@@ -215,6 +232,8 @@ def wound_breach():
     L1.append(limb(-20, 6, W + 20, 6, 2.5, 2.5, "rust"))
     L2 = []
     # the drill: a dead bit buried in the tissue, flutes and collar
+    if not drill:   # the drill is a FOCAL POINT: never on a base wall (it repeats along a run)
+        return bake([L0, L1], seed=57, stencils=[("D-41", 10, 22, (120, 126, 134))])
     L3 = spike(252, 252, 132, 176, 20, "gunmetal", bend=-8, tip=2.0, segments=8, edge="darkmetal")
     for t in (0.18, 0.36, 0.54, 0.72):
         x, y = 252 + (132 - 252) * t, 252 + (176 - 252) * t
@@ -253,8 +272,8 @@ def core_lattice():
     return bake([L0, L1], seed=69)
 
 
-WALLS = [("A_habitation_ring_panel", ring_panel), ("B_gallery_tile", gallery_tile), ("C_reliquary_cradle_bay", cradle_bay),
-         ("D_wound_breach", wound_breach), ("E_core_lattice", core_lattice)]
+WALLS = [("A_habitation_ring_panel", ring_panel), ("B_gallery_tile", gallery_tile), ("C_reliquary_plate", reliquary_plate), ("C_soul_condenser", soul_condenser),
+         ("D_wound_breach", wound_breach), ("D_wound_drill_accent", lambda: wound_breach(drill=True)), ("E_core_lattice", core_lattice)]
 
 if __name__ == "__main__":
     out = sys.argv[1]

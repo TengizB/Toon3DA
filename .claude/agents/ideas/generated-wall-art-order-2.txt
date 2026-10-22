@@ -5,6 +5,12 @@ CREATED: 2026-10-22
 IMPLEMENTED: -
 ---
 
+THE WALL KNOWLEDGE DOCUMENT IS docs/wall-art-creation-guide.txt - how walls, doors, columns, floors
+and ceilings must be created: the format, tiling, trim lines, the region set, the placement rules, the
+design and repetition rules, materials, glow, output, verification, every lesson and every piece of owner
+feedback. Read it before any work in this order; update it in the same commit as any change to what it
+describes. The enemy-art kit's technique (docs/sprite-art-creation-guide.txt sections 1-4) is the tool.
+
 Series: generated-wall-art.txt - THE REGION WALL SET, THE SYMBOL TABLE and THE PLACEMENT RULES sections
 are this order's spec. Consumes order 1's manifest (order 1 R11). Read docs/environment-tileset-system.txt,
 docs/wall-renderer-guide.txt and art-direction sections 3-6 + RENDER RESOLUTION TIERS first.
@@ -49,7 +55,7 @@ IN - PART 1 (choosing)
     per-room wall-theming passes in LevelGenerator / LinearCorridorGenerator / CavernGenerator that
     stamp old-meaning chars ('Z' cryo, 'M' medical ...) and the cavern biome char lists are REPLACED by
     the finisher's family stamping - no generator writes a wall picture symbol again.
-  - The placement rules P1-P8 with constants WALL_SET_* in LevelGenConstants; their own RNG stream
+  - The placement rules P1-P9 (guide section 7, incl. P9 focal spacing) with constants WALL_SET_* in LevelGenConstants; their own RNG stream
     (GameMath.wallSetSeed: the paletteSymbolSeed derivation with a new salt) so the generator's random
     sequence is untouched.
 IN - PART 2 (drawing)
@@ -68,6 +74,8 @@ IN - PART 2 (drawing)
     packed int[] layout: row 0 = south edge, column 0 = west) instead of generating the ten procedural
     materials; mood bindings point at the region set's surfaces; FloorCeilingRenderer's pipeline,
     mips, bands and batching are unchanged.
+  - docs/wall-art-creation-guide.txt: sections 6.4, 7 and 13 lose their [PLANNED: order 2] markers and
+    describe the shipped symbol table, placement rules (incl. P9 spacing) and engine contract.
   - art-direction: V6 exemption list gains "wall emissives"; new section "WALLS" (sets, atlas,
     variants, glow, LOD); section 6 rewritten for surfaces from region sets.
 IN - PART 3 (deleting) - the old layer goes completely (W12)
@@ -226,5 +234,5 @@ None.
 
 RELATED
 -------
-  generated-wall-art.txt, -order-1, symbol-sprite-reuse-system*.txt, render-performance-full-hd (R16/R18),
+  generated-wall-art.txt, -order-1, docs/wall-art-creation-guide.txt, symbol-sprite-reuse-system*.txt, render-performance-full-hd (R16/R18),
   docs/environment-tileset-system.txt, docs/wall-renderer-guide.txt, docs/art-direction.txt

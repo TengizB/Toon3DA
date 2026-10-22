@@ -663,6 +663,7 @@ Reads/writes persistent run statistics via LibGDX `Preferences`. Used for permad
 | Narrative CONTENT contract: what a line may say, the doctrine, the joke policy, ORA's voice, the comprehension bar | `docs/narrative-authority.txt` |
 | Art direction: palette, the five region lighting moods, the atmosphere grade, emissive exemption, floor/ceiling materials, view vignette, `-Dtoon3d.forceMood`, the UI kit, the SUIT vs FACILITY ink table (which ink a screen uses) | `docs/art-direction.txt` |
 | Gameplay sound (procedural SFX: synthesis toolkit, catalog, mixing, firing sites, add-a-sound) | `docs/sound-system.txt` |
+| Creating WALLS, DOORS, COLUMNS, FLOORS, CEILINGS (region wall sets, room families, slots, tiling, trim lines, placement rules, the repetition / no-focal-point / no-figure rules, glow, output, verification, owner feedback): the generated-wall-art series' knowledge document | `docs/wall-art-creation-guide.txt` |
 | Creating ANY generated art (enemy sprites first; props, pickups, effects later): the method, materials, creature design, animation clips, reactions, effects, engine contract, verification, lessons, recipes — plus the generator skill | `docs/sprite-art-creation-guide.txt` + `.claude/skills/enemy-art/SKILL.md` |
 | Turn/tick system architecture | `docs/tick-system.txt` |
 | Game balance — current state, every number/system/formula and known problems | `docs/game-balance-knowledge.txt` |
@@ -678,7 +679,7 @@ Reads/writes persistent run statistics via LibGDX `Preferences`. Used for permad
 
 ## Docs Directory (`docs/`)
 
-All 21 reference docs — read these before implementing anything in their domain:
+All 23 reference docs — read these before implementing anything in their domain:
 
 | File | Lines | What it covers |
 |---|---|---|
@@ -696,6 +697,7 @@ All 21 reference docs — read these before implementing anything in their domai
 | `procedural-vitals-hud.txt` | 202 | HUD rendering pipeline — procedural shapes, no sprite textures |
 | `enemy-system.txt` | 831 | Enemy types, AI turn logic, pathfinding, attack resolution |
 | `sprite-art-creation-guide.txt` | 589 | HOW generated art is made (generated-enemy-art series): non-negotiables (generated in code, never copy the old image-model textures, one style lock, owner approval gate), the kit's rendering technique (height fields, smooth max, light rig, ramps, outlines, cleanup), materials + family inks, creature design briefs, canvas/scale, animation (rigs, poses, clips, the standard clip set, the atlas + glow atlas + clips.json MANIFEST schema), reactions to every event (order 3: hit outcomes, recoil, wounded, statuses, remains, projectiles), effects (the effect sets, fx manifest, emissive vs lit, the particle runtime), the engine contract, verification, lessons, recipes. **Read before creating or changing any generated sprite.** |
+| `wall-art-creation-guide.txt` | 456 | HOW environment surfaces are made with the enemy-art kit (generated-wall-art series): non-negotiables (region separation, NO FOCAL POINT ON A BASE WALL, NO FIGURES IN WALLS), the 256x256 face, the 3-tile tiling canvas and the edge rule, trim lines, the REGION WALL SET (hall slots, six room families + signature, doors, columns, surfaces) and the 21-symbol slot table, the placement rules, designing + the repetition rules, materials, glow/animation, atlas + manifest, engine contract, verification + owner gate, lessons and owner feedback, the five region briefs, recipes. **Read before creating or changing any wall, door, column, floor or ceiling, or how levels choose walls.** |
 | `sound-system.txt` | 290 | The gameplay SFX layer: why it is procedural, the package split, the `GameMath` synthesis toolkit (noise, one-pole filters, percussive envelope, correctly-integrated chirps, ring mod, soft clip), the sound catalog and its design rule, variation without repetition fatigue, distance/pan/rear, the five mixing rules + the time-detected turn boundary, ownership & dispose, every firing site, the EFFECTS setting, ADD A SOUND, and what is deliberately not built yet. **Single source of truth; update on any audio change.** |
 | `tick-system.txt` | 167 | Turn-based game loop, TickEventBus, TickSubscriber pattern |
 | `xp-level-progression.txt` | 269 | Player leveling curve, attribute rewards, tagged perks + keystones (the build system) |

@@ -5,6 +5,12 @@ CREATED: 2026-10-22
 IMPLEMENTED: -
 ---
 
+THE WALL KNOWLEDGE DOCUMENT IS docs/wall-art-creation-guide.txt - how walls, doors, columns, floors
+and ceilings must be created: the format, tiling, trim lines, the region set, the placement rules, the
+design and repetition rules, materials, glow, output, verification, every lesson and every piece of owner
+feedback. Read it before any work in this order; update it in the same commit as any change to what it
+describes. The enemy-art kit's technique (docs/sprite-art-creation-guide.txt sections 1-4) is the tool.
+
 Series: generated-wall-art.txt (region-set model, symbol table, rules W1-W12). Method: order 1's rules
 R1-R12 (face/surface size, tiling, trim lines, variants, rooms read as rooms, glow, animation, mips,
 atlas, keycard doors, manifest, determinism) apply UNCHANGED. CONTENT ONLY plus one registry edit per
@@ -31,7 +37,8 @@ IN
   - Shipped per region: assets/textures/walls/generated/<region>.walls.png / .glow.png / .walls.json /
     .floor.png / .ceiling.png.
   - RegionWallSets: the two rows switch from the set-A alias to their own manifests.
-  - Docs: the guide's WALLS AND SURFACES roster + any new lessons; art-direction WALLS roster;
+  - Docs: docs/wall-art-creation-guide.txt sections 5 (trim lines), 15 (lessons), 16 D and E (final designs),
+    every [PLANNED] marker gone; art-direction WALLS roster;
     environment-tileset-system section 15 roster.
   - SERIES CLOSE: delete .claude/skills/enemy-art/walls_prototype.py; final run-game probe of every
     region (interleaved against the order-3 build) recorded here; APK asset size before order 2 vs now
@@ -43,11 +50,12 @@ OUT
 
 VISUAL DESIGN - REGION D, THE WOUND (mood corrupted_violet)
 -----------------------------------------------------------
-Muscle under strain (dense swollen fibre bundles with constrictions - the prototype's third pass),
-translucent glands lit by ichor (op="add", or the muscle buries them), branching ichor veins, the torn
-facility edge along the top with rivets still in it. No red: the wound reads through anatomy and glow.
-  HALL      BASE x3 the prototype WITHOUT the drill (the drill on every tile was wallpaper): torn plating
-            at different heights; one variant pure tissue. STRUCTURE a surviving steel column wrapped
+Muscle under strain (dense swollen fibre bundles with constrictions - the prototype's third pass), thin
+low-contrast ichor veins, the torn facility edge along the top with rivets still in it. The big glands
+and the drill are FOCAL (guide 15.3, 15.5) and live only in LIGHT and the signature ACCENT. No red: the
+wound reads through anatomy and glow.
+  HALL      BASE x3 the revised prototype WITHOUT the drill AND without the big glands: fibres, thin
+            veins, torn plating at different heights; one variant pure tissue; passes the 6-copy strip. STRUCTURE a surviving steel column wrapped
             and half-swallowed. LIGHT a gland cluster (8 glow frames, a double heartbeat, animate=all).
             SERVICE a severed pipe dripping into tissue. VENT cables grown through like nerves. MARKER
             a facility sign plate (D-xx) half absorbed. BREACH an open wound: a vertical split showing
@@ -55,18 +63,20 @@ facility edge along the top with rivets still in it. No red: the wound reads thr
   MEDICAL   a medical wall overgrown: white livery visible through membrane. ACCENT a dispenser
             swallowed, its cyan lamp still lit inside the membrane.
   SECURITY  a blast-door section bent inward by tissue. ACCENT a gun rack fused into muscle.
-  CONTAINMENT membrane sacs in the wall. ACCENT a large sac with a shape inside (glow frames, animate=some).
+  CONTAINMENT membrane sacs in the wall. ACCENT a large lit sac, slowly pulsing (glow frames, animate=some;
+            no shape inside - W14).
   MACHINERY a reactor housing crushed by a fist of muscle. ACCENT a drill motor, still on its mount.
   RESEARCH  terminals swallowed by membrane, screens glowing through. ACCENT a cable bundle like a
             nerve trunk ending in a terminal.
   STORAGE   crates pulled into the tissue. ACCENT a shutter jammed open by a growth.
-  SIGNATURE THE DRILL FACE: BASE x2 the buried drill bit (the prototype's), scarred tissue around it;
-            ACCENT the drill's collar and a severed drive shaft.
+  SIGNATURE THE DRILL FACE: BASE x2 scarred tissue with spiral drill tracks (no drill - W13);
+            ACCENT the buried drill bit (the prototype's), collar included, FULLY INSIDE its face (guide
+            section 4 EDGE RULE - the prototype's collar crossed the edge).
   DOORS     a facility door forced half shut by tissue, membrane over its edges; keycard panels.
   COLUMNS   a tissue-wrapped column (square: a bone-ribbed pillar).
   FLOOR     membrane over deck fragments; CEILING torn conduit and hanging tissue.
   LESSONS (into the guide): separate lobes read as sausages; parallel full-height bundles read as planks
-  unless constricted and varied; glands must be op="add".
+  unless constricted and varied; glands must be op="add" (already in guide section 15).
 
 VISUAL DESIGN - REGION E, THE CORE (mood core_white_violet)
 ----------------------------------------------------------
@@ -84,8 +94,8 @@ hollows. Purple is semantic (V5): the violet comes from the MOOD; materials stay
             and lattice showing at the edges): MEDICAL, SECURITY, CONTAINMENT, MACHINERY, RESEARCH,
             STORAGE each BASE x2 + ACCENT. The facility is the foreign body now.
   SIGNATURE THE MEMORY HOLLOW: BASE x2 large hollows of soul light with lattice framing; ACCENT the
-            memory window - a faint human silhouette in the light (the original self, story/03; no face,
-            no text; animate=all, slow).
+            soul well - the lattice's lines converging on a deep point of soul light (no figure - W14;
+            animate=all, slow).
   DOORS     a lattice iris (nacre leaves meeting at a soul-lit centre); keycard panels as nacre-set lenses
             in the keycard colour.
   COLUMNS   a nacre trunk (square: a camp-built steel post wrapped by lattice).
@@ -114,6 +124,7 @@ ACCEPTANCE CRITERIA
 
 IMPLEMENTATION PLAN
 -------------------
+  0. READ      docs/wall-art-creation-guide.txt (sections 4-8, 15, 16 D/E)
   1. CONTENT   Region D: hall -> rooms -> signature -> doors/columns -> surfaces; GATE
   2. DATA      (java-architect) its RegionWallSets row; captures
   3. CONTENT   Region E: the same; GATE
@@ -137,7 +148,7 @@ ASSUMPTIONS
 -----------
   AS1  D's breachBase is 0 (its base is already tissue); its BREACH slot is the open wound.
   AS2  E's camp rooms reuse set A's family builders plus a clamp layer - one builder, two regions.
-  AS3  The memory-window figure is a silhouette only.
+  AS3  No figure in the Core: the memory theme is carried by light and convergence, never a body.
 
 
 DECISIONS

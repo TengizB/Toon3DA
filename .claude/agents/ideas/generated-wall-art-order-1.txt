@@ -5,8 +5,14 @@ CREATED: 2026-10-22
 IMPLEMENTED: -
 ---
 
+THE WALL KNOWLEDGE DOCUMENT IS docs/wall-art-creation-guide.txt - how walls, doors, columns, floors
+and ceilings must be created: the format, tiling, trim lines, the region set, the placement rules, the
+design and repetition rules, materials, glow, output, verification, every lesson and every piece of owner
+feedback. Read it before any work in this order; update it in the same commit as any change to what it
+describes. The enemy-art kit's technique (docs/sprite-art-creation-guide.txt sections 1-4) is the tool.
+
 Series: generated-wall-art.txt (read it first: the region-set model, the symbol table, rules W1-W12,
-decisions). Method: docs/sprite-art-creation-guide.txt (the enemy-art kit). OFFLINE ONLY: no Java.
+decisions). OFFLINE ONLY: no Java.
 
 
 OVERVIEW
@@ -31,9 +37,10 @@ IN
   - The region A set: 36 wall faces + floor + ceiling (VISUAL DESIGN below).
   - Shipped: assets/textures/walls/generated/outer_facility.walls.png, .glow.png, .walls.json,
     outer_facility.floor.png, outer_facility.ceiling.png.
-  - docs/sprite-art-creation-guide.txt: new section "WALLS AND SURFACES" (method, tiling, trim lines,
-    groups and slots, variants, keycard doors, manifest schema, prototype lessons) + recipes "ADD A
-    REGION SET" / "ADD A ROOM FAMILY"; SKILL.md gains walls.py commands.
+  - docs/wall-art-creation-guide.txt: sections 2 and 12 lose their [PLANNED: order 1] markers and
+    describe the shipped walls.py and output; section 16 A records the final region A design; new
+    lessons go into section 15. docs/sprite-art-creation-guide.txt section 13 "OTHER CONTENT" gains a
+    one-line pointer to the wall guide; SKILL.md gains walls.py commands and the same pointer.
 OUT
   - Any Java (order 2). Regions B-E (orders 3-4). Committing previews (never - guide 11).
 
@@ -105,14 +112,14 @@ STORAGE         corrugated steel shutters and stacked crate slots,
                 BASE x2 + ACCENT = a roll-up shutter half open (dark gap, a crate edge).
 SIGNATURE       CREW QUARTERS of the company town - the region's special-room look:
                 BASE x2 = rows of crew lockers, name plates scratched off;
-                ACCENT = one locker door ajar, dark inside, a personal photo frame left (no face).
+                ACCENT = one locker door ajar, dark inside, a scarf left on its hook (no figure - W14).
 DOORS           a painted livery sliding door with a porthole and rubber seal; keycard doors add the
                 coloured lock panel + frame stripe (R10).
 COLUMNS         round: a painted steel pillar with the bump rail ring; square: a boxed cable riser.
 FLOOR           deck plates with a worn rubber runner; CEILING: cable trays and strip-lamp housings
                 (no glow - the pipeline has no surface emissives). Value bands: floor 0.10-0.24,
                 ceiling 0.06-0.18 average luminance (art-direction section 6).
-Story details (W8): ring serials, the evacuation board, the scratched name plates, the left photo.
+Story details (W8): ring serials, the evacuation board, the scratched name plates, the left scarf.
 
 
 TECHNICAL NOTES
@@ -156,7 +163,9 @@ ACCEPTANCE CRITERIA
       surfaces; ids per R11; the LIGHT face has 4 glow frames flagged animate=some; atlas <= 2048x2048 and fully opaque.
   A4  The hall strip and every room-family strip tile with no seam; the surfaces tile 3x3 with no seam.
   A5  On the contact sheet at 1x, each room family is identifiable without its label (R5).
-  A6  Guide section "WALLS AND SURFACES" + recipes; SKILL.md updated.
+  A6  docs/wall-art-creation-guide.txt updated (sections 2, 12, 15, 16 A); SKILL.md + sprite guide pointer.
+  A6b Every BASE (hall + six room bases + signature base) passes the 6-copy strip test (guide 8.3 R-1)
+      and no focal shape crosses a tile edge (guide section 4 EDGE RULE).
   A7  The owner has seen the sheets, strips, flicker GIF and in-engine captures (hall, a room, a door)
       under cool_steel; the verdict is recorded in DECISIONS.
 
@@ -167,7 +176,7 @@ IMPLEMENTATION PLAN
   2. BUILDER   walls.py: bake, REGIONS table, writers, previews
   3. CONTENT   hall -> rooms -> signature -> doors/columns -> surfaces
   4. TESTS     None. Not balance-bearing; verified by regeneration, previews and in-engine captures.
-  5. DOCS      the guide's WALLS AND SURFACES section, SKILL.md
+  5. DOCS      docs/wall-art-creation-guide.txt, SKILL.md, the sprite guide pointer
   6. GATE      send everything; STOP; record the verdict.
 
 RISKS AND UNKNOWNS
@@ -182,7 +191,7 @@ CHECKPOINTS
   CP2  walls.py writes a valid manifest + atlas + glow + mips for the HALL group alone
   CP3  all six room families + SIGNATURE generated and in the manifest
   CP4  doors, columns, floor, ceiling generated; shipped files committed
-  CP5  guide + SKILL.md updated
+  CP5  docs/wall-art-creation-guide.txt + SKILL.md + sprite guide pointer updated
   CP6  owner verdict recorded in DECISIONS (approval, or the requested changes done and re-shown)
 
 
@@ -205,4 +214,5 @@ None.
 
 RELATED
 -------
-  generated-wall-art.txt, docs/sprite-art-creation-guide.txt, .claude/skills/enemy-art/
+  generated-wall-art.txt, docs/wall-art-creation-guide.txt, docs/sprite-art-creation-guide.txt,
+  .claude/skills/enemy-art/

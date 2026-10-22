@@ -11,9 +11,12 @@ CHECKPOINTS. This file holds what every order shares: the need, the region-set m
 the symbol table, the placement rules and the owner's decisions. An order that contradicts this file is
 wrong; change this file first (with the owner).
 
-THE METHOD IS docs/sprite-art-creation-guide.txt (the enemy-art kit). Walls are made with THE SAME KIT,
-light rig, material library, outline and cleanup rules as the generated enemies. Order 1 adds a WALLS
-section to the guide; every later order updates it in the same commit as any change to the method.
+THE WALL KNOWLEDGE DOCUMENT IS docs/wall-art-creation-guide.txt - HOW walls, doors, columns, floors and
+ceilings must be created (format, tiling, trim lines, the region set, placement rules, design and
+repetition rules, materials, glow, output, verification, lessons and owner feedback). EVERY order of this
+series references it, reads it before starting, and updates it in the same commit as any change to what
+it describes. Walls are made with THE SAME KIT as the generated enemies (docs/sprite-art-creation-guide.txt
+sections 1-4: light rig, material library, outline, cleanup).
 
 Written by the main thread directly with the owner (2026-10-22), not by creative-game-designer, because
 the request came with a prototype step that needed the kit run in the same session. Revised the same day
@@ -53,7 +56,7 @@ THE FIVE REGIONS (one set each)
                                                 evacuated company town: ordered, clean, wrong.
   B    RESEARCH WING    2 Harvesting Galleries  glazed abattoir tile, hook rails, form-tied        clinical_white
                                                 concrete, steel drains, stains. Grown and cut.
-  C    REACTOR DEPTHS   3 The Reliquary         heavy riveted steel, cradle print bays lit by the  amber_hot
+  C    REACTOR DEPTHS   3 The Reliquary         heavy riveted steel, soul condensers lit by the   amber_hot
                                                 rendered SOUL, pattern archives, fuel lines.
   D    THE BREACH       4 The Wound             plating torn back, muscle and glands pushing       corrupted_violet
                                                 through, ichor veins, dead drills in tissue.
@@ -63,8 +66,10 @@ THE FIVE REGIONS (one set each)
 The descent reads as the facility being consumed: Organization hardware dominates at the top, the
 planet's body at the bottom, and each region's BREACH wall is how the next region leaks upward.
 
-The approved prototypes (D4): ring panel (A hall base), gallery tile (B hall base), cradle bay (C
-signature), breach (D hall base), lattice (E hall base). Source: .claude/skills/enemy-art/walls_prototype.py.
+The approved prototypes (D4, revised by D13-D14): ring panel (A hall base), gallery tile (B hall base),
+reliquary plate (C hall base), soul condenser (C signature ACCENT), breach without the drill (D hall base;
+its big glands move to the LIGHT slot), the drill (D signature ACCENT only), lattice (E hall base).
+The cradle bay with a body inside is DROPPED (D13). Source: .claude/skills/enemy-art/walls_prototype.py.
 The in-engine captures of the prototypes proved: the style reads at wall scale under every mood; a
 signature picture on every tile becomes wallpaper (hence base + rare variety by rule); the old floors
 clash (hence floors in the set); distant detail aliases (hence LOD).
@@ -142,6 +147,9 @@ generator's), so layout, spawns and supply are untouched. Rates in LevelGenConst
       seeded clusters, never on a door frame. 0 on a region's first floor; clearly visible on its last.
   P8  Only exposed wall tiles (a walkable 4-neighbour) are dressed; only a wall symbol is ever written
       over a wall symbol (rule W7 below).
+  P9  SPACING: two FOCAL walls (LIGHT, MARKER, ACCENT, the signature ACCENT) are never adjacent and keep
+      >= 2 tiles between them along a run; the same focal wall keeps >= 4.
+(The guide's section 7 is the permanent copy of P1-P9; change both together.)
 Result on a typical floor: ~65-75% hall base (in 3 variants), a steady rhythm of structure and light,
 an occasional service/marker wall, rooms that read as what they are, and the region's own doors.
 
@@ -169,8 +177,14 @@ SERIES RULES (every order, by reference)
       as different from the hall at 4 tiles by SHAPE and MATERIAL, not by colour alone.
   W7  THE 2D GAME IS UNTOUCHED. No tile symbol added or removed, no wall becomes walkable or vice versa,
       no rule, turn, balance number, spawn, supply slot or persistence key changes.
-  W8  STORY ON THE WALL. Every region set carries story details (serials, quota boards, a cradle
-      print, a buried drill) as things a player notices, never text the player must read.
+  W8  STORY ON THE WALL. Every region set carries story details (serials, quota boards, a soul
+      condenser, a buried drill) as things a player notices, never text the player must read.
+  W13 A BASE WALL HAS NO FOCAL POINT (guide E4, section 8.3). Hall and room BASE walls repeat along whole
+      runs: no object, figure, big gland, big stain or protruding machine on them - every focal thing
+      lives in a spaced slot (LIGHT, MARKER, SERVICE, VENT, ACCENT). Every BASE is judged in a strip of
+      6+ copies before it ships.
+  W14 NO FIGURES INSIDE WALLS (guide E5): no body, silhouette, curled print, face or carcass shape in any
+      wall, door or surface.
   W9  OWNER APPROVAL GATE (guide N7): per region set, a contact sheet (every wall, every variant, the
       tiled hall strip, one strip per room family) + in-engine captures under its mood; STOP until the
       owner answers; the answer goes into that order's DECISIONS.
@@ -226,6 +240,15 @@ DECISIONS (owner)
   D10 (delegated) Floors and ceilings are part of each region set (regenerated with the kit); the
       GPU floor/ceiling pipeline is unchanged, only its texels.                             (2026-10-22)
   D11 (delegated) Columns are part of each region set.                                      (2026-10-22)
+  D12 The knowledge of how walls must be created is saved in one document,
+      docs/wall-art-creation-guide.txt, and every idea of the series references it.          (2026-10-22)
+  D13 The walls "with a person inside" (the cradle-bay prototype): concept acceptable, look rejected,
+      never a base wall -> DROPPED. Replaced by the soul condenser (a glass column of rendered soul, no
+      body) as region C's signature ACCENT; no figure in any wall of any region (W14).        (2026-10-22)
+  D14 The Wound prototype's drill looks fine alone but bad repeated in a line -> no focal object on
+      any BASE wall (W13); the drill is region D's signature ACCENT only, spaced by P9. Revised samples
+      (reliquary plate, soul condenser, Wound base without the drill, the drill as an accent, each in a
+      placed run) were shown to the owner the same day.                                     (2026-10-22)
 
 
 ASSUMPTIONS (series-wide)
@@ -239,7 +262,7 @@ ASSUMPTIONS (series-wide)
   AS5  Wall glow = enemy glow idea: emissive pixels in a glow atlas, NORMAL blend over the graded base,
        exempt from the grade (art-direction V6 gains "wall emissives").
   AS6  Animation = a 2-8 frame cycle of the GLOW layer only. Animated walls: A LIGHT flicker (a seeded
-       ~1 in 6 lamps), C LIGHT + cradle-bay pulse, D LIGHT heartbeat + one containment sac, E LIGHT
+       ~1 in 6 lamps), C LIGHT + soul-condenser pulse, D LIGHT heartbeat + one containment sac, E LIGHT
        synapse pulse + the memory window. The manifest flags each ("animate": all / some).
   AS7  One region atlas <= 2048x2048 (36 faces x 256^2 with 3 mips ~3.1 Mpx fits) + one glow atlas.
        Only the floor's region is resident (~16 MB GPU worst case), disposed on floor teardown.
@@ -259,7 +282,8 @@ RELATED
   Ideas:  generated-enemy-art.txt (+ orders) - the sibling series and the method's origin
           symbol-sprite-reuse-system*.txt - the tileset subsystem this series replaces for walls
           visual-identity*.txt - moods, grade, materials, UI kit
-  Docs:   docs/sprite-art-creation-guide.txt, docs/environment-tileset-system.txt, docs/art-direction.txt,
+  Docs:   docs/wall-art-creation-guide.txt (THE knowledge document), docs/sprite-art-creation-guide.txt,
+          docs/environment-tileset-system.txt, docs/art-direction.txt,
           docs/tile-symbols.txt, docs/wall-renderer-guide.txt, docs/procedural-level-generation.txt
   Story:  story/00-premise.md, 03-the-planet.md, 05-descent-structure.md
   Tool:   .claude/skills/enemy-art/ (kit.py, walls_prototype.py -> walls.py in order 1)

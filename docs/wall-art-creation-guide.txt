@@ -1,0 +1,456 @@
+WALL ART CREATION GUIDE — HOW toon3D MAKES ITS WALLS, DOORS, COLUMNS, FLOORS AND CEILINGS
+==========================================================================================
+PURPOSE: the permanent, single source of truth for HOW environment surfaces are created for this game:
+         what a wall is, how a region's wall set is organised, how a wall is designed, sculpted, tiled,
+         lit, animated, packed and verified, how often each kind of wall appears in a level, and every
+         lesson already paid for (including every piece of owner feedback). Read it before creating,
+         changing or reviewing ANY wall, door, column, floor or ceiling texture, and before changing how
+         levels choose their walls.
+
+Created 2026-10-22 from the session that prototyped generated walls with the enemy-art kit and agreed the
+region-set model with the owner. The implementing series is .claude/agents/ideas/generated-wall-art.txt
+(+ -order-1..4); every order of it references this document and updates it in the SAME commit as any
+change to the method, the set structure, the placement rules or the engine contract. A section marked
+[PLANNED: order N] describes something designed but not built yet; the order that ships it removes the marker.
+
+Relationship to the enemy guide: walls are made with THE SAME KIT (docs/sprite-art-creation-guide.txt
+sections 1-4: the non-negotiables, the tools, the rendering technique, the material library). This guide
+does not repeat that technique; it covers everything that is different about environment surfaces.
+
+Related: docs/sprite-art-creation-guide.txt (the kit), .claude/skills/enemy-art/SKILL.md (the tool),
+         docs/art-direction.txt (the style bible - never contradicted here), docs/environment-tileset-system.txt
+         (the tileset subsystem), docs/tile-symbols.txt (the level format), story/05-descent-structure.md.
+
+
+CONTENTS
+  1.  Non-negotiables
+  2.  Tools and files
+  3.  What a wall is (format, orientation, scale)
+  4.  Tiling: the 3-tile canvas
+  5.  Trim lines: the region's grammar
+  6.  The region wall set (groups, slots, room families, symbols)
+  7.  How often each wall appears (the placement rules)
+  8.  Designing a wall (brief, build order, the repetition rules)
+  9.  Materials
+  10. Glow and animation
+  11. Doors, columns, floors and ceilings
+  12. Output: atlas, mips, manifest
+  13. Engine contract                                              [PLANNED: order 2]
+  14. Verification and the owner approval gate
+  15. Lessons already paid for
+  16. The five regions (design briefs)
+  17. Recipes
+
+
+====================================================================================================
+1. NON-NEGOTIABLES
+====================================================================================================
+  E1  GENERATED IN CODE with the enemy-art kit (sprite guide N1, N3). No hand-painted pixel, no image-
+      model output, no edit of an output PNG. Same input -> byte-identical output. New materials and
+      glyphs are APPENDED to kit.py so every enemy sprite stays byte-identical.
+  E2  ORIGINALITY. The old wall/door/column/floor textures (lab_wall_*.jpg, lab_door_*.jpg, wall.png,
+      the WallRenderer / SurfaceMaterials Pixmap programs) are not reference material - never opened
+      for inspiration, traced, recoloured or re-created. Designs come from the story and the room's purpose.
+  E3  REGION SEPARATION. Every wall belongs to exactly one region's set. A floor is built only from its
+      region's set. Nothing crosses regions - not a hall wall, not a room wall, not a door.
+  E4  A BASE WALL HAS NO FOCAL POINT. Base walls (hall base and every room base) repeat along whole
+      runs, so nothing on them may draw the eye: no object, no figure, no large glowing gland, no
+      single big stain, no protruding machine. Anything the eye locks onto belongs in a spaced slot
+      (LIGHT, MARKER, SERVICE, VENT, ACCENT) - section 8.3. (Owner feedback 2026-10-22: the Wound
+      prototype's drill "looks ok by itself but when several walls like that are together in line,
+      they do not look good with this repeating spike".)
+  E5  NO FIGURES INSIDE WALLS. No human body, silhouette, curled print, face or carcass shape in any
+      wall, door or surface. (Owner feedback 2026-10-22 on the cradle-bay prototype: concept acceptable,
+      the look rejected, and never as a base wall. Its replacement is the soul condenser - section 16 C.)
+      The story is told by machinery, material, light and marks, not by bodies on display.
+  E6  SEMANTIC COLOURS SACRED (art-direction V5). No saturated red/green/blue/purple/yellow decoration,
+      no red medical cross, no hazard-yellow stripes, SUIT_AMBER never. Keycard colours appear only on
+      keycard doors (section 11.1).
+  E7  READABILITY BEATS MOOD (V8). Walls are the backdrop: mid-value, never brighter than the enemies in
+      front of them; emissive pixels small (<= ~6% of a face).
+  E8  THE 2D GAME IS UNTOUCHED. Art never adds or removes a tile symbol, never changes walkability, a
+      rule, a balance number, a spawn or a supply slot. Which wall picture a tile shows is cosmetic.
+  E9  OWNER APPROVAL GATE. No region set enters the game before the owner has seen it (section 14)
+      and said yes. The answer is written into the idea file's DECISIONS.
+  E10 NO TESTS (CLAUDE.md Testing Policy). Verified by regeneration, previews and run-game captures.
+
+
+====================================================================================================
+2. TOOLS AND FILES
+====================================================================================================
+  .claude/skills/enemy-art/kit.py             the renderer (shared with the enemies)
+  .claude/skills/enemy-art/walls_prototype.py the 2026-10-22 prototypes (the record; deleted by order 4)
+  .claude/skills/enemy-art/walls.py           [PLANNED: order 1] the wall builder: tiling bake, the
+                                              REGIONS table, atlas/glow/mips/manifest/surface writers,
+                                              previews; CLI mirrors bestiary.py
+  .claude/skills/enemy-art/sheet.py           contact sheets
+  assets/textures/walls/generated/            [PLANNED: order 1] shipped output per region:
+                                              <region>.walls.png, .glow.png, .walls.json, .floor.png,
+                                              .ceiling.png
+  Requirements: Python 3, numpy, Pillow. A wall face takes ~4 s to bake (768x256 canvas); a full region
+  set (~38 textures) ~3 minutes.
+
+  Commands (walls.py, order 1):
+    cd .claude/skills/enemy-art
+    python3 walls.py ../../../assets/textures/walls/generated outer_facility      # ship one region
+    python3 walls.py /tmp/w --preview /tmp/w/preview outer_facility               # + sheets, strips, GIFs
+  Prototype record:
+    python3 walls_prototype.py /tmp/w [A_ C_ ...]
+
+
+====================================================================================================
+3. WHAT A WALL IS
+====================================================================================================
+  - One TILE FACE: 256x256 RGB, fully opaque. Row 0 = the ceiling line, row 255 = the floor line, so a
+    wall is authored as seen standing in front of it. WallRenderer stretches it over the stripe from the
+    floor to the ceiling; a face is roughly square on screen.
+  - Texel density matches the enemies (a regular enemy canvas is 240 px per ~1 wall height), so a wall
+    and the creature in front of it share one pixel scale.
+  - The same face is drawn on all four sides of a wall tile; the engine darkens one axis (face shading)
+    and grades/fogs by distance and mood. Author mid-values: the engine supplies darkness.
+  - The kit's LIGHT (upper-left-front) is used unchanged. A directional light on a periodic height
+    field shades periodically, so lighting never breaks tiling. The cyan RIM catches right-facing
+    bevels - "lit by the machine" - and is welcome.
+
+
+====================================================================================================
+4. TILING: THE 3-TILE CANVAS
+====================================================================================================
+  Walls tile HORIZONTALLY (with themselves and with every other wall of their set). They never tile
+  vertically. Floors and ceilings tile in both axes.
+
+  The technique (walls_prototype.py `tiled()` + `bake()`):
+    1. Render on a canvas 3 faces wide (768x256). Every shape is stamped three times: at x - 256, x, x + 256.
+    2. Crop the middle 256 columns.
+  Why the result is seamless: the smooth max, the per-shape grain (sampled in each shape's own frame,
+  which moves with the copy), the cavity blur (np.roll wraps a 3-face canvas, which is periodic) and the
+  Bayer dither (256 % 4 == 0) are all translation-invariant. Surfaces use the same idea on a 3x3 canvas.
+
+  The backing: one full-face slab PER COPY, overlapping its neighbours by ~12 px (`backing()`), never one
+  slab spanning the canvas (its grain would not repeat).
+
+  THE EDGE RULE: a shape may cross the tile edge ONLY if it belongs to the region's shared grammar - the
+  trim lines (section 5) or a structure every wall of the set continues the same way (the hall's
+  manifold, a rail). A FOCAL object (a drill, a gauge, a lamp, a sign) stays fully inside its own face,
+  with >= 8 px of margin: its neighbour will be a DIFFERENT wall that does not continue it. (Lesson
+  15.6: the prototype drill's collar crossed the edge and was cut off against the next wall.)
+
+
+====================================================================================================
+5. TRIM LINES: THE REGION'S GRAMMAR
+====================================================================================================
+  Each region declares TRIM LINES - the heights where its architecture changes (a cornice, a cable tray,
+  a rail, a tile line, a kick plate, a drain). EVERY wall of the region's set honours them: a room wall
+  or an accent changes what is BETWEEN the lines, never the lines themselves. That is what lets a LIGHT
+  sit beside a BASE, or a MEDICAL wall meet a hall wall at a doorway, and read as one building.
+
+  Region A (agreed): cornice 0-30, cable tray 24-33, panel field 40-196, bump rail 205, kick plate 214-255.
+  Regions B-E: declared by the order that builds them, written into section 16 when shipped.
+  Organic regions (D, E) keep at least a floor line and the torn-plating top edge (D) / lattice rhythm (E)
+  as their grammar.
+
+
+====================================================================================================
+6. THE REGION WALL SET
+====================================================================================================
+6.1 Every region ships ALL of this (about 36 faces + 2 surfaces):
+
+  group       slots                                                                  faces
+  ----------  ---------------------------------------------------------------------  -----
+  HALL        BASE x3 variants | STRUCTURE | LIGHT | SERVICE | VENT | MARKER | BREACH   9
+  MEDICAL     BASE x2 variants | ACCENT                                                 3
+  SECURITY    BASE x2 | ACCENT                                                          3
+  CONTAINMENT BASE x2 | ACCENT                                                          3
+  MACHINERY   BASE x2 | ACCENT                                                          3
+  RESEARCH    BASE x2 | ACCENT                                                          3
+  STORAGE     BASE x2 | ACCENT                                                          3
+  SIGNATURE   BASE x2 | ACCENT                                                          3
+  DOORS       plain, red, yellow, blue                                                  4
+  COLUMNS     round, square                                                             2
+  SURFACES    floor, ceiling (64x64)                                                    2
+
+6.2 What each slot is
+  BASE        the dominant wall of halls / of a room. Variants are one design with seeded differences
+              (a dent, a different vent, a missing bolt, a scuff, a stencil number): invisible at 4 tiles,
+              noticed up close. NO FOCAL POINT (E4).
+  STRUCTURE   pilaster / rib / frame - the architecture's rhythm and the door frames.
+  LIGHT       the region's light source (lamp, lit slot, gland, synapse), emissive, may animate.
+  SERVICE     the building working: pipes, risers, valves, hose reels.
+  VENT        grilles, hatches, extraction mouths.
+  MARKER      signage, Organization stencils, quota boards - story detail you notice.
+  BREACH      the NEXT region leaking through (A: an ichor seep at a seam; B: chitin pushing tiles off;
+              C: a soul leak; D: an open wound; E: none - falls back to BASE).
+  ACCENT      the room's one telling fixture (a dispenser, a gun locker, a porthole, a breaker panel, a
+              terminal, a half-open shutter). Focal by design, so spaced by placement.
+
+6.3 Room families (data: each RoomBlueprint / special generator names its family - never a switch)
+  MEDICAL      medical_bay, the MED_BAY floor (MedBayGenerator)
+  SECURITY     armory, command_center, the gate airlock (GateAirlockGenerator)
+  CONTAINMENT  cryo_chamber, containment_block
+  MACHINERY    power_plant, atmospheric_plant
+  RESEARCH     server_room, research_lab
+  STORAGE      salvage_bay, supply_cache
+  SIGNATURE    stellar_observatory, gore_nest, the boss arena, the EVENT room (the region's special look)
+  HALL         entrance, standard rooms, corridors, caverns, the start room, hand-made levels (region A)
+  Same family, region's style: a MEDICAL room is recognisably medical in every region and always in that
+  region's materials (A white livery, B surgical tile, C pattern infirmary, D overgrown, E camp panel).
+
+6.4 The symbol table (21 wall symbols, none added or removed - a symbol names a SLOT; the region set names
+    the picture; BASE variants are chosen by the renderer per face, so they need no symbols):
+  HALL         x BASE   k STRUCTURE   S LIGHT   c SERVICE   ' VENT   h MARKER   G BREACH
+  MEDICAL      M base   Q accent        SECURITY   X base   w accent
+  CONTAINMENT  Z base   N accent        MACHINERY  U base   j accent
+  RESEARCH     t base   D accent        STORAGE    v base   " accent
+  SIGNATURE    F base   ` accent
+  Doors d R Y B and the column P are FIXED symbols whose pictures come from the region set.
+  [PLANNED: order 2 puts this table in TilesetConstants; docs/tile-symbols.txt then describes wall
+  symbols by slot.]
+
+
+====================================================================================================
+7. HOW OFTEN EACH WALL APPEARS (THE PLACEMENT RULES)  [PLANNED: order 2]
+====================================================================================================
+The level picks walls by rule, on its own seeded RNG stream (never the generator's), so layout, spawns
+and supply never change. Design every wall knowing how often it will be seen:
+  P1  REGION: the floor's region picks the set; start room and hand-made levels use region A.
+  P2  ROOMS: a room's perimeter is its family's BASE; its ACCENT on 1-3 tiles (the wall facing the
+      entrance first), never two accents adjacent.
+  P3  SPECIAL FLOORS: MED_BAY -> MEDICAL, gate -> SECURITY, event + boss arena -> SIGNATURE, caverns ->
+      HALL with BREACH weighted up.
+  P4  RHYTHM: on a straight exposed hall run >= 5 tiles every 4th tile is STRUCTURE; the walls flanking a
+      door are STRUCTURE.
+  P5  LIGHT: no exposed hall run >= 7 tiles without a LIGHT; never two LIGHTs adjacent.
+  P6  VARIETY: SERVICE / VENT on 6-10% of the remaining hall base in 1-3 tile clusters; MARKER 1-3 per
+      floor near the arrival point and the exit.
+  P7  BREACH: hall density = breachBase + floorIndexInRegion x breachStep, in seeded clusters; 0 on a
+      region's first floor, clearly visible on its last; never on a door frame.
+  P8  Only exposed walls (a walkable 4-neighbour) are dressed; only a wall symbol replaces a wall symbol.
+  P9  SPACING: two FOCAL walls (LIGHT, MARKER, ACCENT, the signature ACCENT) are never adjacent and keep
+      >= 2 tiles between them along a run; the same focal wall keeps >= 4.
+  Consequence for design: ~65-75% of what a player sees is BASE (in variants), so BASE carries the
+  region's mood quietly; ~10% is STRUCTURE/LIGHT rhythm; everything focal is rare and spaced.
+
+
+====================================================================================================
+8. DESIGNING A WALL
+====================================================================================================
+8.1 THE BRIEF (write it in the order's idea file before code)
+    Region + slot       where it lives and how often it is seen (section 7)
+    Purpose             what this wall IS in the fiction (a ring corridor panel, an abattoir tile, a
+                        refinery plate, wounded muscle, the mind's lattice)
+    Trim lines          the region's, honoured
+    Materials           from section 9 / the kit library
+    Focal or not        BASE: none (E4). Otherwise: the ONE thing it shows
+    Story detail        at least one somewhere in the set (a serial, a quota board, a scratched name plate)
+    Distinctness        how it differs at 4 tiles from the hall base and from the same slot of other regions
+
+8.2 BUILD ORDER (each step judged at 1x before the next)
+    a. Trim lines and the backing.
+    b. Big masses (panels, plates, tile field, fibre bundles, lattice) - in ONE layer where they should
+       merge, separate layers only where something must read as IN FRONT (a pipe, a rail, a cage).
+    c. Detail as add / carve: seams, rivets, grooves, cracks, veins, vents.
+    d. Variants: seeded changes that do not move the eye.
+    e. Stencils and story detail last (3x5 stencils are close-range only - sprite guide 12.7).
+    f. Strip test (8.3), then contact sheet, then in-engine.
+
+8.3 THE REPETITION RULES (the wallpaper problem)
+    R-1 Judge every BASE in a strip of 6+ copies (and with its variants mixed). If you can count the
+        tiles from a beat in the pattern, the base has a focal point - remove it or lower its contrast.
+        A big gland, a vein crossing, a stain, a dent, a sign: each repeats as a beat.
+        (Lesson 15.5: the Wound base without the drill still beat on its two big glands.)
+    R-2 Contrast budget: on a BASE, the strongest local contrast is the trim lines and panel seams -
+        those repeat on purpose (they are architecture). Everything else stays within two ramp steps.
+    R-3 Glow on a BASE: none, or a thin line that runs continuously across tiles (a soul trickle in a
+        channel, a seam) so it reads as a line, never as a spot.
+    R-4 Focal walls are designed to be seen ALONE between base walls (strip: BASE BASE BASE X BASE BASE)
+        and must still sit in the trim lines.
+    R-5 Room BASE walls repeat around a whole room - the same rules as the hall BASE.
+
+8.4 Room walls must read as their room at 4 tiles by SHAPE and MATERIAL (fixture silhouettes, panel
+    division, surface), never by colour alone - check the room's strip beside the hall strip at 1x.
+
+8.5 Symmetry: walls are often symmetric by construction (panels); break it with one off-centre detail
+    on focal walls only. A base may be symmetric - it is architecture.
+
+
+====================================================================================================
+9. MATERIALS
+====================================================================================================
+The kit's library (sprite guide section 4) plus ENVIRONMENT materials, appended to kit.MATERIALS
+(the prototype defines them at runtime; order 1 appends them to kit.py):
+  concrete, concrete_dk   poured structure: warm grey, matte, coarse grain
+  ceramic                 glazed abattoir tile: pale greige-celadon, glossy, almost no grain
+  rubber                  bump rails, seals, cable sheaths: near-black, low spec
+  rust                    oxidised steel: umber-brown, never a saturated orange
+  soul (emissive)         the harvested planet-soul / printer fuel: pale, cold, low saturation
+  nacre                   the Core's mineral-bone: pearl grey, faint violet shadow (never a semantic purple)
+  capsule (translucent)   glass over the soul light (condenser columns, conduit windows)
+Reused from the enemies: livery, gunmetal, darkmetal (Organization hardware), flesh, flesh_dk, membrane,
+bone, chitin, chitin_dk (the planet's body), cyan (the facility's light), ichor (planet tissue light).
+Inks by region: A cyan lamps; B cyan-white lamps; C soul; D ichor; E soul. Magma is not used on walls.
+Adding a material: one appended row, checked beside the others on a sheet and under the darkest and
+brightest moods (sprite guide 4.5).
+
+
+====================================================================================================
+10. GLOW AND ANIMATION
+====================================================================================================
+  - Emissive pixels (emissive materials, and translucent ones where thick) are copied into the GLOW image
+    at the same rect (binary alpha). The engine draws them over the graded wall with NORMAL blend,
+    exempt from the mood grade (art-direction V6), so a lamp keeps its colour in every region.
+  - Glow per face <= ~6% of its pixels; on BASE walls none or a continuous line only (R-3).
+  - Animation is a 2-8 frame cycle of the GLOW layer only (the base face stays one image). Bake each
+    frame by calling the builder at that frame's glow level; keep only its glow image. Each animated
+    face is flagged in the manifest: "animate": "all" (every face of that sprite) or "some" (a seeded
+    ~1 in 6 - a failing tube), and the engine offsets the phase per face so nothing pulses in sync.
+  - Agreed animated walls: A LIGHT flicker (some), C LIGHT + condenser pulse, D LIGHT heartbeat + a
+    containment sac, E LIGHT synapse pulse + the signature accent. Pulses stay under the kit's glow
+    ceiling (~1.1).
+
+
+====================================================================================================
+11. DOORS, COLUMNS, FLOORS AND CEILINGS
+====================================================================================================
+11.1 DOORS - four per region (plain + red/yellow/blue keycard), 256x256 faces, region materials. The
+     keycard colour appears ONLY on a lock panel and a frame stripe, emissive, in the exact keycard
+     colours (ItemConstants / CombatPalette), so no mood shifts it; it must read at 6 tiles in the
+     region's mood. The plain door must read as a door against its region's walls at 4 tiles by shape
+     (frame, seam, porthole), never by colour. Door slide animation is the engine's - author a closed door.
+11.2 COLUMNS - round and square per region, authored as 256x256 faces (the column path draws a stripe).
+11.3 FLOORS / CEILINGS - 64x64, opaque, tiling in both axes (3x3 canvas), no glow (the floor pipeline
+     has none). Value bands (art-direction section 6): floors 0.10-0.24, ceilings 0.06-0.18 average
+     luminance, so they sit below the walls. No period of 8 texels or less (moire at the far band).
+     The image's top-left origin is converted once at load to the pipeline's layout (row 0 = south edge).
+
+
+====================================================================================================
+12. OUTPUT: ATLAS, MIPS, MANIFEST  [PLANNED: order 1]
+====================================================================================================
+  - One atlas per region (<= 2048x2048) holding every wall, door and column face plus mips 128 and 64
+    (2x2 box filter), 2 px padding filled with duplicated edge texels (Nearest sampling at a column edge
+    never bleeds); one glow atlas with the same packing; packing order = manifest order.
+  - Manifest <region>.walls.json, version 1:
+      { "version": 1, "region": "outer_facility", "size": 256, "mips": 3,
+        "trim": {...}, "breach": {"base": 0.0, "step": 0.03},
+        "walls":   [ {"id": "wall_a_hall_base_0", "group": "HALL", "slot": "BASE", "variant": 0,
+                      "rect": [x,y], "mipRects": [[x,y],[x,y]], "glowRect": [x,y] | null,
+                      "glowFrames": [{"rect": [x,y], "duration": 0.08}, ...] | null,
+                      "animate": "all" | "some" | null }, ... ],
+        "doors":   [ {"id": "door_a_plain" | "door_a_red" | "door_a_yellow" | "door_a_blue", ...} ],
+        "columns": [ {"id": "column_a_round" | "column_a_square", ...} ],
+        "surfaces": {"floor": "outer_facility.floor.png", "ceiling": "outer_facility.ceiling.png"} }
+  - Ids are STABLE (wall_<region letter>_<group>_<slot>[_<variant>]) and never renamed once shipped.
+
+
+====================================================================================================
+13. ENGINE CONTRACT  [PLANNED: order 2]
+====================================================================================================
+  - One region atlas per floor (walls + doors + columns: one bind), one glow atlas, the two surfaces;
+    loaded with the floor, disposed with it. A manifest that fails to load -> the floor uses region A.
+  - BASE variant per face = pure hash of (tile column, row, side, floor seed): stable, no popping.
+  - Distance LOD: mip 0/1/2 from texels per screen pixel (256 / stripe height) - kills distant shimmer.
+  - Glow: NORMAL blend, ungraded, BLACKOUT-dimmed, alpha fading from 10 tiles to 0.6 at 20.
+  - The base pass keeps its opaque/unblended path and equal-column merge (render-performance-full-hd).
+  - Every world pass grades walls at environment strength 1.0 under the region's mood and fogs by depth.
+  The order that ships this rewrites this section as SHIPPED behaviour.
+
+
+====================================================================================================
+14. VERIFICATION AND THE OWNER APPROVAL GATE
+====================================================================================================
+  1. Strips: every BASE x6 (variants mixed); the hall run BASE BASE STRUCTURE BASE LIGHT BASE SERVICE
+     BASE BASE MARKER; each room family BASE BASE ACCENT BASE BASE; each focal wall alone between bases.
+  2. Contact sheet per group at 2x on the game's near-black, labelled.
+  3. Surfaces tiled 3x3; door set at 1x; glow GIFs for animated faces.
+  4. In-engine (run-game): a hall, two room families, the signature room, a door, under the region's
+     mood; one turn burst at 8+ tiles (shimmer); enemies of the region at 2 and 4 tiles in front.
+     Before order 2 exists, preview with the throwaway trick: a TEMP edit in the working tree of
+     TextureGeneratorRegistry.generate() returning a PNG from an env var for wall_* ids - reverted,
+     never committed (how the prototypes were captured).
+  5. Regeneration: enemy atlases and earlier regions byte-identical after any kit change.
+  6. Gate: send 1-4 to the owner; STOP; record the verdict in DECISIONS; only then wire the set.
+
+
+====================================================================================================
+15. LESSONS ALREADY PAID FOR
+====================================================================================================
+  15.1 (2026-10-22, in-engine prototypes) The kit's style reads at wall scale and under every mood; the
+       Wound and the Reliquary were the strongest. Soul light and ichor read through the grade.
+  15.2 A focal picture on every tile becomes WALLPAPER: the cradle bays and the drill repeated along
+       every run. -> E4, P9, the slot model.
+  15.3 Owner: the drill wall "looks ok by itself" but repeated in a line looks bad. -> the drill is a
+       signature ACCENT only (region D), spaced by P9.
+  15.4 Owner: the walls with a person inside (the cradle-bay prototype) - concept acceptable, look
+       rejected, never a base wall; replaced by the soul condenser. -> E5, no figures anywhere.
+  15.5 Removing the object is not enough: the Wound base without the drill still BEAT on its two big
+       glands and a vein crossing. Glands belong to the LIGHT slot; the base keeps fibres and thin,
+       low-contrast veins. -> R-1, R-2.
+  15.6 The prototype drill's collar crossed the tile edge and was cut off against the next (different)
+       wall. -> the EDGE RULE (section 4).
+  15.7 Tissue: separate lobes read as sausages; parallel full-height bundles read as planks unless
+       constricted and varied in width; glands must be op="add" or the muscle's height buries them.
+  15.8 The ring-panel livery read slightly too bright and flat at range: one ramp step darker, grime at
+       the panel foot (W7 / E7).
+  15.9 The Core lattice read busy at range: fewer, thicker struts, bigger hollows.
+  15.10 A hook on every abattoir tile repeats like the drill: one base variant at most, the rest in the
+       signature.
+  15.11 The old floor/ceiling materials (flat grids, tread plates) clashed with sculpted walls -> floors
+       and ceilings are part of every region set.
+  15.12 Detailed 256-texel walls alias at range with Nearest sampling -> mips + distance LOD.
+  15.13 Rotating in the start room reverses the view (it is a large open room) - capture walls on a
+       generated floor reached through the route map (run-game: seed, onDescentRequested, engage; answer
+       the briefing exchange and LEAVE IT on the relic offer first).
+
+
+====================================================================================================
+16. THE FIVE REGIONS (design briefs - the orders hold the full per-slot lists)
+====================================================================================================
+  A  OUTER FACILITY / Habitation Rings (cool_steel). An evacuated company town: painted livery panels,
+     rubber bump rail, riveted kick plate, cable tray. Prototype ring panel = hall BASE (approved).
+     Signature: crew quarters (lockers with scratched name plates, one ajar - no figure, no photo face).
+  B  RESEARCH WING / Harvesting Galleries (clinical_white). An abattoir passed off as a lab: glazed tile,
+     hook rail, form-tied concrete, drains, desaturated stains. Prototype gallery tile = hall BASE
+     (approved; the hook moves to one variant + the signature). Signature: the killing floor - hooks on
+     trolleys and empty chains (no carcass shapes - E5).
+  C  REACTOR DEPTHS / Reliquary (amber_hot). The resurrection heart: heavy riveted steel, fuel manifolds,
+     the pale soul light as the only light. Hall BASE = riveted reliquary plate with a continuous soul
+     trickle in the floor channel (prototype reliquary_plate). Signature: THE SOUL REFINERY - BASE x2
+     refinery plating with condenser feed lines (no focal point); ACCENT the soul condenser (prototype
+     soul_condenser: a glass column of rendered soul, a filtration coil, gauge, valve; pulses). The
+     cradle bay with a body is DROPPED (15.4).
+  D  THE BREACH / The Wound (corrupted_violet). The facility torn open by the planet's body. Hall BASE =
+     muscle fibre with constrictions and thin veins under a torn plating edge, NO drill, NO big glands
+     (15.3, 15.5). LIGHT = the gland cluster (heartbeat). Signature: the drill face - BASE x2 scarred
+     tissue with drill tracks; ACCENT the buried drill, fully inside its face (15.6).
+  E  THE CORE (core_white_violet). The being's mind: a calm nacre lattice, soul light in the hollows.
+     Hall BASE = the lattice (prototype, calmer - 15.9). Room families = the Organization's last camp
+     (region A panels clamped onto nacre). Signature: the memory hollow - BASE x2 large lit hollows;
+     ACCENT a soul well where the lattice's lines converge (no figure - E5).
+
+
+====================================================================================================
+17. RECIPES
+====================================================================================================
+ADD A WALL TO A REGION SET (a variant, a slot face)
+  [ ] brief (8.1); E2 respected; trim lines honoured; focal rule (E4) decided
+  [ ] builder in walls.py + one row in the region's REGIONS entry; materials appended if needed
+  [ ] strips (14.1) incl. the 6-copy base strip; no edge crossing for focal shapes (section 4)
+  [ ] regenerate: enemies + other regions byte-identical
+  [ ] contact sheet + in-engine; owner verdict recorded
+  [ ] this guide: section 16 if the region's design changed; section 15 for any lesson
+
+ADD A REGION SET
+  [ ] all of 6.1 (36 faces + 2 surfaces); trim lines written into section 5; breach base/step
+  [ ] the RegionWallSet registry row stops aliasing region A [PLANNED: order 2 mechanism]
+  [ ] section 16 brief; owner gate
+
+ADD A ROOM FAMILY
+  [ ] one family enum row + a room set (BASE x2 + ACCENT) in EVERY region + one free wall symbol pair
+      (the 21 symbols are all used: a new family needs a new FIXED symbol pair under the CLAUDE.md STRICT
+      RULE, or an existing family to be merged) - so prefer mapping a new room to an existing family
+
+ADD A ROOM (that uses an existing family)
+  [ ] its RoomBlueprint registration names the family - no art, no symbol, nothing else
+
+CHANGE THE PLACEMENT RULES
+  [ ] constants in LevelGenConstants (WALL_SET_*), section 7 updated in the same commit
