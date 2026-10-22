@@ -234,6 +234,6 @@ OPEN QUESTIONS
 RELATED
 -------
   Ideas:  generated-enemy-art-order-5.txt, sump-wretch-acid-death.txt (where these were found),
-          mixed-encounter-groups.txt (V7 room cap), elemental-golem-verdant-spiresower (the '}' marker)
+          mixed-encounter-groups.txt (V7 room cap), elemental-golem-verdant-spiresower.txt (the '}' marker)
   Docs:   docs/enemy-system.txt, docs/tile-symbols.txt, docs/procedural-level-generation.txt,
           docs/game-balance-authority.txt (DENSITY / V7)
