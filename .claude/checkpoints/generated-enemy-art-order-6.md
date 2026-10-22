@@ -55,7 +55,7 @@ file's tick in the same commit as the work**. Never more than one checkpoint unc
 - [x] **CP2a** — five rigs at rest pose (concept stills, owner override applied); family sheet + one image per enemy
       SENT. DONE WHEN: `--stills` renders all five with no edge warning and the images are sent.
 - [x] **CP2b** — the owner's concept read recorded in DECISIONS (A1); requested changes applied. STOP until it is.
-- [ ] **CP3** — all clips + ability clips (DEBUFF_PLAYER, SUMMON) + the `undead` effect set; clip GIFs + in-engine burst
+- [x] **CP3** — all clips + ability clips (DEBUFF_PLAYER, SUMMON) + the `undead` effect set; clip GIFs + in-engine burst
       GIFs (default + one mood) SENT. DONE WHEN: sent; build green.
 - [ ] **CP4** — owner approval of all five recorded (stop until it is).
 - [ ] **CP5** — five registry rows + SUMMON clip row wired; A3-A5 verified in-engine; build green.
@@ -97,3 +97,26 @@ Revised Ghoul + family sheet sent. Still WAITING for the concept approval (CP2b)
 
 **CP2b:** owner approved all five concepts (D4). Next: CP3 clips. The rest poses ARE the approved stills - a clip may move
 them but the defaults must not change.
+
+**CP3:** all clips + effects + the one runtime change. Frames / atlas: ghoul 93 (1024x2048), crawler 64 (1024x1024),
+revenant 77 (1024x2048), vortex_eye 97 (1024x1024), blight_corruptor 96 (1024x2048); NO edge warnings. Ability clips:
+Vortex Eye DEBUFF_PLAYER (fps 16, "emit" at 0.28) + ATTACK ("emit" 0.12); Corruptor SUMMON (0.6 s, pods split via `split`).
+Rig additions (rest poses byte-identical to the approved stills, checked with --stills + cmp): kit `Figure.transformed(xf)`
+(no earlier output changes); Ghoul + Revenant `fall` (DEATH collapse about the ground line); Crawler NARROW 0.90 + lift 2 px
+applied to the WHOLE figure incl. rest (its rest spanned x 8-154 with fingers under the ground line, so every clip clipped -
+a deviation from the approved still of 10% width, lesson 12.20, to be named in the IMPLEMENTATION NOTE); Vortex Eye coat
+strips shrink as it unravels; Corruptor's left arm drawn in front of the pods when raised / forward. Revenant raise: arm
+straight up (r_sh 2.85) with the baton laid back over the helmet; the swing passes foreshortened (arm_fore) and the baton
+angle is keyed continuously (-5.53 = 0.75 - 2pi) so it never sweeps off the right edge.
+Effects: `undead` set (14 sprites, 19 bursts) + five creatures rows; overrides: ghoul LEAK -> LEAK_EMBER (red), revenant
+RESIST -> RESIST_ARMOUR + CHARGE -> CHARGE_BATON, vortex_eye PROJECTILE/TRAIL/MUZZLE -> SOUL_BOLT/BOLT_TRAIL/BOLT_MUZZLE,
+blight_corruptor HIT/HIT_HEAVY/DEATH/LEAK/CHARGE -> spore bursts. The runtime loads it by family name (no code change).
+RUNTIME (name in the IMPLEMENTATION NOTE): EnemyClipId.SUMMON + abilityClip(SpecialAbility.SUMMON, SUMMON). Nothing else.
+Fresh bake of everything: the 32 earlier files unchanged (git clean on them).
+Build (mirror): only StoryBarkTest.humourLivesNearTheSurfaceAndDiesNearTheCore red (known).
+In-engine (TEMPORARY rows GHOUL/CRAWLER/REVENANT/VORTEX_EYE/BLIGHT_CORRUPTOR, removed again - CP5 adds them): every creature
+showed dormant, ALERT, MOVE, real ATTACK (logmoments), HURT_LIGHT, HURT_HEAVY, WOUNDED + leak, BURNING, DEATH -> remains;
+Revenant real WIND_UP (its lunge); Vortex Eye real ABILITY (DEBUFF_PLAYER) + bolts; Corruptor real SUMMON (summoned dead
+arrive with ALERTED). A4 line-up at 3 tiles in default / corrupted_violet / core_white_violet; A5 soul reads cold white.
+Tools (scratchpad, not committed): tools/gen.py, runall.sh, runmood.sh, lineup.py, assemble.py, clipgif.py.
+Sent: labelled clip GIFs, in-engine GIFs default + corrupted_violet, the 3-tile line-up. WAITING for owner approval (CP4).

@@ -7,7 +7,7 @@ Usage:  python3 effects.py OUT_DIR [--preview DIR] [set ...]
   <set>.fx.json (the FX MANIFEST: sprites -> frames, bursts -> emitters, creatures -> where they emit).
   --preview  also writes <set>_fx_sheet.png: every sprite frame at 4x on the game's near-black.
 
-SETS. One per enemy FAMILY, named exactly as the family enum in lower case ("machine", "insect", "aberration"), plus the
+SETS. One per enemy FAMILY, named exactly as the family enum in lower case ("machine", "insect", "aberration", "undead"), plus the
 shared "status" set (fire, smoke, toxin bubbles, the dazed stars) that every family uses for statuses whose
 colour is semantic (art-direction V5), not a family ink. A later family order adds ONE entry to SETS.
 
@@ -356,6 +356,129 @@ def _detonate(o, f):
     return [shapes]
 
 
+# --- undead (order 6: the facility's own staff, sealed in what they wore to work - cloth, armour and the SOUL ink) -----
+def _wisp(o, f):
+    """A soul wisp shaken out of a wound: a short curling streak of pale light that thins as it rises (emissive)."""
+    c, n = 6.5, 4
+    length = _fade(f, n, 3.4, 5.6)
+    bend = _fade(f, n, 0.6, 2.2)
+    r = _fade(f, n, 1.5, 0.7)
+    return [[limb(c, c + length * 0.5, c + bend, c, r, r * 0.8, "soul", glow=_fade(f, n, 1.2, 0.75)),
+             limb(c + bend, c, c - bend * 0.4, c - length * 0.5, r * 0.8, r * 0.5, "soul", glow=_fade(f, n, 1.0, 0.6))]]
+
+
+def _ember(o, f):
+    """The Ghoul's leak: a red ember from the cracked visor, lengthening as it falls (the owner's red-eye exception)."""
+    c = 3.5
+    stretch = (0.6, 1.6, 2.4)[f]
+    return [[limb(c, c - stretch, c, c + 0.5, 0.6, 1.1, "redeye", glow=_fade(f, 3, 1.2, 0.8))]]
+
+
+def _soul_flash(o, f):
+    """The soul leaving a body that falls: a ragged burst of cold light that swells and thins (emissive)."""
+    c, n = 10.5, 4
+    rng = random.Random(2100 + f)
+    r = _fade(f, n, 2.6, 7.5)
+    glow = _fade(f, n, 1.3, 0.55)
+    shapes = [blob(c, c, r * 0.6, r * 0.55, "soul", glow=glow)]
+    for i in range(7):
+        a = i * 2 * math.pi / 7 + rng.uniform(-0.35, 0.35)
+        d = r * rng.uniform(0.75, 1.05)
+        shapes.append(limb(c, c, c + math.cos(a) * d, c + math.sin(a) * d * 0.85, r * 0.22, 0.5, "soul", glow=glow * 0.9))
+    return [shapes]
+
+
+def _scrap(o, f, mat="overalls"):
+    """A torn scrap of suit cloth, tumbling (lit: graded with the body)."""
+    c = 4.5
+    r = Xturn(f * math.pi / 4)
+    pts = [(-3.2, -1.4), (2.6, -2.0), (3.2, 0.8), (0.2, 2.0), (-2.4, 1.4)]
+    squash = (1.0, 0.55, 1.0, 0.75)[f]
+    return [[slab([(c + x, c + y * squash) for x, y in (r(p) for p in pts)], mat, bevel=0.8, slope=1.0)]]
+
+
+def _armour_fleck(o, f):
+    """A chip knocked off the riot armour, tumbling (lit)."""
+    c = 3.5
+    r = Xturn(f * math.pi / 4)
+    return [[slab([(c + x, c + y) for x, y in (r(p) for p in [(-2.0, -1.0), (2.0, -1.4), (1.6, 1.2), (-1.6, 1.0)])],
+                  "darkmetal", bevel=0.8)]]
+
+
+def _armour_spark(o, f):
+    """RESISTED on riot armour: a hard white-hot star off the plate, collapsing (emissive)."""
+    c, n = 7.5, 3
+    ray = _fade(f, n, 6.5, 2.5)
+    shapes = [limb(c, c, c + math.cos(a) * ray, c + math.sin(a) * ray, 1.1, 0.4, "flare", glow=_fade(f, n, 1.8, 1.1))
+              for a in (0.0, math.pi / 2, math.pi, 3 * math.pi / 2)]
+    shapes.append(blob(c, c, 1.6, 1.6, "flare", glow=2.0))
+    return [shapes]
+
+
+def _ash(o, f):
+    """RESISTED on the undead: no wound - a dull puff of grey grime off the suit (lit, no light of its own)."""
+    c, n = 4.5, 3
+    r = _fade(f, n, 1.8, 3.6)
+    return [[blob(c, c, r, r * 0.8, "deadskin", depth=r * 0.3, k=2)]]
+
+
+def _soul_mote(o, f):
+    """A mote of soul light drawn into the body while it winds up."""
+    c = 2.5
+    r = (1.0, 1.4, 0.9)[f]
+    return [[blob(c, c, r, r, "soul", glow=_fade(f, 3, 1.0, 1.2))]]
+
+
+def _soul_bolt(o, f):
+    """The Vortex Eye's bolt: a knot of soul light with a hot heart and a ragged corona, wobbling (projectile)."""
+    c = 6.5
+    rx, ry = ((3.8, 3.3), (3.3, 3.9), (3.6, 3.5))[f]
+    corona = [limb(c, c, c + math.cos(a) * (rx + 1.5), c + math.sin(a) * (ry + 1.5), 1.0, 0.4, "soul", glow=0.9)
+              for a in (f * 0.7 + i * 2 * math.pi / 5 for i in range(5))]
+    return [[blob(c, c, rx, ry, "soul", glow=1.1), *corona,
+             blob(c - 0.8, c - 0.8, 1.5, 1.3, "soul", op="add", depth=1.0, glow=1.6)]]
+
+
+def _bolt_trail(o, f):
+    """A wisp shed by the bolt as it flies."""
+    c = 3.5
+    stretch = (2.4, 1.6, 0.9)[f]
+    return [[limb(c, c - stretch, c, c + 0.6, 0.6, 1.1, "soul", glow=_fade(f, 3, 1.1, 0.7))]]
+
+
+def _bolt_muzzle(o, f):
+    """The lash at the eye ports as the bolt leaves: a twisting ring of soul light closing in (emissive)."""
+    c, n = 9.5, 3
+    r = _fade(f, n, 7.5, 3.5)
+    shapes = []
+    for i in range(6):
+        a = i * math.pi / 3 + f * 0.5
+        shapes.append(limb(c + math.cos(a) * r, c + math.sin(a) * r * 0.8, c + math.cos(a + 0.8) * r * 0.55,
+                           c + math.sin(a + 0.8) * r * 0.45, 1.1, 0.5, "soul", glow=_fade(f, n, 1.6, 1.0)))
+    shapes.append(blob(c, c, _fade(f, n, 2.4, 1.4), _fade(f, n, 2.4, 1.4), "soul", glow=1.6))
+    return [shapes]
+
+
+def _spore(o, f):
+    """A spore drifting out of a split pod: a tiny soul-lit speck."""
+    c = 2.5
+    r = (0.9, 1.3, 1.0)[f]
+    return [[blob(c, c, r, r, "soul", glow=_fade(f, 3, 0.9, 1.1))]]
+
+
+def _spore_puff(o, f):
+    """A puff of spore dust off the Corruptor's pods: a soft grey cloud that swells as it drifts (lit)."""
+    c, n = 6.5, 4
+    rng = random.Random(2300 + f)
+    r = _fade(f, n, 2.0, 5.2)
+    shapes = [blob(c, c, r, r * 0.85, "spore", depth=r * 0.4, k=3, glow=0.0)]
+    for _ in range(3):
+        a = rng.uniform(0, 2 * math.pi)
+        shapes.append(blob(c + math.cos(a) * r * 0.55, c + math.sin(a) * r * 0.45, r * 0.5, r * 0.45, "spore",
+                           depth=r * 0.3, k=3, glow=0.0))
+    return [shapes]
+
+
 # --- status (shared, semantic colours) ---------------------------------------------------------------
 def _flame(o, f):
     """A flame lick: rises, peaks, gutters. Fire is a status colour (V5), so it is the same on every family."""
@@ -635,6 +758,114 @@ SETS = {
                                 poison=placement("hit_centre", (0, 0), 30), body=placement("hit_centre", (0, 20), 30),
                                 bursts={"PROJECTILE": "SPIT", "TRAIL": "SPIT_TRAIL", "MUZZLE": "SPIT_MUZZLE",
                                         "IMPACT": "ACID_SPLASH", "HIT": "SPLASH", "HIT_HEAVY": "SPLASH_HEAVY"}),
+        },
+    ),
+    # ---------------------------------------------------------------------------------------- UNDEAD
+    # order 6: the facility's own staff. The family ink is SOUL (pale, cold, low saturation - AS1); what comes off them
+    # is soul light and torn suit cloth, never blood (R3: the light leaks only from eyes, mouths and the wounds it re-
+    # entered by). The Ghoul's red ember, the Revenant's armour spark, the Vortex Eye's bolt and the Corruptor's spores
+    # are creature-only bursts taken through overrides (the order 4 idiom).
+    "undead": dict(
+        sprites=[
+            Sprite("WISP", 13, 4, _wisp, emissive=True),
+            Sprite("SOUL_FLASH", 21, 4, _soul_flash, emissive=True),
+            Sprite("SCRAP", 9, 4, lambda o, f: _scrap(o, f), emissive=False, mode="loop", fps=12),
+            Sprite("SCRAP_PALE", 9, 4, lambda o, f: _scrap(o, f, mat="labcoat"), emissive=False, mode="loop", fps=10),
+            Sprite("ASH", 9, 3, _ash, emissive=False),
+            Sprite("MOTE", 5, 3, _soul_mote, emissive=True, mode="loop", fps=8),
+            Sprite("EMBER", 7, 3, _ember, emissive=True),
+            Sprite("ARMOUR_FLECK", 7, 4, _armour_fleck, emissive=False, mode="loop", fps=13),
+            Sprite("ARMOUR_SPARK", 15, 3, _armour_spark, emissive=True),
+            Sprite("SOUL_BOLT", 13, 3, _soul_bolt, emissive=True, mode="loop", fps=12),
+            Sprite("BOLT_TRAIL", 7, 3, _bolt_trail, emissive=True),
+            Sprite("BOLT_MUZZLE", 19, 3, _bolt_muzzle, emissive=True),
+            Sprite("SPORE", 5, 3, _spore, emissive=True),
+            Sprite("SPORE_PUFF", 13, 4, _spore_puff, emissive=False),
+        ],
+        bursts={
+            # HURT: soul wisps shaken out of the wound and a scrap of suit.
+            "HIT": burst(emitter("WISP", (4, 6), (0.35, 0.55), (40, 110), angle=90, spread=200, toward=(10, 40), gravity=-60,
+                                 drag=1.6, radius=6),
+                         emitter("SCRAP", (1, 2), (0.45, 0.65), (60, 120), spread=360, toward=(10, 40), gravity=520, radius=6)),
+            "HIT_HEAVY": burst(emitter("WISP", (8, 11), (0.40, 0.65), (60, 160), angle=90, spread=240, toward=(20, 70),
+                                       gravity=-60, drag=1.2, radius=9),
+                               emitter("SCRAP", (2, 3), (0.50, 0.75), (70, 160), spread=360, toward=(10, 50), gravity=540, radius=9),
+                               emitter("SCRAP_PALE", (1, 2), (0.50, 0.75), (70, 160), spread=360, gravity=540, radius=9)),
+            # RESISTED: no wound, no light - a dull puff of grime off the suit.
+            "RESIST": burst(emitter("ASH", (2, 3), (0.24, 0.32), (10, 30), spread=360, radius=3),
+                            emitter("SCRAP", (0, 1), (0.40, 0.50), (50, 80), angle=60, spread=60, gravity=520)),
+            "KILL": burst(emitter("SOUL_FLASH", (1, 1), (0.30, 0.34), (0, 0), toward=(20, 20), radius=2),
+                          emitter("WISP", (10, 14), (0.45, 0.75), (80, 200), angle=90, spread=300, toward=(30, 90),
+                                  gravity=-80, drag=1.0, radius=12),
+                          emitter("SCRAP", (3, 4), (0.55, 0.80), (80, 180), spread=360, toward=(10, 50), gravity=540, radius=12)),
+            # DEATH: the soul goes out of it - a cold flash and a column of wisps rising off the falling body, cloth scraps.
+            "DEATH": burst(emitter("SOUL_FLASH", (2, 2), (0.40, 0.50), (10, 30), angle=90, spread=90, gravity=-40, radius=14),
+                           emitter("WISP", (8, 10), (0.70, 1.00), (30, 80), angle=90, spread=60, gravity=-90, drag=0.6, radius=16),
+                           emitter("SCRAP", (3, 4), (0.60, 0.90), (50, 120), angle=90, spread=150, toward=(10, 40), gravity=540, radius=18),
+                           emitter("SCRAP_PALE", (1, 2), (0.60, 0.90), (50, 120), angle=90, spread=150, gravity=540, radius=18)),
+            # WOUNDED: a wisp seeping out of the wound now and then.
+            "LEAK": burst(emitter("WISP", (1, 1), (0.50, 0.70), (10, 25), angle=90, spread=40, gravity=-50, radius=1.5),
+                          interval=(0.40, 0.95)),
+            # WIND_UP: motes of soul drawn up into the body.
+            "CHARGE": burst(emitter("MOTE", (1, 2), (0.35, 0.55), (10, 30), angle=90, spread=70, gravity=-60, radius=2),
+                            interval=(0.08, 0.16)),
+            "BLEED": burst(emitter("WISP", (1, 1), (0.45, 0.60), (10, 25), angle=90, spread=50, gravity=-50, radius=10),
+                           interval=(0.25, 0.50)),
+            # creature-only (no runtime id), taken through overrides:
+            "LEAK_EMBER": burst(emitter("EMBER", (1, 1), (0.40, 0.55), (0, 10), angle=-90, spread=20, gravity=380, radius=1.5),
+                                interval=(0.35, 0.90)),
+            "RESIST_ARMOUR": burst(emitter("ARMOUR_SPARK", (1, 1), (0.16, 0.22), (0, 0), toward=(40, 40)),
+                                   emitter("ARMOUR_FLECK", (1, 2), (0.40, 0.55), (60, 110), angle=70, spread=80, gravity=520)),
+            "CHARGE_BATON": burst(emitter("MOTE", (1, 2), (0.12, 0.20), (20, 60), spread=360, radius=2),
+                                  interval=(0.06, 0.12)),
+            "SOUL_BOLT": burst(emitter("SOUL_BOLT", (1, 1), (0.30, 0.30), (0, 0))),
+            "BOLT_TRAIL": burst(emitter("BOLT_TRAIL", (1, 1), (0.22, 0.34), (5, 15), angle=90, spread=60, gravity=-120),
+                                interval=(0.025, 0.04)),
+            "BOLT_MUZZLE": burst(emitter("BOLT_MUZZLE", (1, 1), (0.16, 0.16), (0, 0)),
+                                 emitter("WISP", (2, 3), (0.25, 0.40), (40, 90), spread=360, gravity=-40)),
+            "HIT_SPORE": burst(emitter("SPORE_PUFF", (2, 3), (0.45, 0.65), (20, 50), angle=90, spread=200, gravity=-30, radius=8),
+                               emitter("SPORE", (4, 6), (0.45, 0.70), (40, 110), spread=360, toward=(10, 40), gravity=-20,
+                                       drag=1.4, radius=8)),
+            "HIT_HEAVY_SPORE": burst(emitter("SPORE_PUFF", (4, 5), (0.55, 0.80), (30, 70), angle=90, spread=240, gravity=-30, radius=12),
+                                     emitter("SPORE", (8, 11), (0.50, 0.80), (50, 150), spread=360, toward=(20, 60), gravity=-20,
+                                             drag=1.2, radius=12),
+                                     emitter("SCRAP", (1, 2), (0.50, 0.75), (70, 160), spread=360, gravity=540, radius=10)),
+            "DEATH_SPORE": burst(emitter("SPORE_PUFF", (6, 8), (0.80, 1.20), (20, 60), angle=90, spread=180, gravity=-25, radius=24),
+                                 emitter("SPORE", (14, 18), (0.80, 1.20), (30, 110), angle=90, spread=220, toward=(10, 40),
+                                         gravity=-25, drag=0.8, radius=24),
+                                 emitter("SOUL_FLASH", (1, 1), (0.40, 0.50), (0, 0), radius=8),
+                                 emitter("WISP", (4, 6), (0.70, 1.00), (30, 70), angle=90, spread=60, gravity=-90, radius=16)),
+            "LEAK_SPORE": burst(emitter("SPORE", (1, 2), (0.70, 1.00), (10, 25), angle=90, spread=60, gravity=-30, radius=4),
+                                interval=(0.25, 0.60)),
+            "CHARGE_SPORE": burst(emitter("SPORE", (1, 2), (0.40, 0.60), (10, 30), angle=90, spread=90, gravity=-40, radius=14),
+                                  interval=(0.08, 0.16)),
+        },
+        creatures={
+            # the leak is a red ember from the cracked visor (the owner's red-eye exception)
+            "ghoul": dict(leak=placement("eye", (3, 1), 1.5), burn=placement("hit_centre", (0, -6), 18),
+                          charge=placement("emitter", (0, 0), 8), stun=placement("eye", (0, -24), 14),
+                          poison=placement("hit_centre", (0, -10), 16), body=placement("hit_centre", (0, 0), 14),
+                          bursts={"LEAK": "LEAK_EMBER"}),
+            # the leak is the split down the spine; the wind-up scrapes motes off the floor under its hands
+            "crawler": dict(leak=placement("hit_centre", (0, -22), 3), burn=placement("hit_centre", (0, -14), 26),
+                            charge=placement("hit_centre", (0, -8), 14), stun=placement("eye", (0, -22), 14),
+                            poison=placement("hit_centre", (0, -6), 24), body=placement("hit_centre", (0, -4), 22)),
+            # the leak is the breach in the chest plate; the baton tip crackles on the wind-up; hits ring off the armour
+            "revenant": dict(leak=placement("hit_centre", (9, -8), 1.5), burn=placement("hit_centre", (0, -6), 24),
+                             charge=placement("emitter", (0, 0), 2), stun=placement("eye", (0, -26), 16),
+                             poison=placement("hit_centre", (0, -10), 20), body=placement("hit_centre", (0, -4), 18),
+                             bursts={"RESIST": "RESIST_ARMOUR", "CHARGE": "CHARGE_BATON"}),
+            # the only shooter of the family: its bolt is its own (overrides); the leak is the light thinning from the ports
+            "vortex_eye": dict(leak=placement("eye", (0, 6), 4), burn=placement("hit_centre", (0, -8), 20),
+                               charge=placement("emitter", (0, 0), 6), stun=placement("eye", (0, -28), 14),
+                               poison=placement("hit_centre", (0, 0), 20), body=placement("hit_centre", (0, 8), 22),
+                               bursts={"PROJECTILE": "SOUL_BOLT", "TRAIL": "BOLT_TRAIL", "MUZZLE": "BOLT_MUZZLE"}),
+            # spores everywhere: hits puff spore dust off the pods, the split pods leak it, the death bursts them all
+            "blight_corruptor": dict(leak=placement("hit_centre", (12, -8), 6), burn=placement("hit_centre", (0, -10), 28),
+                                     charge=placement("hit_centre", (-14, -36), 16), stun=placement("eye", (0, -28), 16),
+                                     poison=placement("hit_centre", (0, -6), 26), body=placement("hit_centre", (0, -10), 26),
+                                     bursts={"HIT": "HIT_SPORE", "HIT_HEAVY": "HIT_HEAVY_SPORE", "DEATH": "DEATH_SPORE",
+                                             "LEAK": "LEAK_SPORE", "CHARGE": "CHARGE_SPORE"}),
         },
     ),
     # ---------------------------------------------------------------------------------------- STATUS (shared)

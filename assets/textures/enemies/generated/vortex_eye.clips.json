@@ -1,0 +1,200 @@
+{
+ "version": 1,
+ "creature": "vortex_eye",
+ "canvas": [160,240],
+ "groundY": 232,
+ "atlas": "vortex_eye.atlas.png",
+ "glow": "vortex_eye.glow.png",
+ "atlasSize": [1024,1024],
+ "clips": {
+  "IDLE": {
+   "mode": "loop",
+   "fps": 12,
+   "duration": 1.5,
+   "frames": [
+    {"rect":[0,0,60,137],"offset":[50,48],"duration":0.0833,"glow":true,"anchors":{"eye":[81.9,69.6],"ground":[80.0,232.0],"hit_centre":[80.0,102.0],"muzzle":[82.0,69.6]}},
+    {"rect":[62,0,60,137],"offset":[50,48],"duration":0.0833,"glow":true,"anchors":{"eye":[81.7,69.9],"ground":[80.0,232.0],"hit_centre":[80.0,102.3],"muzzle":[81.9,69.9]}},
+    {"rect":[124,0,60,137],"offset":[50,49],"duration":0.0833,"glow":true,"anchors":{"eye":[81.6,70.1],"ground":[80.0,232.0],"hit_centre":[80.0,102.6],"muzzle":[81.7,70.1]}},
+    {"rect":[186,0,60,137],"offset":[50,49],"duration":0.0833,"glow":true,"anchors":{"eye":[81.4,70.4],"ground":[80.0,232.0],"hit_centre":[80.0,102.8],"muzzle":[81.5,70.4]}},
+    {"rect":[248,0,60,137],"offset":[50,49],"duration":0.0833,"glow":true,"anchors":{"eye":[81.2,70.7],"ground":[80.0,232.0],"hit_centre":[80.0,103.1],"muzzle":[81.3,70.7]}},
+    {"rect":[310,0,60,137],"offset":[50,49],"duration":0.0833,"glow":true,"anchors":{"eye":[81.1,70.9],"ground":[80.0,232.0],"hit_centre":[80.0,103.4],"muzzle":[81.1,70.9]}},
+    {"rect":[372,0,60,137],"offset":[50,50],"duration":0.0833,"glow":true,"anchors":{"eye":[80.9,71.2],"ground":[80.0,232.0],"hit_centre":[80.0,103.7],"muzzle":[81.0,71.2]}},
+    {"rect":[434,0,60,137],"offset":[50,50],"duration":0.0833,"glow":true,"anchors":{"eye":[80.7,71.5],"ground":[80.0,232.0],"hit_centre":[80.0,103.9],"muzzle":[80.8,71.5]}},
+    {"rect":[496,0,60,137],"offset":[50,50],"duration":0.0833,"glow":true,"anchors":{"eye":[80.5,71.7],"ground":[80.0,232.0],"hit_centre":[80.0,104.2],"muzzle":[80.6,71.7]}},
+    {"rect":[62,139,60,136],"offset":[50,51],"duration":0.0833,"glow":true,"anchors":{"eye":[80.4,72.0],"ground":[80.0,232.0],"hit_centre":[80.0,104.5],"muzzle":[80.4,72.0]}},
+    {"rect":[558,0,60,137],"offset":[50,50],"duration":0.0833,"glow":true,"anchors":{"eye":[80.8,71.9],"ground":[80.0,232.0],"hit_centre":[80.0,104.4],"muzzle":[80.8,71.9]}},
+    {"rect":[124,139,60,136],"offset":[50,50],"duration":0.0833,"glow":true,"anchors":{"eye":[81.6,71.8],"ground":[80.0,232.0],"hit_centre":[80.0,104.2],"muzzle":[81.7,71.8]}},
+    {"rect":[186,139,60,136],"offset":[50,50],"duration":0.0833,"glow":true,"anchors":{"eye":[82.5,71.5],"ground":[80.0,232.0],"hit_centre":[80.0,103.9],"muzzle":[82.7,71.5]}},
+    {"rect":[248,139,60,136],"offset":[50,50],"duration":0.0833,"glow":true,"anchors":{"eye":[83.0,71.2],"ground":[80.0,232.0],"hit_centre":[80.0,103.5],"muzzle":[83.2,71.2]}},
+    {"rect":[310,139,60,136],"offset":[50,49],"duration":0.0833,"glow":true,"anchors":{"eye":[82.9,70.8],"ground":[80.0,232.0],"hit_centre":[80.0,103.0],"muzzle":[83.2,70.8]}},
+    {"rect":[372,139,60,136],"offset":[50,49],"duration":0.0833,"glow":true,"anchors":{"eye":[82.7,70.3],"ground":[80.0,232.0],"hit_centre":[80.0,102.6],"muzzle":[82.9,70.4]}},
+    {"rect":[620,0,60,137],"offset":[50,48],"duration":0.0833,"glow":true,"anchors":{"eye":[82.3,70.0],"ground":[80.0,232.0],"hit_centre":[80.0,102.3],"muzzle":[82.5,70.0]}},
+    {"rect":[682,0,60,137],"offset":[50,48],"duration":0.0833,"glow":true,"anchors":{"eye":[82.0,69.7],"ground":[80.0,232.0],"hit_centre":[80.0,102.1],"muzzle":[82.2,69.7]}}
+   ]
+  },
+  "DORMANT": {
+   "mode": "loop",
+   "fps": 6,
+   "duration": 3.0,
+   "variantOf": "IDLE",
+   "frames": [
+    {"rect":[434,139,60,136],"offset":[50,54],"duration":0.1667,"glow":true,"anchors":{"eye":[85.6,75.3],"ground":[80.0,232.0],"hit_centre":[80.0,107.0],"muzzle":[86.1,75.4]}},
+    {"rect":[496,139,60,136],"offset":[50,54],"duration":0.1667,"glow":true,"anchors":{"eye":[85.6,75.3],"ground":[80.0,232.0],"hit_centre":[80.0,107.0],"muzzle":[86.1,75.4]}},
+    {"rect":[558,139,60,136],"offset":[50,54],"duration":0.1667,"glow":true,"anchors":{"eye":[85.6,75.3],"ground":[80.0,232.0],"hit_centre":[80.0,107.0],"muzzle":[86.1,75.4]}},
+    {"rect":[620,139,60,136],"offset":[50,54],"duration":0.1667,"glow":true,"anchors":{"eye":[85.6,75.3],"ground":[80.0,232.0],"hit_centre":[80.0,107.0],"muzzle":[86.1,75.4]}},
+    {"rect":[682,139,60,136],"offset":[50,54],"duration":0.1667,"glow":true,"anchors":{"eye":[85.6,75.3],"ground":[80.0,232.0],"hit_centre":[80.0,107.0],"muzzle":[86.1,75.4]}},
+    {"rect":[744,139,60,136],"offset":[50,54],"duration":0.1667,"glow":true,"anchors":{"eye":[85.6,75.3],"ground":[80.0,232.0],"hit_centre":[80.0,107.0],"muzzle":[86.1,75.4]}},
+    {"rect":[806,139,60,136],"offset":[50,54],"duration":0.1667,"glow":true,"anchors":{"eye":[85.6,75.3],"ground":[80.0,232.0],"hit_centre":[80.0,107.0],"muzzle":[86.1,75.4]}},
+    {"rect":[868,139,60,136],"offset":[50,54],"duration":0.1667,"glow":true,"anchors":{"eye":[85.6,75.3],"ground":[80.0,232.0],"hit_centre":[80.0,107.0],"muzzle":[86.1,75.4]}},
+    {"rect":[930,139,60,136],"offset":[50,54],"duration":0.1667,"glow":true,"anchors":{"eye":[85.6,75.3],"ground":[80.0,232.0],"hit_centre":[80.0,107.0],"muzzle":[86.1,75.4]}},
+    {"rect":[558,278,60,135],"offset":[50,54],"duration":0.1667,"glow":true,"anchors":{"eye":[85.6,75.3],"ground":[80.0,232.0],"hit_centre":[80.0,107.0],"muzzle":[86.1,75.4]}},
+    {"rect":[620,278,60,135],"offset":[50,54],"duration":0.1667,"glow":true,"anchors":{"eye":[85.6,75.3],"ground":[80.0,232.0],"hit_centre":[80.0,107.0],"muzzle":[86.1,75.4]}},
+    {"rect":[682,278,60,135],"offset":[50,54],"duration":0.1667,"glow":true,"anchors":{"eye":[85.6,75.3],"ground":[80.0,232.0],"hit_centre":[80.0,107.0],"muzzle":[86.1,75.4]}},
+    {"rect":[744,278,60,135],"offset":[50,54],"duration":0.1667,"glow":true,"anchors":{"eye":[85.6,75.3],"ground":[80.0,232.0],"hit_centre":[80.0,107.0],"muzzle":[86.1,75.4]}},
+    {"rect":[806,278,60,135],"offset":[50,54],"duration":0.1667,"glow":true,"anchors":{"eye":[85.6,75.3],"ground":[80.0,232.0],"hit_centre":[80.0,107.0],"muzzle":[86.1,75.4]}},
+    {"rect":[868,278,60,135],"offset":[50,54],"duration":0.1667,"glow":true,"anchors":{"eye":[85.6,75.3],"ground":[80.0,232.0],"hit_centre":[80.0,107.0],"muzzle":[86.1,75.4]}},
+    {"rect":[930,278,60,135],"offset":[50,54],"duration":0.1667,"glow":true,"anchors":{"eye":[85.6,75.3],"ground":[80.0,232.0],"hit_centre":[80.0,107.0],"muzzle":[86.1,75.4]}},
+    {"rect":[0,278,60,136],"offset":[50,54],"duration":0.1667,"glow":true,"anchors":{"eye":[85.6,75.3],"ground":[80.0,232.0],"hit_centre":[80.0,107.0],"muzzle":[86.1,75.4]}},
+    {"rect":[62,278,60,136],"offset":[50,54],"duration":0.1667,"glow":true,"anchors":{"eye":[85.6,75.3],"ground":[80.0,232.0],"hit_centre":[80.0,107.0],"muzzle":[86.1,75.4]}}
+   ]
+  },
+  "ALERT": {
+   "mode": "once",
+   "fps": 12,
+   "duration": 0.45,
+   "frames": [
+    {"rect":[744,0,60,137],"offset":[50,48],"duration":0.09,"glow":true,"anchors":{"eye":[81.9,69.6],"ground":[80.0,232.0],"hit_centre":[80.0,102.0],"muzzle":[82.0,69.6]}},
+    {"rect":[806,553,60,128],"offset":[50,43],"duration":0.09,"glow":true,"anchors":{"eye":[79.1,64.6],"ground":[80.0,232.0],"hit_centre":[80.0,97.1],"muzzle":[79.0,64.6]}},
+    {"rect":[186,416,60,134],"offset":[50,45],"duration":0.09,"glow":true,"anchors":{"eye":[80.6,67.0],"ground":[80.0,232.0],"hit_centre":[80.0,99.5],"muzzle":[80.6,67.0]}},
+    {"rect":[0,416,60,135],"offset":[50,46],"duration":0.09,"glow":true,"anchors":{"eye":[81.6,67.9],"ground":[80.0,232.0],"hit_centre":[80.0,100.3],"muzzle":[81.7,67.9]}},
+    {"rect":[124,278,60,136],"offset":[50,48],"duration":0.09,"glow":true,"anchors":{"eye":[81.9,69.6],"ground":[80.0,232.0],"hit_centre":[80.0,102.0],"muzzle":[82.0,69.6]}}
+   ]
+  },
+  "MOVE": {
+   "mode": "loop",
+   "fps": 12,
+   "duration": 0.333,
+   "frames": [
+    {"rect":[806,0,60,137],"offset":[50,47],"duration":0.0833,"glow":true,"anchors":{"eye":[80.0,68.5],"ground":[80.0,232.0],"hit_centre":[80.0,101.0],"muzzle":[80.0,68.5]}},
+    {"rect":[868,0,60,137],"offset":[50,48],"duration":0.0833,"glow":true,"anchors":{"eye":[81.7,69.6],"ground":[80.0,232.0],"hit_centre":[80.0,102.0],"muzzle":[81.8,69.6]}},
+    {"rect":[186,278,60,136],"offset":[50,49],"duration":0.0833,"glow":true,"anchors":{"eye":[83.4,70.8],"ground":[80.0,232.0],"hit_centre":[80.0,103.0],"muzzle":[83.7,70.8]}},
+    {"rect":[248,278,60,136],"offset":[50,48],"duration":0.0833,"glow":true,"anchors":{"eye":[81.7,69.6],"ground":[80.0,232.0],"hit_centre":[80.0,102.0],"muzzle":[81.9,69.6]}}
+   ]
+  },
+  "WIND_UP": {
+   "mode": "hold",
+   "fps": 12,
+   "duration": 0.35,
+   "frames": [
+    {"rect":[744,0,60,137],"offset":[50,48],"duration":0.0875,"glow":true,"anchors":{"eye":[81.9,69.6],"ground":[80.0,232.0],"hit_centre":[80.0,102.0],"muzzle":[82.0,69.6]}},
+    {"rect":[248,416,60,133],"offset":[50,47],"duration":0.0875,"glow":true,"anchors":{"eye":[81.2,68.8],"ground":[80.0,232.0],"hit_centre":[80.0,101.2],"muzzle":[81.3,68.8]}},
+    {"rect":[62,684,60,123],"offset":[50,46],"duration":0.0875,"glow":true,"anchors":{"eye":[79.8,67.3],"ground":[80.0,232.0],"hit_centre":[80.0,99.8],"muzzle":[79.8,67.3]}},
+    {"rect":[434,684,60,119],"offset":[50,45],"duration":0.0875,"glow":true,"anchors":{"eye":[79.1,66.5],"ground":[80.0,232.0],"hit_centre":[80.0,99.0],"muzzle":[79.0,66.5]}}
+   ]
+  },
+  "ATTACK": {
+   "mode": "once",
+   "fps": 20,
+   "duration": 0.3,
+   "frames": [
+    {"rect":[744,0,60,137],"offset":[50,48],"duration":0.05,"glow":true,"anchors":{"eye":[81.9,69.6],"ground":[80.0,232.0],"hit_centre":[80.0,102.0],"muzzle":[82.0,69.6]}},
+    {"rect":[186,684,60,121],"offset":[50,46],"duration":0.05,"glow":true,"anchors":{"eye":[81.9,67.1],"ground":[80.0,232.0],"hit_centre":[80.0,99.5],"muzzle":[82.0,67.1]}},
+    {"rect":[248,684,60,120],"offset":[50,42],"duration":0.05,"glow":true,"anchors":{"eye":[81.9,63.6],"ground":[80.0,232.0],"hit_centre":[80.0,96.0],"muzzle":[82.0,63.6]},"event":"emit"},
+    {"rect":[930,553,60,125],"offset":[50,45],"duration":0.05,"glow":true,"anchors":{"eye":[81.9,67.0],"ground":[80.0,232.0],"hit_centre":[80.0,99.4],"muzzle":[82.0,67.0]}},
+    {"rect":[496,416,60,131],"offset":[50,46],"duration":0.05,"glow":true,"anchors":{"eye":[81.9,67.9],"ground":[80.0,232.0],"hit_centre":[80.0,100.3],"muzzle":[82.0,67.9]}},
+    {"rect":[310,278,60,136],"offset":[50,48],"duration":0.05,"glow":true,"anchors":{"eye":[81.9,69.6],"ground":[80.0,232.0],"hit_centre":[80.0,102.0],"muzzle":[82.0,69.6]}}
+   ]
+  },
+  "DEBUFF_PLAYER": {
+   "mode": "once",
+   "fps": 16,
+   "duration": 0.5,
+   "frames": [
+    {"rect":[744,0,60,137],"offset":[50,48],"duration":0.0625,"glow":true,"anchors":{"eye":[81.9,69.6],"ground":[80.0,232.0],"hit_centre":[80.0,102.0],"muzzle":[82.0,69.6]}},
+    {"rect":[310,416,60,133],"offset":[50,47],"duration":0.0625,"glow":true,"anchors":{"eye":[81.1,68.5],"ground":[80.0,232.0],"hit_centre":[80.0,101.0],"muzzle":[81.1,68.5]}},
+    {"rect":[0,684,60,124],"offset":[50,45],"duration":0.0625,"glow":true,"anchors":{"eye":[79.4,66.6],"ground":[80.0,232.0],"hit_centre":[80.0,99.1],"muzzle":[79.4,66.6]}},
+    {"rect":[496,684,60,119],"offset":[50,44],"duration":0.0625,"glow":true,"anchors":{"eye":[78.5,65.6],"ground":[80.0,232.0],"hit_centre":[80.0,98.0],"muzzle":[78.4,65.6]}},
+    {"rect":[310,684,60,120],"offset":[50,42],"duration":0.0625,"glow":true,"anchors":{"eye":[78.7,63.0],"ground":[80.0,232.0],"hit_centre":[80.0,95.5],"muzzle":[78.6,63.0]},"event":"emit"},
+    {"rect":[868,553,60,127],"offset":[50,45],"duration":0.0625,"glow":true,"anchors":{"eye":[79.3,66.9],"ground":[80.0,232.0],"hit_centre":[80.0,99.4],"muzzle":[79.2,66.9]}},
+    {"rect":[372,416,60,133],"offset":[50,46],"duration":0.0625,"glow":true,"anchors":{"eye":[80.4,67.9],"ground":[80.0,232.0],"hit_centre":[80.0,100.4],"muzzle":[80.4,67.9]}},
+    {"rect":[930,0,60,137],"offset":[50,48],"duration":0.0625,"glow":true,"anchors":{"eye":[81.9,69.6],"ground":[80.0,232.0],"hit_centre":[80.0,102.0],"muzzle":[82.0,69.6]}}
+   ]
+  },
+  "HURT_LIGHT": {
+   "mode": "once",
+   "fps": 12,
+   "duration": 0.17,
+   "frames": [
+    {"rect":[372,278,60,136],"offset":[50,46],"duration":0.085,"glow":true,"anchors":{"eye":[84.7,67.1],"ground":[80.0,232.0],"hit_centre":[80.0,99.0],"muzzle":[85.1,67.1]}},
+    {"rect":[0,139,60,137],"offset":[50,48],"duration":0.085,"glow":true,"anchors":{"eye":[81.9,69.6],"ground":[80.0,232.0],"hit_centre":[80.0,102.0],"muzzle":[82.0,69.6]}}
+   ]
+  },
+  "HURT_HEAVY": {
+   "mode": "once",
+   "fps": 12,
+   "duration": 0.42,
+   "frames": [
+    {"rect":[744,0,60,137],"offset":[50,48],"duration":0.084,"glow":true,"anchors":{"eye":[81.9,69.6],"ground":[80.0,232.0],"hit_centre":[80.0,102.0],"muzzle":[82.0,69.6]}},
+    {"rect":[930,416,60,129],"offset":[50,57],"duration":0.084,"glow":true,"anchors":{"eye":[85.6,78.3],"ground":[80.0,232.0],"hit_centre":[80.0,109.9],"muzzle":[86.1,78.4]}},
+    {"rect":[62,416,60,135],"offset":[50,46],"duration":0.084,"glow":true,"anchors":{"eye":[78.7,67.6],"ground":[80.0,232.0],"hit_centre":[80.0,100.1],"muzzle":[78.6,67.6]}},
+    {"rect":[434,278,60,136],"offset":[50,46],"duration":0.084,"glow":true,"anchors":{"eye":[79.3,67.7],"ground":[80.0,232.0],"hit_centre":[80.0,100.2],"muzzle":[79.3,67.7]}},
+    {"rect":[496,278,60,136],"offset":[50,48],"duration":0.084,"glow":true,"anchors":{"eye":[81.9,69.6],"ground":[80.0,232.0],"hit_centre":[80.0,102.0],"muzzle":[82.0,69.6]}}
+   ]
+  },
+  "DEFEND": {
+   "mode": "hold",
+   "fps": 12,
+   "duration": 0.33,
+   "frames": [
+    {"rect":[744,0,60,137],"offset":[50,48],"duration":0.0825,"glow":true,"anchors":{"eye":[81.9,69.6],"ground":[80.0,232.0],"hit_centre":[80.0,102.0],"muzzle":[82.0,69.6]}},
+    {"rect":[434,416,60,133],"offset":[50,50],"duration":0.0825,"glow":true,"anchors":{"eye":[82.9,71.8],"ground":[80.0,232.0],"hit_centre":[80.0,104.1],"muzzle":[83.1,71.8]}},
+    {"rect":[124,684,60,122],"offset":[50,55],"duration":0.0825,"glow":true,"anchors":{"eye":[84.7,76.0],"ground":[80.0,232.0],"hit_centre":[80.0,107.9],"muzzle":[85.0,76.1]}},
+    {"rect":[558,684,60,118],"offset":[50,57],"duration":0.0825,"glow":true,"anchors":{"eye":[85.6,78.3],"ground":[80.0,232.0],"hit_centre":[80.0,110.0],"muzzle":[86.1,78.4]}}
+   ]
+  },
+  "WOUNDED": {
+   "mode": "loop",
+   "fps": 12,
+   "duration": 1.5,
+   "variantOf": "IDLE",
+   "frames": [
+    {"rect":[0,553,60,129],"offset":[50,52],"duration":0.0833,"glow":true,"anchors":{"eye":[86.0,73.0],"ground":[80.0,232.0],"hit_centre":[80.0,104.6],"muzzle":[86.4,73.1]}},
+    {"rect":[558,416,60,130],"offset":[50,52],"duration":0.0833,"glow":true,"anchors":{"eye":[86.0,73.3],"ground":[80.0,232.0],"hit_centre":[80.0,104.9],"muzzle":[86.4,73.4]}},
+    {"rect":[620,416,60,130],"offset":[50,52],"duration":0.0833,"glow":true,"anchors":{"eye":[86.0,73.6],"ground":[80.0,232.0],"hit_centre":[80.0,105.1],"muzzle":[86.4,73.7]}},
+    {"rect":[682,416,60,130],"offset":[50,52],"duration":0.0833,"glow":true,"anchors":{"eye":[86.0,73.9],"ground":[80.0,232.0],"hit_centre":[80.0,105.4],"muzzle":[86.4,73.9]}},
+    {"rect":[744,416,60,130],"offset":[50,53],"duration":0.0833,"glow":true,"anchors":{"eye":[86.0,74.1],"ground":[80.0,232.0],"hit_centre":[80.0,105.7],"muzzle":[86.4,74.2]}},
+    {"rect":[806,416,60,130],"offset":[50,53],"duration":0.0833,"glow":true,"anchors":{"eye":[86.0,74.4],"ground":[80.0,232.0],"hit_centre":[80.0,106.0],"muzzle":[86.4,74.5]}},
+    {"rect":[868,416,60,130],"offset":[50,53],"duration":0.0833,"glow":true,"anchors":{"eye":[86.0,74.7],"ground":[80.0,232.0],"hit_centre":[80.0,106.2],"muzzle":[86.4,74.8]}},
+    {"rect":[62,553,60,129],"offset":[50,54],"duration":0.0833,"glow":true,"anchors":{"eye":[86.0,75.0],"ground":[80.0,232.0],"hit_centre":[80.0,106.5],"muzzle":[86.4,75.1]}},
+    {"rect":[124,553,60,129],"offset":[50,54],"duration":0.0833,"glow":true,"anchors":{"eye":[86.0,75.3],"ground":[80.0,232.0],"hit_centre":[80.0,106.8],"muzzle":[86.4,75.3]}},
+    {"rect":[186,553,60,129],"offset":[50,54],"duration":0.0833,"glow":true,"anchors":{"eye":[86.0,75.5],"ground":[80.0,232.0],"hit_centre":[80.0,107.1],"muzzle":[86.4,75.6]}},
+    {"rect":[248,553,60,129],"offset":[50,54],"duration":0.0833,"glow":true,"anchors":{"eye":[86.0,75.5],"ground":[80.0,232.0],"hit_centre":[80.0,107.0],"muzzle":[86.4,75.5]}},
+    {"rect":[310,553,60,129],"offset":[50,54],"duration":0.0833,"glow":true,"anchors":{"eye":[86.0,75.2],"ground":[80.0,232.0],"hit_centre":[80.0,106.8],"muzzle":[86.4,75.3]}},
+    {"rect":[372,553,60,129],"offset":[50,53],"duration":0.0833,"glow":true,"anchors":{"eye":[86.0,74.9],"ground":[80.0,232.0],"hit_centre":[80.0,106.4],"muzzle":[86.4,75.0]}},
+    {"rect":[434,553,60,129],"offset":[50,53],"duration":0.0833,"glow":true,"anchors":{"eye":[86.0,74.5],"ground":[80.0,232.0],"hit_centre":[80.0,106.0],"muzzle":[86.4,74.6]}},
+    {"rect":[496,553,60,129],"offset":[50,53],"duration":0.0833,"glow":true,"anchors":{"eye":[86.0,74.1],"ground":[80.0,232.0],"hit_centre":[80.0,105.6],"muzzle":[86.4,74.2]}},
+    {"rect":[558,553,60,129],"offset":[50,52],"duration":0.0833,"glow":true,"anchors":{"eye":[86.0,73.7],"ground":[80.0,232.0],"hit_centre":[80.0,105.2],"muzzle":[86.4,73.8]}},
+    {"rect":[620,553,60,129],"offset":[50,52],"duration":0.0833,"glow":true,"anchors":{"eye":[86.0,73.4],"ground":[80.0,232.0],"hit_centre":[80.0,104.9],"muzzle":[86.4,73.4]}},
+    {"rect":[682,553,60,129],"offset":[50,52],"duration":0.0833,"glow":true,"anchors":{"eye":[86.0,73.1],"ground":[80.0,232.0],"hit_centre":[80.0,104.7],"muzzle":[86.4,73.2]}}
+   ]
+  },
+  "DEATH": {
+   "mode": "hold",
+   "fps": 12,
+   "duration": 0.9,
+   "frames": [
+    {"rect":[744,0,60,137],"offset":[50,48],"duration":0.0818,"glow":true,"anchors":{"eye":[81.9,69.6],"ground":[80.0,232.0],"hit_centre":[80.0,102.0],"muzzle":[82.0,69.6]}},
+    {"rect":[124,416,60,135],"offset":[50,44],"duration":0.0818,"glow":true,"anchors":{"eye":[82.5,65.3],"ground":[80.0,232.0],"hit_centre":[80.0,97.6],"muzzle":[82.7,65.3]}},
+    {"rect":[744,553,60,129],"offset":[50,48],"duration":0.0818,"glow":true,"anchors":{"eye":[83.9,69.8],"ground":[80.0,232.0],"hit_centre":[80.0,101.9],"muzzle":[84.2,69.9]}},
+    {"rect":[372,684,60,120],"offset":[50,57],"duration":0.0818,"glow":true,"anchors":{"eye":[85.8,78.4],"ground":[80.0,232.0],"hit_centre":[80.0,110.0],"muzzle":[86.3,78.5]}},
+    {"rect":[620,684,60,111],"offset":[50,69],"duration":0.0818,"glow":true,"anchors":{"eye":[87.8,90.0],"ground":[80.0,232.0],"hit_centre":[80.0,120.8],"muzzle":[88.4,90.1]}},
+    {"rect":[682,684,62,103],"offset":[50,81],"duration":0.0818,"glow":true,"anchors":{"eye":[89.5,102.1],"ground":[80.0,232.0],"hit_centre":[80.0,132.0],"muzzle":[90.2,102.3]}},
+    {"rect":[746,684,63,98],"offset":[50,90],"duration":0.0818,"glow":true,"anchors":{"eye":[90.5,110.8],"ground":[80.0,232.0],"hit_centre":[80.0,140.2],"muzzle":[91.3,111.1]}},
+    {"rect":[877,684,63,83],"offset":[50,92],"duration":0.0818,"glow":true,"anchors":{"eye":[90.7,112.8],"ground":[80.0,232.0],"hit_centre":[80.0,142.0],"muzzle":[91.6,113.1]}},
+    {"rect":[942,684,63,83],"offset":[50,92],"duration":0.0818,"glow":false,"anchors":{"eye":[91.0,113.0],"ground":[80.0,232.0],"hit_centre":[80.0,142.0],"muzzle":[91.8,113.3]}},
+    {"rect":[811,684,64,83],"offset":[50,92],"duration":0.0818,"glow":false,"anchors":{"eye":[91.5,113.4],"ground":[80.0,232.0],"hit_centre":[80.0,142.0],"muzzle":[92.4,113.7]}},
+    {"rect":[0,810,65,82],"offset":[50,93],"duration":0.0818,"glow":false,"anchors":{"eye":[92.2,114.0],"ground":[80.0,232.0],"hit_centre":[80.0,142.0],"muzzle":[93.2,114.3]}}
+   ]
+  }
+ }
+}

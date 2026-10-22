@@ -63,6 +63,7 @@ def vortex_eye_build(p):
     eye = p.eye_glow * (1 - p.dim)
     # the torn shoulders of the lab coat: a ragged hem the vortex pours out of
     hem_y = cy + 30
+    strip = max(0.15, 1.0 - 1.2 * p.unravel)
     coat = [
         blob(cx, cy + 12, 26.0, 18.0, "labcoat", depth=15, k=10),
         blob(j["l_shoulder"][0] + 2, j["l_shoulder"][1] + 7, 9.0, 9.0, "labcoat", depth=9, k=9),
@@ -71,8 +72,11 @@ def vortex_eye_build(p):
               (cx + 7, hem_y + 6), (cx + 15, hem_y - 3), (cx + 22, hem_y + 3), (cx + 29, cy + 12)], "labcoat",
              bevel=3.0, slope=0.9, k=6),
         # torn strips of coat hanging into the vortex, trailing as it turns
-        *chain([(cx - 18, hem_y), (cx - 20 + 3 * math.sin(p.spin * 6.28), hem_y + 12), (cx - 17, hem_y + 22)], 2.6, 1.2, "labcoat", k=2),
-        *chain([(cx + 11, hem_y + 2), (cx + 14 + 3 * math.cos(p.spin * 6.28), hem_y + 15), (cx + 12, hem_y + 25)], 2.4, 1.1, "labcoat", k=2),
+        # (they shrink back up into the hem as the vortex unravels, so the fallen bust never stands on them)
+        *chain([(cx - 18, hem_y), (cx - 20 + 3 * math.sin(p.spin * 6.28), hem_y + 12 * strip),
+                (cx - 17, hem_y + 22 * strip)], 2.6, 1.2, "labcoat", k=2),
+        *chain([(cx + 11, hem_y + 2), (cx + 14 + 3 * math.cos(p.spin * 6.28), hem_y + 2 + 13 * strip),
+                (cx + 12, hem_y + 2 + 23 * strip)], 2.4, 1.1, "labcoat", k=2),
         # lapels and the collar standing up round the helmet's neck ring
         limb(cx - 6, cy - 6, cx - 15, cy + 18, 2.2, 1.6, "labcoat", op="add", depth=1.6),
         limb(cx + 6, cy - 6, cx + 15, cy + 18, 2.2, 1.6, "labcoat", op="add", depth=1.6),
@@ -130,4 +134,69 @@ def vortex_eye_build(p):
 
 VORTEX_EYE = Rig("vortex_eye", vortex_eye_build, VORTEX_POSE, seed=67)
 
-VORTEX_CLIPS = []      # CP3 adds the clip set once the owner has approved the concept still
+
+# ---- clips (R4: it does not walk - it is CARRIED, the vortex turning under it like a slow drain) ----------------------
+_REST = dict(head=0.10, bob=0.0, tight=0.0, lash=0.0, pour=1.0, eye_glow=1.0)
+IDLE = Clip("IDLE", [
+    (0.00, dict(spin=0.0, bob=0.0, head=0.10), "linear"),
+    (0.75, dict(bob=2.5, head=0.02)),
+    (1.50, dict(spin=1.0), "linear"),
+    (1.10, dict(head=0.16)),
+], duration=1.5, mode="loop")
+
+VORTEX_CLIPS = [
+    IDLE,
+    IDLE.variant("DORMANT", speed=0.5, fps=6, pour=0.30, eye_glow=0.25, bob=5.0, head=0.30),
+    Clip("ALERT", [        # the light floods out of the ports and the vortex surges, lifting it
+        (0.00, dict(_REST, spin=0.0)),
+        (0.12, dict(pour=2.0, eye_glow=2.0, bob=-5.0, tight=0.5, head=-0.05, spin=0.25), "out"),
+        (0.30, dict(pour=1.4, bob=-2.0, tight=0.1, spin=0.45)),
+        (0.45, dict(_REST, spin=0.55)),
+    ], mode="once"),
+    Clip("MOVE", [         # it drifts: the vortex spins faster, the bust leans into the slide
+        (0.000, dict(spin=0.0, head=0.0, bob=-1.0), "linear"),
+        (0.167, dict(head=0.18, bob=1.0)),
+        (0.333, dict(spin=1.0), "linear"),
+    ], duration=0.333, mode="loop"),
+    Clip("WIND_UP", [      # the vortex tightens under it and the ports burn - held
+        (0.00, dict(_REST, spin=0.0)),
+        (0.35, dict(tight=1.0, pour=1.7, eye_glow=1.7, bob=-3.0, head=-0.05, spin=0.6)),
+    ], mode="hold"),
+    Clip("ATTACK", [       # the vortex tightens and LASHES: the soul bolt leaves the eye ports (muzzle anchor)
+        (0.00, dict(_REST, spin=0.0)),
+        (0.08, dict(tight=1.0, pour=1.8, eye_glow=1.9, bob=-3.0, spin=0.3), "in"),
+        (0.12, dict(lash=1.0, pour=2.2, eye_glow=2.2, bob=-6.0, spin=0.5), "out"),
+        (0.22, dict(lash=0.3, tight=0.4, pour=1.4, bob=-2.0, spin=0.7)),
+        (0.30, dict(_REST, spin=0.8)),
+    ], fps=20, mode="once", events={0.12: "emit"}),
+    Clip("DEBUFF_PLAYER", [  # the ability (BLINDED): a longer draw, the whole vortex wound tight, then one hard lash
+        (0.00, dict(_REST, spin=0.0)),
+        (0.22, dict(tight=1.0, pour=2.0, eye_glow=2.0, bob=-4.0, head=-0.08, spin=0.6), "in"),
+        (0.28, dict(lash=1.0, pour=2.4, eye_glow=2.4, bob=-7.0, spin=0.8), "out"),
+        (0.40, dict(lash=0.2, tight=0.3, pour=1.3, bob=-2.0, spin=1.0)),
+        (0.50, dict(_REST, spin=1.1)),
+    ], fps=16, mode="once", events={0.28: "emit"}),
+    Clip("HURT_LIGHT", [
+        (0.00, dict(bob=-3.0, pour=0.4, eye_glow=0.4, head=0.25, spin=0.1), "out"),
+        (0.17, dict(_REST, spin=0.15)),
+    ], mode="once"),
+    Clip("HURT_HEAVY", [   # knocked down the vortex: the light gutters, the strands fly loose, then it rights itself
+        (0.00, dict(_REST, spin=0.0)),
+        (0.08, dict(bob=8.0, pour=0.3, eye_glow=0.3, head=0.45, unravel=0.25, spin=0.2), "out"),
+        (0.25, dict(bob=-3.0, pour=1.5, eye_glow=1.5, head=-0.10, unravel=0.05, spin=0.4)),
+        (0.42, dict(_REST, unravel=0.0, spin=0.5)),
+    ], mode="once"),
+    Clip("DEFEND", [       # it sinks into the vortex, the strands winding tight round it like a cocoon - held
+        (0.00, dict(_REST, spin=0.0, tag=1.0)),
+        (0.33, dict(tight=1.0, bob=8.0, pour=0.6, eye_glow=0.6, head=0.30, spin=0.5)),
+    ], mode="hold"),
+    # WOUNDED: the vortex frays, the light pours thin, the head lolls
+    IDLE.variant("WOUNDED", pour=0.6, unravel=0.18, head=0.32, eye_glow=0.8),
+    Clip("DEATH", [        # the vortex unravels and the bust drops out of it
+        (0.00, dict(_REST, spin=0.0, unravel=0.0, dim=0.0)),
+        (0.10, dict(pour=2.2, eye_glow=2.2, bob=-5.0, spin=0.2), "out"),
+        (0.60, dict(unravel=1.0, pour=0.6, bob=0.0, head=0.6, spin=0.7), "in"),
+        (0.90, dict(unravel=1.0, head=0.7, spin=0.8), "hold"),
+        (0.20, dict(dim=0.0)), (0.75, dict(dim=1.0)),
+    ], mode="hold"),
+]

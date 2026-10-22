@@ -156,8 +156,9 @@ def blight_corruptor_build(p):
         root(_leg(j, "l", -1) + _leg(j, "r", 1)),
         root(body + hood),
         root(mask),
-        root(_arm(j, "l", -1)),
-        root(_pods(p, j, body_xf)),
+        # the pods sit in front of the hanging left arm; a RAISED or forward arm (smash, guard) comes in front of them
+        *((root(_pods(p, j, body_xf)), root(_arm(j, "l", -1))) if p.l_el < -1.2 or p.l_arm_fore > 0.3 else
+          (root(_arm(j, "l", -1)), root(_pods(p, j, body_xf)))),
         root(_arm(j, "r", 1) + wand),
     ]
     anchors = {
@@ -174,4 +175,84 @@ def blight_corruptor_build(p):
 
 BLIGHT_CORRUPTOR = Rig("blight_corruptor", blight_corruptor_build, CORRUPTOR_POSE, seed=71)
 
-CORRUPTOR_CLIPS = []      # CP3 adds the clip set once the owner has approved the concept still
+
+# ---- clips (R4: it moves like something too heavy for its own legs; the growth breathes, not the worker) ------------
+_REST = dict(torso=0.05, chest=0.06, head=0.12, l_sh=0.02, l_el=-0.25, l_wr=-0.1, r_sh=-0.05, r_el=-0.85, r_wr=-0.25,
+             l_hip=0.08, r_hip=0.10, l_knee=-0.10, r_knee=-0.12, squat=0.12, by=0.0, bx=0.0, breath=0.0, pods=0.0,
+             split=0.0, eye_glow=1.0, l_arm_fore=0.0, r_arm_fore=0.0)
+# the free left fist raised up the front for the smash (lesson 12.17: folded in, never swung out past the edge)
+_FIST_UP = dict(l_sh=0.55, l_el=-2.30, l_wr=-0.3, l_arm_fore=0.25, torso=-0.06, chest=-0.04, head=0.0, by=-3.0,
+                breath=1.0, pods=1.0, eye_glow=1.6)
+_SLAMMED = dict(l_sh=-0.25, l_el=-0.60, l_wr=-0.2, l_arm_fore=0.55, torso=0.10, chest=0.08, head=0.20, by=6.0,
+                squat=0.30, breath=0.4, pods=0.6, eye_glow=1.9)
+
+IDLE = Clip("IDLE", [
+    (0.00, dict(breath=0.0, head=0.12, by=0.0)),
+    (0.70, dict(breath=1.0, head=0.02, by=-1.5)),
+    (1.60, dict(breath=0.0)),
+    (1.10, dict(head=0.18, by=0.0)),
+    (0.20, dict(pods=0.0)), (0.95, dict(pods=1.0)), (1.45, dict(pods=0.1)),   # the pods swell a beat behind the breath
+], duration=1.6, mode="loop")
+
+CORRUPTOR_CLIPS = [
+    IDLE,
+    IDLE.variant("DORMANT", speed=0.5, fps=6, eye_glow=0.25, pod_glow=0.45, head=0.40, squat=0.22, by=4.0),
+    Clip("ALERT", [        # it straightens with a wet heave, the pods flaring
+        (0.00, dict(_REST)),
+        (0.12, dict(by=-4.0, head=-0.10, breath=1.0, pods=1.4, eye_glow=2.0, l_sh=0.12, torso=0.0), "out"),
+        (0.30, dict(by=-2.0, pods=0.9, eye_glow=1.5)),
+        (0.45, dict(_REST, pods=0.3)),
+    ], mode="once"),
+    Clip("MOVE", [         # a slow, heavy trudge: one leg at a time, the whole mass rolling over it
+        (0.000, dict(l_hip=0.14, l_knee=-0.28, l_leg_fore=0.30, r_hip=0.10, r_knee=-0.12, r_leg_fore=0.0, torso=0.0,
+                     by=-1.0, bx=-2.0, pods=0.6)),
+        (0.083, dict(l_leg_fore=0.05, by=2.0, bx=0.0, torso=0.04, pods=0.2)),
+        (0.167, dict(r_hip=0.16, r_knee=-0.28, r_leg_fore=0.30, l_hip=0.08, l_knee=-0.10, l_leg_fore=0.0, torso=0.10,
+                     by=-1.0, bx=2.0, pods=0.6)),
+        (0.250, dict(r_leg_fore=0.05, by=2.0, bx=0.0, torso=0.06, pods=0.2)),
+    ], duration=0.333, mode="loop"),
+    Clip("WIND_UP", [      # the free fist raised over the pods - held
+        (0.00, dict(_REST)),
+        (0.40, dict(_FIST_UP)),
+    ], mode="hold"),
+    Clip("ATTACK", [       # the smash: the fist comes down at you with the whole swollen weight behind it
+        (0.00, dict(_REST)),
+        (0.08, dict(_FIST_UP), "out"),
+        (0.14, dict(_SLAMMED), "in"),
+        (0.22, dict(_SLAMMED, by=4.0, pods=0.3)),
+        (0.30, dict(_REST)),
+    ], fps=20, mode="once", events={0.14: "impact"}),
+    Clip("SUMMON", [       # the ability: it hunches, the pods swell and SPLIT, and what grew inside is released
+        (0.00, dict(_REST)),
+        (0.18, dict(squat=0.30, by=6.0, torso=0.12, chest=0.10, head=0.30, breath=1.0, pods=1.6, eye_glow=1.6), "in"),
+        (0.30, dict(split=1.0, pods=1.2, by=2.0, torso=0.0, head=-0.05, l_sh=0.30, eye_glow=2.0), "out"),
+        (0.45, dict(split=0.8, pods=0.4, breath=0.2)),
+        (0.60, dict(_REST, split=0.0)),
+    ], mode="once"),
+    Clip("HURT_LIGHT", [
+        (0.00, dict(by=-1.5, head=-0.05, pods=1.0, eye_glow=0.5), "out"),
+        (0.17, dict(by=0.0, head=0.12, pods=0.0, eye_glow=1.0)),
+    ], mode="once"),
+    Clip("HURT_HEAVY", [   # rocked back on its heels, the pods shuddering
+        (0.00, dict(_REST)),
+        (0.08, dict(by=-4.0, torso=-0.10, chest=-0.06, head=-0.25, l_sh=0.22, pods=1.5, eye_glow=0.4, split=0.3), "out"),
+        (0.25, dict(by=-1.0, torso=0.10, head=0.25, pods=0.6, eye_glow=1.3, split=0.0)),
+        (0.42, dict(_REST)),
+    ], mode="once"),
+    Clip("DEFEND", [       # it hunches over its pods, the free arm folded across them
+        (0.00, dict(_REST, tag=1.0)),
+        (0.33, dict(l_sh=-0.25, l_el=-1.90, l_wr=-0.3, squat=0.30, by=6.0, torso=0.10, chest=0.12, head=0.35,
+                    eye_glow=0.7, pod_glow=0.6)),
+    ], mode="hold"),
+    # WOUNDED: two pods have split and weep light; it lists, the breathing ragged
+    IDLE.variant("WOUNDED", split=0.45, torso=0.12, squat=0.20, by=3.0, head=0.30),
+    Clip("DEATH", [        # it goes down under its own weight and the pods burst
+        (0.00, dict(_REST, sag=0.0, split=0.0, dim=0.0)),
+        (0.12, dict(by=-3.0, head=-0.15, pods=1.6, eye_glow=1.9, breath=1.0), "out"),
+        (0.35, dict(squat=0.8, by=20.0, sag=0.3, split=1.0, pods=1.2, torso=0.10, head=0.30, l_sh=0.15), "in"),
+        (0.65, dict(sag=1.0, by=26.0, pods=0.0, breath=0.0, head=0.45), "in"),
+        (0.80, dict(sag=0.94), "out"),
+        (0.90, dict(sag=1.0), "hold"),
+        (0.30, dict(dim=0.0)), (0.80, dict(dim=1.0)),
+    ], mode="hold"),
+]

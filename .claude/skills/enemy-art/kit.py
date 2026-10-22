@@ -934,6 +934,12 @@ class Figure:
     def __init__(self, layers, anchors=None, stencils=None):
         self.layers, self.anchors, self.stencils = layers, anchors or {}, stencils or []
 
+    def transformed(self, xf):
+        """A copy carried through one more transform - layers, anchors and stencil positions (generated-enemy-art
+        order 6: a whole-body slump or collapse applied after the rig has posed everything)."""
+        return Figure([xf(layer) for layer in self.layers], {n: xf.pt(a) for n, a in self.anchors.items()},
+                      [(text, *xf.pt((x, y)), colour) for text, x, y, colour in self.stencils])
+
 
 class Rig:
     """A creature: build(pose) -> Figure, the pose defaults, the canvas and the render seed."""

@@ -252,6 +252,8 @@ public final class EnemyAnimationRules {
         // Order 5: the Aberrations' abilities (the self-destruct row plays on each countdown turn).
         abilityClip(SpecialAbility.DEBUFF_PLAYER, EnemyClipId.DEBUFF_PLAYER);
         abilityClip(SpecialAbility.SELF_DESTRUCT, EnemyClipId.SELF_DESTRUCT);
+        // Order 6: the Undead's carrier (the summoned dead arrive through ALERTED, like any spawn).
+        abilityClip(SpecialAbility.SUMMON,        EnemyClipId.SUMMON);
 
         death(EnemyVisualEvent.DeathCause.SELF_DESTRUCT, EnemyClipId.DEATH_BURST, EnemyEffectSet.BurstId.DETONATE);
 

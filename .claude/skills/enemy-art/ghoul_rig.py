@@ -27,6 +27,7 @@ GHOUL_POSE.update(
     hood_lag=0.0,                                 # the hood / hose lag behind the head (secondary motion)
     badge=0.0,                                    # the ID badge swing on its lanyard (-1 .. 1)
     crack=0.0,                                    # WOUNDED: the visor cracks (0..1), red light leaking through
+    fall=0.0,                                     # DEATH: the whole body collapses toward the floor (0..1)
     tag=1.0,                                      # 0 drops the badge stencil when the badge is covered
 )
 
@@ -166,9 +167,100 @@ def ghoul_build(p):
     stencils = []
     if p.tag > 0.5:
         stencils.append(("14", bx - 3.5, by - 1.5, (40, 44, 52)))
-    return Figure(layers, anchors, stencils)
+    fig = Figure(layers, anchors, stencils)
+    if p.fall > 0.005:     # DEATH: the body collapses toward the floor (and the viewer) about the ground line
+        fig = fig.transformed(Xf.scale(1.0 + 0.08 * p.fall, 1.0 - 0.72 * p.fall, (80.0, 232.0)))
+    return fig
 
 
 GHOUL = Rig("ghoul", ghoul_build, GHOUL_POSE, seed=53)
 
-GHOUL_CLIPS = []      # CP3 adds the clip set once the owner has approved the concept still
+
+# ---- clips (R4: it moves WRONG - patient, swaying, the head never sits straight) ---------------------------------------
+_REST = dict(torso=0.025, chest=0.05, neck=0.06, head=0.30, l_sh=0.04, r_sh=0.13, l_el=-0.16, r_el=-0.30, l_wr=-0.10,
+             r_wr=0.06, l_arm_fore=0.0, r_arm_fore=0.10, l_hip=0.07, r_hip=0.04, l_knee=-0.09, r_knee=-0.06, squat=0.03,
+             by=0.0, bx=0.0, l_curl=0.12, r_curl=0.22, eye_glow=1.0)
+# the grab: both arms thrust at the viewer, long fingers wide, then clamped
+# the reach: both long arms come up and out toward the viewer, hands at chest height, fingers splayed
+_REACH = dict(l_sh=0.85, r_sh=0.85, l_el=-0.75, r_el=-0.75, l_arm_fore=0.50, r_arm_fore=0.50, l_wr=-0.35, r_wr=-0.35,
+              l_curl=0.0, r_curl=0.0, head=0.05, torso=0.0, chest=0.0, by=-2.0, eye_glow=1.7)
+# the grab: the hands snap in together in front of the chest and clench
+_CLAMP = dict(l_sh=0.35, r_sh=0.35, l_el=-1.45, r_el=-1.45, l_arm_fore=0.55, r_arm_fore=0.55, l_wr=-0.3, r_wr=-0.3,
+              l_curl=1.0, r_curl=1.0, head=0.0, by=2.0, eye_glow=2.0)
+
+_IDLE = Clip("IDLE", [
+    (0.00, dict(torso=0.025, head=0.30, l_sh=0.04, r_sh=0.13, badge=0.0, by=0.0, l_curl=0.12)),
+    (0.40, dict(torso=0.045, head=0.42, l_sh=0.08, r_sh=0.10, by=1.0, l_curl=0.22)),
+    (0.95, dict(torso=0.00, head=0.20, l_sh=0.02, r_sh=0.16, by=0.0, l_curl=0.08)),
+    (1.25, dict(head=0.34, by=0.5)),
+    (0.55, dict(r_curl=0.40), "hold"), (0.70, dict(r_curl=0.22)),           # a finger twitch
+], duration=1.6, mode="loop")
+
+def _scaled_lag(keys, param, gain, offset=0.0):
+    return [(t, {k: (v - offset) * gain for k, v in d.items()}, e) for t, d, e in keys]
+
+
+IDLE = Clip("IDLE", _IDLE.keys + _scaled_lag(lag(_IDLE, "torso", 0.17, 1.6, out_param="badge", fps=12), "badge", 12.0, 0.025)
+            + _scaled_lag(lag(_IDLE, "head", 0.12, 1.6, out_param="hood_lag", fps=12), "hood_lag", 3.0, 0.30),
+            duration=1.6, mode="loop")
+
+GHOUL_CLIPS = [
+    IDLE,
+    # DORMANT: the head hangs, the red eyes almost out
+    IDLE.variant("DORMANT", speed=0.5, fps=6, eye_glow=0.22, neck=0.20, by=3.0, l_curl=0.05, r_curl=0.08),
+    Clip("ALERT", [        # the head snaps upright, the eyes flare, the fingers spread
+        (0.00, dict(_REST, head=0.30, eye_glow=1.0)),
+        (0.10, dict(head=-0.10, neck=0.0, by=-3.0, eye_glow=2.0, l_curl=0.0, r_curl=0.0, l_sh=0.20, r_sh=0.26), "out"),
+        (0.25, dict(head=0.02, by=-2.0, eye_glow=1.6)),
+        (0.45, dict(_REST, head=0.18, eye_glow=1.2)),
+    ], mode="once"),
+    Clip("MOVE", [         # the shamble: a long leg swings, the other foot scuffs; the whole frame lists after it
+        (0.000, dict(l_hip=0.16, l_knee=-0.20, l_leg_fore=0.35, r_hip=0.00, r_knee=-0.02, r_leg_fore=0.0, torso=-0.05,
+                     by=-1.5, l_sh=-0.04, r_sh=0.24, head=0.40, badge=-0.6)),
+        (0.083, dict(l_leg_fore=0.10, by=1.0, torso=-0.02)),
+        (0.167, dict(r_hip=0.13, r_knee=-0.18, r_leg_fore=0.35, l_hip=0.04, l_knee=-0.04, l_leg_fore=0.0, torso=0.07,
+                     by=-1.5, l_sh=0.20, r_sh=0.04, head=0.22, badge=0.6)),
+        (0.250, dict(r_leg_fore=0.10, by=1.0, torso=0.04)),
+    ], duration=0.333, mode="loop"),
+    Clip("WIND_UP", [      # the telegraph: both arms come up and out at you, fingers opening wide - held
+        (0.00, dict(_REST)),
+        (0.30, dict(_REACH, l_sh=0.70, r_sh=0.70, eye_glow=1.5)),
+        (0.50, dict(_REACH, eye_glow=1.8)),
+    ], mode="hold"),
+    Clip("ATTACK", [       # the clumsy two-handed grab: reach, clamp, drag back
+        (0.00, dict(_REST)),
+        (0.08, dict(_REACH), "out"),
+        (0.14, dict(_CLAMP), "in"),
+        (0.22, dict(_CLAMP, l_arm_fore=0.35, r_arm_fore=0.35, by=1.0, r_curl=0.85)),
+        (0.30, dict(_REST)),
+    ], fps=20, mode="once", events={0.14: "impact"}),
+    Clip("HURT_LIGHT", [   # a jolt; the head whips the other way
+        (0.00, dict(head=-0.05, torso=-0.04, by=-1.5, eye_glow=0.5), "out"),
+        (0.17, dict(head=0.30, torso=0.025, by=0.0, eye_glow=1.0)),
+    ], mode="once"),
+    Clip("HURT_HEAVY", [   # it rocks back on its long legs, arms flung - and keeps coming
+        (0.00, dict(_REST)),
+        (0.08, dict(by=-5.0, torso=-0.10, chest=-0.06, head=-0.30, l_sh=0.30, r_sh=0.34, l_el=0.1, r_el=0.12, l_curl=0.0,
+                    r_curl=0.0, l_hip=0.12, r_hip=0.10, eye_glow=0.4, crack=0.4), "out"),
+        (0.25, dict(by=-1.0, torso=0.06, head=0.50, l_sh=0.15, r_sh=0.25, l_el=-0.1, r_el=-0.2, eye_glow=1.3, crack=0.0)),
+        (0.42, dict(_REST)),
+    ], mode="once"),
+    Clip("DEFEND", [       # it folds its long arms across the mask and hunches
+        (0.00, dict(_REST, tag=1.0)),
+        (0.33, dict(l_sh=-0.30, r_sh=-0.30, l_el=-2.15, r_el=-2.05, l_wr=-0.4, r_wr=-0.4, l_curl=0.6, r_curl=0.6,
+                    neck=0.15, head=0.10, squat=0.25, by=8.0, eye_glow=0.7, tag=0.0)),
+    ], mode="hold"),
+    # WOUNDED: the visor cracked, red leaking; the left arm hangs dead off its shoulder, the head rolled over
+    IDLE.variant("WOUNDED", crack=1.0, l_sh=0.0, l_el=0.0, l_wr=0.0, l_curl=0.0, neck=0.12, squat=0.08, by=2.0),
+    Clip("DEATH", [        # folds at the knees, sways, and goes down on its face
+        (0.00, dict(_REST, squat=0.03, by=0.0, fall=0.0, dim=0.0)),
+        (0.12, dict(head=-0.20, eye_glow=1.9, l_sh=0.30, r_sh=0.35, by=-2.0), "out"),
+        (0.38, dict(squat=1.0, by=44.0, l_knee=-0.6, r_knee=-0.55, l_hip=0.30, r_hip=0.28, l_sh=0.05, r_sh=0.10,
+                    l_el=0.0, r_el=0.0, head=0.45, torso=0.06), "in"),
+        (0.52, dict(by=40.0, torso=-0.06, head=0.30)),
+        (0.80, dict(fall=1.0, by=46.0, l_hip=0.12, r_hip=0.10, l_sh=-0.10, r_sh=-0.05, l_el=-0.3, r_el=-0.4, l_curl=0.3, r_curl=0.4, head=0.6), "in"),
+        (0.92, dict(fall=0.94), "out"),
+        (1.00, dict(fall=1.0), "hold"),
+        (0.30, dict(dim=0.0)), (0.85, dict(dim=1.0)),
+    ], mode="hold"),
+]

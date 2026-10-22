@@ -5,6 +5,8 @@ except for the cold soul light behind it, heavy pauldrons, a chest plate stencil
 baton in the right fist. No face: the helmet never comes off. Motion character: a soldier's stance it still
 remembers - alert, square, then a heavy charging stride and an overhead smash.
 """
+import math
+
 from kit import blob, limb, chain, slab, riveted_plate, fold_lines, hand, Humanoid, with_glow, Xf, Figure, Rig, Clip
 
 SKELETON = Humanoid(pelvis=(80.0, 134.0), spine=56.0, neck=6.0, head=15.0, shoulder_half=25.0, hip_half=12.0,
@@ -22,6 +24,7 @@ REVENANT_POSE.update(
     baton=0.0,                                     # baton glow (0 dead .. 1 charged): the shock tip crackles
     eye_glow=1.0, dim=0.0,
     crack=1.0,                                     # the visor crack (it was cracked when it died; WOUNDED widens it)
+    fall=0.0,                                     # DEATH: the whole body collapses toward the floor (0..1)
     tag=1.0,
 )
 
@@ -143,9 +146,95 @@ def revenant_build(p):
     stencils = []
     if p.tag > 0.5:
         stencils.append(("S-07", cx - 15.5, cy + 3.0, (214, 212, 204)))
-    return Figure(layers, anchors, stencils)
+    fig = Figure(layers, anchors, stencils)
+    if p.fall > 0.005:     # DEATH: the body collapses toward the floor (and the viewer) about the ground line
+        fig = fig.transformed(Xf.scale(1.0 + 0.06 * p.fall, 1.0 - 0.70 * p.fall, (80.0, 232.0)))
+    return fig
 
 
 REVENANT = Rig("revenant", revenant_build, REVENANT_POSE, seed=59)
 
-REVENANT_CLIPS = []      # CP3 adds the clip set once the owner has approved the concept still
+
+# ---- clips: a soldier's drill it still remembers - square, alert, heavy; it barely flinches ------------------------
+_REST = dict(torso=-0.04, chest=0.03, head=-0.20, l_sh=0.05, l_el=-0.75, l_wr=-0.15, r_sh=0.12, r_el=-0.40, r_wr=0.10,
+             l_hip=0.12, r_hip=0.12, l_knee=-0.14, r_knee=-0.12, squat=0.14, by=0.0, bx=0.0, baton_angle=0.0,
+             baton=0.0, eye_glow=1.0, l_arm_fore=0.0, r_arm_fore=0.0)
+# the baton raised high: the arm straight up over the helmet, the baton laid back across the top of the head (angles
+# solved numerically so the tip stays on the canvas; the swing up and down passes FORESHORTENED, toward the viewer,
+# so the arm never sweeps out past the canvas edge - lesson 12.17)
+_RAISED = dict(r_sh=2.85, r_el=0.1, r_wr=-0.2, r_arm_fore=0.0, baton_angle=0.75 - 2 * math.pi, torso=0.05, chest=0.04, head=-0.05, l_sh=0.25,
+               l_el=-0.5, squat=0.20, by=2.0, baton=1.0, eye_glow=1.6)
+# the smash landed: the arm down in front at the viewer, the baton forward, the body behind it
+_SMASHED = dict(r_sh=0.0, r_el=-0.55, r_wr=0.2, r_arm_fore=0.45, baton_angle=-1.5, torso=-0.06, chest=-0.04, head=-0.25,
+                l_sh=0.20, l_el=-0.3, squat=0.30, by=8.0, baton=1.4, eye_glow=1.9)
+
+REVENANT_CLIPS = [
+    Clip("IDLE", [         # an alert combat stance: weight shifting, the head scanning, the baton tip flicking
+        (0.00, dict(torso=-0.04, head=-0.20, by=0.0, baton_angle=0.0, l_sh=0.05)),
+        (0.45, dict(torso=-0.01, head=-0.06, by=1.0, baton_angle=0.10, l_sh=0.08)),
+        (0.80, dict(torso=-0.06, head=-0.28, by=0.0, baton_angle=-0.05)),
+        (0.95, dict(baton=0.6), "hold"), (1.05, dict(baton=0.0)),
+    ], duration=1.2, mode="loop"),
+]
+REVENANT_CLIPS += [
+    REVENANT_CLIPS[0].variant("DORMANT", speed=0.5, fps=6, eye_glow=0.2, head=0.25, squat=0.22, by=4.0, l_sh=0.0,
+                              l_el=-0.2, r_sh=0.02, r_el=-0.1),
+    Clip("ALERT", [        # the head snaps up, the baton comes up to guard, the eyes flare
+        (0.00, dict(_REST, eye_glow=1.0)),
+        (0.10, dict(head=0.05, by=-3.0, r_sh=0.30, r_el=-1.10, baton_angle=0.5, baton=1.2, eye_glow=2.0, l_sh=0.20), "out"),
+        (0.25, dict(by=-1.0, eye_glow=1.5)),
+        (0.40, dict(_REST, baton=0.3)),
+    ], mode="once"),
+    Clip("MOVE", [         # a heavy charging stride: knees high, the whole armoured mass rocking side to side
+        (0.000, dict(l_hip=0.20, l_knee=-0.35, l_leg_fore=0.40, r_hip=0.10, r_knee=-0.08, r_leg_fore=0.0, torso=-0.08,
+                     by=-3.0, bx=-2.0, l_sh=-0.05, r_sh=0.22, head=-0.12)),
+        (0.083, dict(l_leg_fore=0.10, by=2.0, bx=0.0, torso=-0.03)),
+        (0.167, dict(r_hip=0.20, r_knee=-0.33, r_leg_fore=0.40, l_hip=0.10, l_knee=-0.08, l_leg_fore=0.0, torso=0.02,
+                     by=-3.0, bx=2.0, l_sh=0.15, r_sh=0.02, head=-0.25)),
+        (0.250, dict(r_leg_fore=0.10, by=2.0, bx=0.0, torso=-0.02)),
+    ], duration=0.333, mode="loop"),
+    Clip("WIND_UP", [      # the lunge's telegraph: the baton raised high and crackling, crouched to spring - held
+        (0.00, dict(_REST)),
+        (0.15, dict(r_sh=1.10, r_el=-0.9, r_arm_fore=0.95, baton_angle=-1.1, by=1.0, baton=0.5), "linear"),
+        (0.32, dict(r_sh=2.30, r_el=-0.5, r_arm_fore=0.80, baton_angle=-3.0, baton=0.8), "linear"),
+        (0.45, dict(_RAISED), "inout"),
+    ], mode="hold"),
+    Clip("ATTACK", [       # the overhead smash
+        (0.00, dict(_REST)),
+        (0.04, dict(r_sh=1.6, r_el=-1.2, r_arm_fore=0.95, baton_angle=-0.6, by=1.0), "linear"),
+        (0.08, dict(_RAISED, r_sh=2.45, r_el=-1.0, r_arm_fore=0.55), "out"),
+        (0.11, dict(r_sh=1.40, r_el=-0.6, r_arm_fore=0.85, baton_angle=-1.8, by=4.0), "linear"),
+        (0.14, dict(_SMASHED), "in"),
+        (0.22, dict(_SMASHED, by=6.0, baton=0.8)),
+        (0.30, dict(_REST)),
+    ], fps=20, mode="once", events={0.14: "impact"}),
+    Clip("HURT_LIGHT", [   # armour takes it: a twitch of the head, no step back
+        (0.00, dict(head=-0.06, by=-1.0, eye_glow=0.6), "out"),
+        (0.17, dict(head=-0.20, by=0.0, eye_glow=1.0)),
+    ], mode="once"),
+    Clip("HURT_HEAVY", [   # barely rocks: the torso turns with the blow, a half step, and it squares up again
+        (0.00, dict(_REST)),
+        (0.08, dict(by=-3.0, torso=-0.12, chest=-0.05, head=-0.40, l_sh=0.25, r_sh=0.18, r_el=-0.5, eye_glow=0.4,
+                    crack=1.8), "out"),
+        (0.25, dict(by=-1.0, torso=0.02, head=-0.10, eye_glow=1.3, crack=1.0)),
+        (0.42, dict(_REST)),
+    ], mode="once"),
+    Clip("DEFEND", [       # both forearms up across the visor, crouched behind the pauldrons
+        (0.00, dict(_REST, tag=1.0)),
+        (0.33, dict(l_sh=-0.10, l_el=-2.30, l_wr=-0.3, r_sh=-0.05, r_el=-2.20, r_wr=-0.2, baton_angle=0.6, squat=0.35,
+                    by=10.0, head=0.0, eye_glow=0.7)),
+    ], mode="hold"),
+    REVENANT_CLIPS[0].variant("WOUNDED", crack=2.0, torso=-0.10, squat=0.22, by=3.0, l_sh=0.18, l_el=-0.1, l_wr=0.0,
+                              head=-0.35),
+    Clip("DEATH", [        # drops to its knees, holds a beat, then goes forward onto its face
+        (0.00, dict(_REST, fall=0.0, dim=0.0)),
+        (0.10, dict(head=0.10, by=-2.0, eye_glow=1.8, r_sh=0.15, r_el=-0.5, baton_angle=-0.5), "out"),
+        (0.35, dict(squat=1.0, by=36.0, l_hip=0.30, r_hip=0.28, l_knee=-0.6, r_knee=-0.6, l_sh=0.10, r_sh=0.15,
+                    l_el=-0.1, r_el=-0.1, head=0.35, torso=0.0, baton_angle=-0.6), "in"),
+        (0.55, dict(by=38.0, head=0.25)),
+        (0.80, dict(fall=1.0, by=40.0, l_hip=0.12, r_hip=0.10, l_sh=-0.05, r_sh=0.10, head=0.5), "in"),
+        (0.90, dict(fall=0.95), "out"),
+        (1.00, dict(fall=1.0), "hold"),
+        (0.30, dict(dim=0.0)), (0.85, dict(dim=1.0)),
+    ], mode="hold"),
+]
