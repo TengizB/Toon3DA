@@ -58,7 +58,7 @@ file's tick in the same commit as the work**. Never more than one checkpoint unc
       pixel-identical, committed.
 - [x] **CP5** — three rows wired (PLAGUE_HULK, EYE_TYRANT, GORE_BITER) + the acid arrival splash (runtime IMPACT burst);
       A2-A5 for the three re-verified in-engine; build green.
-- [ ] **CP5b** — the NEW Mire Wraith (dangerous, alive, not an egg): rig + full clip set + effects row; stills, clip GIFs
+- [x] **CP5b** — the NEW Mire Wraith (dangerous, alive, not an egg): rig + full clip set + effects row; stills, clip GIFs
       and in-engine bursts (default + one mood) sent. DONE WHEN: sent; build green.
 - [ ] **CP5c** — owner approval of the new Mire Wraith recorded (stop until it is); then its row wired, A2 verified.
 - [ ] **CP6** — docs (guide, art-direction 16, SKILL.md, enemy-system); reviewer PASS; STATUS: IMPLEMENTED.
@@ -135,3 +135,13 @@ The Warden has no IMPACT: unchanged. Verified in-engine with a TEMPORARY capture
 floor's STARTING enemy count, so several dormant enemies added later that wake in one turn overflow it
 (ArrayIndexOutOfBoundsException in phaseA) - capture spawns hit it; capture scripts alert spawns by index instead.
 Build: only StoryBarkTest red. Designer delivered .claude/agents/ideas/sump-wretch-acid-death.txt (separate work).
+
+**CP5b:** the NEW Mire Wraith: `mire_wraith_rig.py` (seed 47) - a shrouded sludge predator: a lamprey maw (the spout =
+muzzle anchor at MAW (80, 94)), a veined acid gullet under it, hooked arms (left down in the mire, right raised), a ragged
+skin shroud (flat slabs), ribs + acid veins, the S4 hose on the left. 95 frames, 2048x2048, no edge warnings. Clips: the
+standard set + DEBUFF_PLAYER (volley, "emit" at 0.22). Lessons: the column first read as a stack of tyres - one tapering
+chain merged INTO the torso layer (12.1); tube drapes read as extra arms - flat bevelled slabs read as cloth; lowering a
+raised forearm must fold it INWARD (negative el) or the hand leaves the canvas. Effects: creatures row `mire_wraith`
+(overrides incl. IMPACT -> ACID_SPLASH). Fresh bake == shipped; other sets unchanged. Captures used a TEMPORARY row
+MIRE_WRAITH -> mire_wraith (removed, not committed). Sent: stills (early), clip GIF + strip, in-engine GIFs (default +
+amber_hot, a 2-tile close-up and the full reaction run). WAITING for owner approval (CP5c).

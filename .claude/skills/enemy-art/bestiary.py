@@ -20,6 +20,7 @@ from plague_hulk_rig import PLAGUE_HULK, HULK_CLIPS
 from eye_tyrant_rig import EYE_TYRANT, TYRANT_CLIPS
 from gore_biter_rig import GORE_BITER, BITER_CLIPS
 from sump_wretch_rig import SUMP_WRETCH, WRETCH_CLIPS
+from mire_wraith_rig import MIRE_WRAITH, WRAITH_CLIPS
 
 # creature -> (rig, clips). A new creature is one <name>_rig.py plus one row here.
 CREATURES = [
@@ -30,6 +31,7 @@ CREATURES = [
     (PLAGUE_HULK, HULK_CLIPS),
     (EYE_TYRANT, TYRANT_CLIPS),
     (GORE_BITER, BITER_CLIPS),
+    (MIRE_WRAITH, WRAITH_CLIPS),      # the second design (owner gate, 2026-10-22)
     (SUMP_WRETCH, WRETCH_CLIPS),      # the first Mire Wraith design, kept for a new enemy (owner, 2026-10-22)
 ]
 

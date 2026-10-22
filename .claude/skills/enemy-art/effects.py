@@ -621,6 +621,13 @@ SETS = {
                                charge=placement("ground", (0, -3), 32), stun=placement("eye", (0, -36), 14),
                                poison=placement("hit_centre", (0, -20), 26), body=placement("hit_centre", (0, -10), 24),
                                bursts={"CHARGE": "SCUFF"}),
+            # the SECOND Mire Wraith (owner gate 2026-10-22): acid drools from the lamprey maw; the wind-up motes rise off
+            # the swelling gullet; the acid and its landing splash are its own (overrides, the order 4 idiom).
+            "mire_wraith": dict(leak=placement("emitter", (4, 14), 2), burn=placement("hit_centre", (0, 4), 32),
+                                charge=placement("hit_centre", (0, 4), 12), stun=placement("eye", (0, -26), 14),
+                                poison=placement("hit_centre", (0, 20), 30), body=placement("hit_centre", (0, 40), 30),
+                                bursts={"PROJECTILE": "SPIT", "TRAIL": "SPIT_TRAIL", "MUZZLE": "SPIT_MUZZLE",
+                                        "IMPACT": "ACID_SPLASH", "HIT": "SPLASH", "HIT_HEAVY": "SPLASH_HEAVY"}),
             # the leak is the torn hose; the acid is its own, so the projectile is a per-creature override (order 4 idiom).
             # The first Mire Wraith design, kept as its own creature for a new enemy (owner, 2026-10-22).
             "sump_wretch": dict(leak=placement("hit_centre", (60, -38), 1), burn=placement("hit_centre", (0, -20), 34),
