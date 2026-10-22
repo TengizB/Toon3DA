@@ -102,6 +102,7 @@ import ge.tbegvadze.toon3d.render.*;
 import ge.tbegvadze.toon3d.render.enemyvisual.EnemyVisualLayer;
 import ge.tbegvadze.toon3d.render.WeaponInspectOverlayRenderer;
 import ge.tbegvadze.toon3d.render.tilesetgfx.EnvironmentTextureSet;
+import ge.tbegvadze.toon3d.render.tilesetgfx.RegionWallAtlas;
 import ge.tbegvadze.toon3d.render.tilesetgfx.TilesetGfxBootstrap;
 import ge.tbegvadze.toon3d.route.AmmoCacheRequest;
 import ge.tbegvadze.toon3d.route.BossTable;
@@ -262,6 +263,9 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
     // TILESET SYSTEM (order-6): per-level texture supply realized from the level's palette; owned here,
     // set on the wall/prop renderers each level, disposed on level teardown (leak-free across transitions).
     private EnvironmentTextureSet  environmentTextureSet;
+    // REGION WALL ATLAS (generated-wall-art order 2): the floor's wall / door / column faces + glow, loaded for
+    // the floor's region set and disposed with the floor (only one region is ever resident).
+    private RegionWallAtlas        regionWallAtlas;
     private EnemyRenderer          enemyRenderer;
     // generated-enemy-art order 2: the animated enemy layer of the current floor (atlases, animators,
     // dying instances). Built and disposed with the floor beside enemyRenderer; listens to enemyManager.
@@ -1469,6 +1473,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         // TILESET SYSTEM (order-6): free this floor's realized textures before the next floor rebuilds
         // its own subset — keeps GPU footprint at one level's palette, not an accumulation across floors.
         if (environmentTextureSet != null) { environmentTextureSet.dispose(); environmentTextureSet = null; }
+        if (regionWallAtlas != null) { regionWallAtlas.dispose(); regionWallAtlas = null; }
         if (shopMachineRenderer != null) shopMachineRenderer.dispose();
         enemyRenderer.dispose();
         impactEffectSystem.setBodyEffectsOwner(null);
@@ -1594,7 +1599,8 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         // the GL thread here (level load); disposed in rebuildForLevel/dispose so transitions stay leak-free.
         environmentTextureSet  = EnvironmentTextureSet.realize(targetLevel.getPalette(),
                                                                TilesetGfxBootstrap.generators());
-        wallRenderer.setEnvironmentTextureSet(environmentTextureSet);
+        regionWallAtlas        = RegionWallAtlas.loadForFloor(targetLevel.getPalette().wallSetId());
+        wallRenderer.setRegionWallAtlas(regionWallAtlas, GameMath.floorSeed(runSeed, currentDepth));
         propRenderer.setEnvironmentTextureSet(environmentTextureSet);
         propRenderer.setWeaponTierMap(buildWeaponTierMap());
         shopMachineRenderer    = new ShopMachineRenderer(targetLevel, wallRenderer);
@@ -3186,6 +3192,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         propRenderer.dispose();
         // TILESET SYSTEM (order-6): free the current floor's realized textures at world shutdown.
         if (environmentTextureSet != null) { environmentTextureSet.dispose(); environmentTextureSet = null; }
+        if (regionWallAtlas != null) { regionWallAtlas.dispose(); regionWallAtlas = null; }
         if (shopMachineRenderer != null) shopMachineRenderer.dispose();
         enemyRenderer.dispose();
         impactEffectSystem.setBodyEffectsOwner(null);

@@ -54,7 +54,7 @@ Never `git add -A`.
       palette; no generator writes a wall picture char. DONE WHEN: build green and R1 script shows no difference.
 - [x] **CP3** — route wallSetId + World resolution + LevelGenConfig fields; hall placement P4-P9. DONE WHEN: build
       green, R1 holds.
-- [ ] **CP4** — RegionWallAtlas loads per floor; walls, doors, columns draw from the atlas (base pass). DONE WHEN:
+- [x] **CP4** — RegionWallAtlas loads per floor; walls, doors, columns draw from the atlas (base pass). DONE WHEN:
       run-game shows set A walls/doors/columns.
 - [ ] **CP5** — variants + LOD + glow + animation; captures A4-A6 sent.
 - [ ] **CP6** — floor/ceiling from the set's surfaces; capture sent.
@@ -134,3 +134,16 @@ base, inside the guide's 65-75%), STRUCTURE 16-18% (P4's literal "every 4th" + f
 "~10% structure/light"; record in guide 7 at CP8), LIGHT ~4%, SERVICE+VENT ~4%; breach 0% on a region's first floor,
 ~6% of exposed (12% of hall base) on its last; caverns 80% base. Scratchpad tools: `dumpsrc/r1/Dump.java` (print a
 floor), `Stats.java` (fractions).
+
+**CP4:** `render/tilesetgfx/RegionWallAtlas.loadForFloor(palette.wallSetId())` (R7: set -> set A -> null = white-pixel
+flat walls; validates version/size/mips and every id the set names) parses the manifest into dense face arrays
+(`faceIndex(id)`, `sourceX/Y(mip, face)`, `isGlowing`, `animateMode`, `glowFrameCount/X/Y/Seconds`, `floorPath()`,
+`ceilingPath()`). World builds it in buildLevelDependentResources and disposes it in rebuildForLevel + dispose;
+`WallRenderer.setRegionWallAtlas(atlas, floorSeed)` replaces setEnvironmentTextureSet (props keep the set) and fills
+char -> face tables (`wallFaceStart/Count/Indices`, `doorFaceByChar`, `columnFace` picked per floor). Old door
+textures are no longer loaded (generators still in the file until CP7). Base pass draws srcX = face origin + texel
+column at mip 0, variant 0 (CP5 enables variants/mips/glow). New RenderConstants WALL_* (face size, max mip, mip bias,
+glow fade, some-animate 1 in 6, pick sides, phase buckets). Verified in run-game (seed 7, first node, cool_steel):
+set A hall base + structure ribs on a generated floor. run-game opening for a generated floor: standard opening,
+`13:tap:644:100;14:seed:7;14.5:set:startRoomChoiceResolved:true;15:call:.:onDescentRequested;17:engage;
+23:tap:640:450;24.5:tap:640:450;26:tap:644:80;27:tap:644:100;28:tap:915:667` (briefing answer + ack, relic LEAVE IT).

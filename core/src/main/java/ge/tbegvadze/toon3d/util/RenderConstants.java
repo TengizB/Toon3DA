@@ -669,4 +669,28 @@ public final class RenderConstants {
     public static final String  PERF_PROBE_UNIT_MILLISECONDS     = "MS";
     /** Fixed decimals for readout and log numbers. */
     public static final int     PERF_PROBE_DECIMALS              = 2;
+
+    // ── REGION WALL ATLAS RUNTIME (generated-wall-art order 2; docs/wall-art-creation-guide.txt section 13) ──
+    /** Texels per wall face side at mip 0 (the manifest's "size"). */
+    public static final int   WALL_FACE_SIZE                = 256;
+    /** Highest distance-LOD level the manifests ship (mips 0, 1, 2). */
+    public static final int   WALL_MAX_MIP                  = 2;
+    /**
+     * Distance LOD bias: GameMath.wallMipLevel switches to mip m once (WALL_FACE_SIZE / stripe height) x bias
+     * reaches 2^m. 1.0 = the honest texel-per-unit switch on the 720-unit projection; larger = earlier.
+     */
+    public static final float WALL_MIP_BIAS                 = 1.0f;
+    /** Wall glow stays fully lit up to this many tiles ... */
+    public static final float WALL_GLOW_FADE_START_TILES    = 10f;
+    /** ... and fades linearly to WALL_GLOW_MIN_ALPHA here (and holds). */
+    public static final float WALL_GLOW_FADE_END_TILES      = 20f;
+    public static final float WALL_GLOW_MIN_ALPHA           = 0.6f;
+    /** An "animate": "some" glow runs on about one face in this many (a failing tube); the rest hold frame 0. */
+    public static final int   WALL_GLOW_SOME_ANIMATE_ONE_IN = 6;
+    /** Hash "side" used to pick the floor's column picture from the set (not a real face side, which are 0-3). */
+    public static final int   WALL_COLUMN_PICK_SIDE         = 4;
+    /** Hash "side" offset for the per-face glow animation phase (keeps it independent of the variant hash). */
+    public static final int   WALL_GLOW_PHASE_SIDE_OFFSET   = 8;
+    /** Buckets the per-face glow phase is drawn from (phase = bucket / buckets x cycle length). */
+    public static final int   WALL_GLOW_PHASE_BUCKETS       = 64;
 }

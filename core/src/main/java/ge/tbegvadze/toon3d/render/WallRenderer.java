@@ -11,9 +11,13 @@ import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.utils.Disposable;
 import ge.tbegvadze.toon3d.door.DoorManager;
 import ge.tbegvadze.toon3d.level.Level;
-import ge.tbegvadze.toon3d.render.tilesetgfx.EnvironmentTextureSet;
+import ge.tbegvadze.toon3d.render.tilesetgfx.RegionWallAtlas;
 import ge.tbegvadze.toon3d.render.tilesetgfx.TextureGeneratorRegistry;
-import ge.tbegvadze.toon3d.tileset.LevelPalette;
+import ge.tbegvadze.toon3d.tileset.RegionWallSet;
+import ge.tbegvadze.toon3d.tileset.RegionWallSets;
+import ge.tbegvadze.toon3d.tileset.WallGroup;
+import ge.tbegvadze.toon3d.tileset.WallSlot;
+import ge.tbegvadze.toon3d.tileset.WallSlotTable;
 import ge.tbegvadze.toon3d.tileset.TilesetRegistries;
 import ge.tbegvadze.toon3d.util.ArtDirection;
 import ge.tbegvadze.toon3d.util.GameMath;
@@ -64,40 +68,33 @@ public class WallRenderer implements Renderable, Disposable {
     private final Level level;
     private final DoorManager doorManager;
     private final SpriteBatch batch;
-    private final Texture doorTexture;
-    private final Texture doorTextureRed;
-    private final Texture doorTextureYellow;
-    private final Texture doorTextureBlue;
     private final Texture whitePixelTexture;
     // Perpendicular wall distance per screen column — used for sprite depth-clipping later.
     private final float[] zBuffer;
 
-    // TILESET SYSTEM (order-7): the wall + column art is no longer owned by this renderer. Each level's
-    // EnvironmentTextureSet (owned/disposed by World, realized from the level's LevelPalette) supplies the
-    // textures; WallRenderer resolves symbol -> sprite id (via the palette) -> Texture (via the set) ONCE
-    // per level in setEnvironmentTextureSet() and caches the result in these char-indexed arrays. The hot
-    // per-column draw path still does a single O(1) array read (no per-frame map lookup, no allocation),
-    // preserving the parallel-worker performance profile — the workers read these immutable-for-the-level
-    // arrays via the happens-before edge from the per-level setter running on the GL thread before
-    // render(). With the legacy palette the arrays hold exactly the same textures the old static table did,
-    // so the look is unchanged; a varied palette (order-8) fills them with different accent art.
-    // See docs/environment-tileset-system.txt (section 7 / order-7).
-    private final Texture[] levelWallTextures = new Texture[128];
-    private final int[]     levelWallWidths   = new int[128];
-    private final int[]     levelWallHeights  = new int[128];
-    // Column ('P') resolves the same way; the column path is a separate branch, so its resolved texture is
-    // cached in dedicated fields rather than the char array.
-    private static final char COLUMN_SYMBOL = TilesetConstants.FLEXIBLE_COLUMN_SYMBOLS.charAt(0);
-    private Texture levelColumnTexture;
+    // REGION WALL ATLAS (generated-wall-art order 2): every wall, door and column face of the floor comes from
+    // the floor's RegionWallAtlas (owned and disposed by World with the floor). setRegionWallAtlas() resolves,
+    // ONCE per level, each char to its face indices in these tables, so the hot per-column path reads plain
+    // int arrays (no map lookup, no allocation). Workers read them through the happens-before edge of the
+    // executor dispatch (the setter runs on the GL thread before any render()).
+    private static final int ASCII_TABLE_SIZE = 128;
+    private RegionWallAtlas regionWallAtlas;
+    // The texture the base pass draws from: the region atlas, or the white pixel when no atlas could load (R7).
+    private Texture wallSourceTexture;
+    // Texels per face side at mip 0 (WALL_FACE_SIZE with an atlas, 1 for the white-pixel fallback).
+    private int     wallFaceSize = 1;
+    // Wall char -> [start, start + count) into wallFaceIndices: the BASE variants in order (count 1 otherwise).
+    private final int[] wallFaceStart   = new int[ASCII_TABLE_SIZE];
+    private final int[] wallFaceCount   = new int[ASCII_TABLE_SIZE];
+    private final int[] wallFaceIndices = new int[ASCII_TABLE_SIZE];
+    // Door char -> face (d R Y B; any other door char = the plain door).
+    private final int[] doorFaceByChar  = new int[ASCII_TABLE_SIZE];
+    // The floor's column face (the set's round or square column, picked per floor).
+    private int columnFace;
+    // Floor seed the per-face picks hash with (GameMath.wallVariantIndex): same seed, same walls (R6).
+    private long wallVariantSeed;
     // R16: true when every wall/column/door texture of this level is fully opaque (base pass unblended).
     private boolean levelSurfacesOpaque;
-    private int     levelColumnTextureWidth;
-    private int     levelColumnTextureHeight;
-
-    // Door textures ARE still owned here: doors are FIXED gameplay symbols, not environment sprites, so
-    // they are not part of any level's EnvironmentTextureSet. Char-indexed table (ASCII index 0–127);
-    // Arrays.fill initialises every slot to the plain-door default, named chars override it.
-    private final Texture[] doorTextureTable;
 
     // Runtime render-resolution authority (util/RenderResolution) — see setRenderResolution(). Defaults
     // to HD so a WallRenderer never rendered through World.applyStoryAccessibilitySettings() still
@@ -125,12 +122,6 @@ public class WallRenderer implements Renderable, Disposable {
     private float alertPulse          = 0f;
     // Monotonically increasing facility clock used to evaluate 'f' (flickering) tile brightness.
     private float lightingTimeSeconds = 0f;
-
-    // TILESET SYSTEM (order-7): the per-level texture supply realized from this level's palette. Set
-    // each level by World via setEnvironmentTextureSet(), which pre-resolves the wall + column textures
-    // from it into the char-indexed arrays above. The set is the OWNER of those wall/column textures;
-    // WallRenderer never disposes them (World disposes the set).
-    private EnvironmentTextureSet environmentTextureSet;
 
     // Tile-space player position computed once per frame; workers read via happens-before from
     // ExecutorService.execute(), which is established after these fields are written.
@@ -225,28 +216,14 @@ public class WallRenderer implements Renderable, Disposable {
         this.batch   = new SpriteBatch(2 * RENDER_RESOLUTION_MAX_COLUMNS + 2);
         this.zBuffer = new float[RENDER_RESOLUTION_MAX_COLUMNS];
 
-        // Wall + column textures are no longer built or owned here (order-7). They are supplied per level
-        // by the EnvironmentTextureSet and cached into levelWallTextures/levelColumn* by
-        // setEnvironmentTextureSet(); the per-char generate*WallTexture()/generateColumnTexture() routines
-        // now live behind the TextureGeneratorRegistry (see registerTextureGenerators). Doors are FIXED
-        // gameplay symbols, not environment sprites, so their textures are still built and owned here.
-        doorTexture      = loadOrGenerateDoorTexture(LAB_DOOR_CLOSED_PATH, 0f, 0f, 0f);
-
-        doorTextureRed    = loadOrGenerateDoorTexture(LAB_DOOR_RED_PATH,    0.90f, 0.13f, 0.13f);
-        doorTextureYellow = loadOrGenerateDoorTexture(LAB_DOOR_YELLOW_PATH, 0.97f, 0.80f, 0.12f);
-        doorTextureBlue   = loadOrGenerateDoorTexture(LAB_DOOR_BLUE_PATH,   0.16f, 0.48f, 0.97f);
-
         Pixmap whitePixel = new Pixmap(1, 1, Pixmap.Format.RGBA8888);
         whitePixel.setColor(Color.WHITE);
         whitePixel.fill();
         whitePixelTexture = new Texture(whitePixel);
         whitePixel.dispose();
 
-        doorTextureTable = new Texture[128];
-        Arrays.fill(doorTextureTable, doorTexture);
-        doorTextureTable['R'] = doorTextureRed;
-        doorTextureTable['Y'] = doorTextureYellow;
-        doorTextureTable['B'] = doorTextureBlue;
+        wallSourceTexture = whitePixelTexture;
+        levelSurfacesOpaque = true;
 
         // --- Parallel compute infrastructure ---
         columnResults = new WallColumnResult[RENDER_RESOLUTION_MAX_COLUMNS];
@@ -2100,95 +2077,61 @@ public class WallRenderer implements Renderable, Disposable {
     }
 
     /**
-     * Supplies this level's realized texture set (symbol/sprite-reuse order-6/7) and PRE-RESOLVES the
-     * per-level wall + column textures from it. Called once per level by World, right after the set is
-     * built from the level's palette, on the GL thread BEFORE any render() — so the char-indexed arrays it
-     * fills are safely published to the render workers (happens-before via the executor dispatch each
-     * frame) and the hot per-column path keeps a single O(1) array read with no per-frame map lookup or
-     * allocation. Resolution: symbol -> sprite id (level palette) -> Texture + intrinsic size (the set).
+     * Supplies this floor's region wall atlas and the floor seed, and PRE-RESOLVES every wall, door and column
+     * char to its face indices (generated-wall-art order 2). Called once per level by World on the GL thread
+     * BEFORE any render(). A null atlas (R7: not even set A could load) draws every wall with the white pixel.
+     * Every wall symbol resolves to the floor's set through {@link WallSlotTable} and the set's R3 fallback.
      */
-    public void setEnvironmentTextureSet(EnvironmentTextureSet textureSet) {
-        this.environmentTextureSet = textureSet;
-        resolveLevelWallAndColumnTextures(textureSet);
-    }
-
-    /**
-     * Fills the char-indexed wall arrays and the column fields from this level's palette + texture set.
-     * Every non-wall slot defaults to the plain-wall texture so an unrecognised char can never NPE the
-     * draw (the array is only indexed by chars for which {@link Level#isWall} is true, but the default
-     * keeps the invariant the old static table held). With the legacy palette this reproduces the former
-     * table entry-for-entry, so the look is unchanged.
-     */
-    private void resolveLevelWallAndColumnTextures(EnvironmentTextureSet textureSet) {
-        LevelPalette palette = level.getPalette();
-
-        // Default fill for any non-wall / unbound char = this level's ACTUAL base wall (the sprite the
-        // palette binds to the bulk wall symbol 'x'). This must NOT be hardcoded to "wall_plain": with
-        // base-wall variety 'x' may resolve to an alternate base wall (e.g. "wall_plain_sandstone"), and
-        // "wall_plain" is then NOT in this level's realized set, so textureFor("wall_plain") would throw
-        // and crash the level at load. The base-wall symbol is bound by EVERY palette (legacy, the
-        // allocator, and generatedWithBaseWall), so its sprite is always realized and safe here.
-        char   baseWallSymbol   = TilesetConstants.FIXED_WALL_SYMBOL.charAt(0);
-        String baseWallSpriteId = palette.spriteIdOf(baseWallSymbol);
-        if (baseWallSpriteId == null) {
-            baseWallSpriteId = TilesetConstants.FIXED_WALL_SPRITE_ID; // defensive: every palette binds 'x'
+    public void setRegionWallAtlas(RegionWallAtlas atlas, long floorSeed) {
+        this.regionWallAtlas = atlas;
+        this.wallVariantSeed = floorSeed;
+        Arrays.fill(wallFaceStart, 0);
+        Arrays.fill(wallFaceCount, 1);
+        Arrays.fill(wallFaceIndices, 0);
+        Arrays.fill(doorFaceByChar, 0);
+        columnFace = 0;
+        if (atlas == null) {
+            wallSourceTexture = whitePixelTexture;
+            wallFaceSize      = 1;
+            levelSurfacesOpaque = true;
+            return;
         }
-        // TEMPORARY (generated-wall-art order 2, CP2-CP3): a region-set face has no texture until the atlas
-        // (CP4); walls draw as the shaded white pixel meanwhile.
-        boolean realized = textureSet.contains(baseWallSpriteId);
-        Texture plainTexture = realized ? textureSet.textureFor(baseWallSpriteId) : whitePixelTexture;
-        int     plainWidth   = realized ? textureSet.widthFor(baseWallSpriteId)   : 1;
-        int     plainHeight  = realized ? textureSet.heightFor(baseWallSpriteId)  : 1;
-        Arrays.fill(levelWallTextures, plainTexture);
-        Arrays.fill(levelWallWidths,   plainWidth);
-        Arrays.fill(levelWallHeights,  plainHeight);
-
-        for (int charIndex = 0; charIndex < levelWallTextures.length; charIndex++) {
-            char symbol = (char) charIndex;
-            if (!Level.isWall(symbol)) continue;
-            String spriteId = palette.spriteIdOf(symbol);
-            if (spriteId == null || !textureSet.contains(spriteId)) continue; // keeps the plain default
-            levelWallTextures[charIndex] = textureSet.textureFor(spriteId);
-            levelWallWidths[charIndex]   = textureSet.widthFor(spriteId);
-            levelWallHeights[charIndex]  = textureSet.heightFor(spriteId);
+        wallSourceTexture = atlas.atlasTexture();
+        wallFaceSize      = WALL_FACE_SIZE;
+        RegionWallSet set = RegionWallSets.registry().resolve(atlas.setId());
+        int nextIndex = 0;
+        String symbols = WallSlotTable.symbols();
+        for (int symbolIndex = 0; symbolIndex < symbols.length(); symbolIndex++) {
+            char symbol = symbols.charAt(symbolIndex);
+            java.util.List<String> ids = set.resolve(WallSlotTable.groupOf(symbol), WallSlotTable.slotOf(symbol));
+            wallFaceStart[symbol] = nextIndex;
+            wallFaceCount[symbol] = ids.size();
+            for (String id : ids) wallFaceIndices[nextIndex++] = atlas.faceIndex(id);
         }
-
-        // Column 'P' — resolves to the round OR (order-8) square column sprite for this level. 'P' is a
-        // FLEXIBLE COLUMN symbol bound in every palette (legacy binds round; the allocator always fills
-        // it), so spriteIdOf is non-null in practice; the null branch keeps the plain-wall default
-        // (always present in the set) so a missing binding degrades gracefully instead of NPE-ing in the
-        // hot render path — the same defence the wall loop above uses.
-        String columnSpriteId = palette.spriteIdOf(COLUMN_SYMBOL);
-        if (columnSpriteId == null || !textureSet.contains(columnSpriteId)) {
-            levelColumnTexture       = plainTexture;
-            levelColumnTextureWidth  = plainWidth;
-            levelColumnTextureHeight = plainHeight;
-        } else {
-            levelColumnTexture       = textureSet.textureFor(columnSpriteId);
-            levelColumnTextureWidth  = textureSet.widthFor(columnSpriteId);
-            levelColumnTextureHeight = textureSet.heightFor(columnSpriteId);
+        // Any other char that reaches the wall path (never, by Level.isWall) keeps the hall BASE.
+        char hallBase = WallSlotTable.symbolFor(WallGroup.HALL, WallSlot.BASE);
+        for (int charIndex = 0; charIndex < ASCII_TABLE_SIZE; charIndex++) {
+            if (!WallSlotTable.isWallSymbol((char) charIndex)) {
+                wallFaceStart[charIndex] = wallFaceStart[hallBase];
+                wallFaceCount[charIndex] = wallFaceCount[hallBase];
+            }
         }
-
-        // R16: one flag per level - the base pass may run unblended only if every wall, column and door
-        // texture it can draw is fully opaque (then blending is a no-op and costs fill-rate for nothing).
-        boolean opaque = OPAQUE_WALL_TEXTURES.contains(levelColumnTexture);
-        for (int charIndex = 0; charIndex < levelWallTextures.length && opaque; charIndex++) {
-            if (Level.isWall((char) charIndex)) opaque = OPAQUE_WALL_TEXTURES.contains(levelWallTextures[charIndex]);
+        int plainDoor = atlas.faceIndex(set.doorIdFor(TilesetConstants.WALL_SET_DOOR_SYMBOLS.charAt(0)));
+        Arrays.fill(doorFaceByChar, plainDoor);
+        for (int doorIndex = 0; doorIndex < TilesetConstants.WALL_SET_DOOR_SYMBOLS.length(); doorIndex++) {
+            char doorSymbol = TilesetConstants.WALL_SET_DOOR_SYMBOLS.charAt(doorIndex);
+            doorFaceByChar[doorSymbol] = atlas.faceIndex(set.doorIdFor(doorSymbol));
         }
-        for (int charIndex = 0; charIndex < doorTextureTable.length && opaque; charIndex++) {
-            opaque = OPAQUE_WALL_TEXTURES.contains(doorTextureTable[charIndex]);
-        }
-        levelSurfacesOpaque = opaque;
+        java.util.List<String> columns = set.columnIds();
+        columnFace = atlas.faceIndex(columns.get(
+                GameMath.wallVariantIndex(0, 0, WALL_COLUMN_PICK_SIDE, floorSeed, columns.size())));
+        // R16: the region atlas is RGB by contract (guide section 12), so the base pass can run unblended.
+        levelSurfacesOpaque = true;
     }
 
     /** R16: whether this level's base pass runs with blending disabled (every drawable surface opaque). */
     public boolean isLevelSurfacesOpaque() {
         return levelSurfacesOpaque;
-    }
-
-    /** The current per-level texture set, or null before the first level is wired (order-6 plumbing). */
-    public EnvironmentTextureSet getEnvironmentTextureSet() {
-        return environmentTextureSet;
     }
 
     /** Returns the perpendicular wall distance (in tile units) for a given screen column. */
@@ -2326,6 +2269,18 @@ public class WallRenderer implements Renderable, Disposable {
         // Reset to white so no alert tint leaks into other renderers that share GL state.
         batch.setColor(Color.WHITE);
         batch.end();
+    }
+
+    /** Top-left atlas x of {@code face} at {@code mip}; 0 for the white-pixel fallback. */
+    private int faceOriginX(int mip, int face) {
+        RegionWallAtlas atlas = regionWallAtlas;
+        return atlas != null ? atlas.sourceX(mip, face) : 0;
+    }
+
+    /** Top-left atlas y (row 0 = top) of {@code face} at {@code mip}; 0 for the white-pixel fallback. */
+    private int faceOriginY(int mip, int face) {
+        RegionWallAtlas atlas = regionWallAtlas;
+        return atlas != null ? atlas.sourceY(mip, face) : 0;
     }
 
     /** R18: true when {@code next} would draw exactly the surface slice {@code first} draws, with no door panel. */
@@ -2471,7 +2426,9 @@ public class WallRenderer implements Renderable, Disposable {
 
                 float columnU         = GameMath.columnTextureU(hitTileX, hitTileY,
                                                                  columnCenterTileX, columnCenterTileY);
-                int   columnTexColumn = GameMath.textureColumn(columnU, levelColumnTextureWidth);
+                int   face            = columnFace;
+                int   faceSize        = wallFaceSize;
+                int   columnTexColumn = GameMath.textureColumn(columnU, faceSize);
 
                 // Lambert shading: dot of the outward surface normal with the world light direction.
                 float normalX          = (hitTileX - columnCenterTileX) / COLUMN_RADIUS_TILES;
@@ -2491,17 +2448,17 @@ public class WallRenderer implements Renderable, Disposable {
 
                 int texSrcY      = GameMath.wallTextureClipSrcY(
                                        unclampedTop, WALL_PROJECTION_SCREEN_HEIGHT,
-                                       lineHeight, levelColumnTextureHeight);
+                                       lineHeight, faceSize);
                 int texSrcHeight = GameMath.wallTextureClipSrcHeight(
                                        drawTop, drawBottom,
-                                       lineHeight, levelColumnTextureHeight);
-                texSrcHeight = Math.min(texSrcHeight, levelColumnTextureHeight - texSrcY);
+                                       lineHeight, faceSize);
+                texSrcHeight = Math.min(texSrcHeight, faceSize - texSrcY);
                 texSrcHeight = Math.max(1, texSrcHeight);
 
                 result.drawSurface         = true;
-                result.surfaceTexture      = levelColumnTexture;
-                result.surfaceTexColumn    = columnTexColumn;
-                result.surfaceTexSrcY      = texSrcY;
+                result.surfaceTexture      = wallSourceTexture;
+                result.surfaceTexColumn    = faceOriginX(0, face) + columnTexColumn;
+                result.surfaceTexSrcY      = faceOriginY(0, face) + texSrcY;
                 result.surfaceTexSrcHeight = texSrcHeight;
                 result.surfaceDrawBottom   = drawBottom;
                 result.surfaceDrawTop      = drawTop;
@@ -2529,13 +2486,11 @@ public class WallRenderer implements Renderable, Disposable {
                 int   adjacentFloorRow    = crossedVerticalLine ? tileRow                 : tileRow - stepRow;
                 float wallTileBrightness  = level.getTileBrightness(adjacentFloorColumn, adjacentFloorRow, lightingTimeSeconds);
 
-                // O(1) array lookup into this level's pre-resolved wall textures (order-7): the palette +
-                // texture-set resolution happened once in setEnvironmentTextureSet(), so the hot path stays
-                // a single array read per column.
+                // O(1) array reads into this level's pre-resolved face tables (setRegionWallAtlas).
                 int     hitCharIndex          = hitWallCell & 0x7F;
-                Texture selectedTexture       = levelWallTextures[hitCharIndex];
-                int     selectedTextureWidth  = levelWallWidths[hitCharIndex];
-                int     selectedTextureHeight = levelWallHeights[hitCharIndex];
+                int     face                  = wallFaceIndices[wallFaceStart[hitCharIndex]];
+                int     selectedTextureWidth  = wallFaceSize;
+                int     selectedTextureHeight = wallFaceSize;
                 int     wallTextureColumn     = GameMath.textureColumn(wallHitFractionMirrored, selectedTextureWidth);
 
                 float shade = GameMath.wallShade(perpWallDistance, WALL_SHADING_FALLOFF);
@@ -2552,9 +2507,9 @@ public class WallRenderer implements Renderable, Disposable {
                 texSrcHeight = Math.max(1, texSrcHeight);
 
                 result.drawSurface         = true;
-                result.surfaceTexture      = selectedTexture;
-                result.surfaceTexColumn    = wallTextureColumn;
-                result.surfaceTexSrcY      = texSrcY;
+                result.surfaceTexture      = wallSourceTexture;
+                result.surfaceTexColumn    = faceOriginX(0, face) + wallTextureColumn;
+                result.surfaceTexSrcY      = faceOriginY(0, face) + texSrcY;
                 result.surfaceTexSrcHeight = texSrcHeight;
                 result.surfaceDrawBottom   = drawBottom;
                 result.surfaceDrawTop      = drawTop;
@@ -2608,9 +2563,9 @@ public class WallRenderer implements Renderable, Disposable {
                     // Each variant may have its own resolution (the keycard doors are generated
                     // independently of the file-loaded plain door), so clip against the SELECTED
                     // texture's own dimensions rather than a shared plain-door size.
-                    Texture selectedDoorTexture   = doorTextureTable[doorHitCell & 0x7F];
-                    int     selectedDoorTexWidth  = selectedDoorTexture.getWidth();
-                    int     selectedDoorTexHeight = selectedDoorTexture.getHeight();
+                    int     doorFace              = doorFaceByChar[doorHitCell & 0x7F];
+                    int     selectedDoorTexWidth  = wallFaceSize;
+                    int     selectedDoorTexHeight = wallFaceSize;
 
                     int doorTexSrcY      = GameMath.wallTextureClipSrcY(
                                                doorUnclampedTop, WALL_PROJECTION_SCREEN_HEIGHT,
@@ -2627,9 +2582,9 @@ public class WallRenderer implements Renderable, Disposable {
                     shade = Math.max(Math.min(shade * doorTileBrightness, MAX_LIGHTING_SHADE), WALL_SHADE_MIN_BRIGHTNESS);
 
                     result.drawDoorPanel          = true;
-                    result.doorPanelTexture       = selectedDoorTexture;
-                    result.doorPanelTexColumn     = doorTexColumn;
-                    result.doorPanelTexSrcY       = doorTexSrcY;
+                    result.doorPanelTexture       = wallSourceTexture;
+                    result.doorPanelTexColumn     = faceOriginX(0, doorFace) + doorTexColumn;
+                    result.doorPanelTexSrcY       = faceOriginY(0, doorFace) + doorTexSrcY;
                     result.doorPanelTexSrcHeight  = doorTexSrcHeight;
                     result.doorPanelDrawBottom    = clampedPanelBottom;
                     result.doorPanelDrawTop       = clampedPanelTop;
@@ -2652,13 +2607,8 @@ public class WallRenderer implements Renderable, Disposable {
     @Override
     public void dispose() {
         batch.dispose();
-        // Wall + column textures are owned/disposed by the per-level EnvironmentTextureSet (World's dispose
-        // chain), NOT here — order-7 moved that ownership to the set. Disposing them here would double-free.
-        // WallRenderer still owns only the door textures and the 1×1 white pixel it builds itself.
-        for (Texture door : new Texture[] {doorTexture, doorTextureRed, doorTextureYellow, doorTextureBlue}) {
-            forgetWallTextureOpacity(door);
-            door.dispose();
-        }
+        // Wall, door and column faces live in the floor's RegionWallAtlas, owned and disposed by World with the
+        // floor. WallRenderer owns only the 1x1 white pixel it builds itself.
         whitePixelTexture.dispose();
         if (workerPool != null) {
             workerPool.shutdown();
