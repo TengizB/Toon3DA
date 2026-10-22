@@ -1681,6 +1681,10 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
                 gameAudio.playAt(GameSoundId.TOXIC_SPILL, tileColumn, tileRow);
             }
         });
+        // A death splash (sump-wretch-acid-death) is SEEN on every tile it reaches: the creature's IMPACT burst.
+        hazardManager.setAcidSplashListener((deadType, tileColumn, tileRow) -> {
+            if (enemyVisualLayer != null) enemyVisualLayer.onAcidSplash(deadType, tileColumn, tileRow);
+        });
         // The loudest event in the game, placed at the barrel so a chain reaction sweeps across the
         // stereo field the way it sweeps across the room.
         explosiveBarrelManager.setDetonationListener((tileColumn, tileRow) -> {

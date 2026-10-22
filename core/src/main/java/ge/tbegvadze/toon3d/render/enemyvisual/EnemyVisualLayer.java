@@ -13,6 +13,7 @@ import ge.tbegvadze.toon3d.status.StatusEffect;
 import ge.tbegvadze.toon3d.status.StatusType;
 import ge.tbegvadze.toon3d.util.Constants;
 import ge.tbegvadze.toon3d.util.EffectConstants;
+import ge.tbegvadze.toon3d.util.GameMath;
 
 import java.util.List;
 
@@ -168,6 +169,32 @@ public final class EnemyVisualLayer implements EnemyVisualListener, Disposable {
         animator.pendingTargetX     = targetColumn * Constants.CELL_SIZE + Constants.CELL_SIZE / 2f;
         animator.pendingTargetY     = targetRow    * Constants.CELL_SIZE + Constants.CELL_SIZE / 2f;
         return true;
+    }
+
+    /**
+     * A DEATH SPLASH reached a tile (sump-wretch-acid-death, {@code HazardManager.AcidSplashListener}): the dead
+     * creature's own IMPACT burst - for the Sump Wretch the aberration set's ACID_SPLASH - on that tile's floor.
+     * Cosmetic only. A tile closer to the viewer than ENEMY_EFFECT_PROJECTILE_IMPACT_LEAD_TILES (the player's own
+     * tile when they are splashed) bursts that far in front of the camera instead, the same rule the acid
+     * projectile's impact uses, so the splash that poisons the player is the one they see. A type without a
+     * generated creature or an IMPACT burst draws nothing.
+     */
+    public void onAcidSplash(EnemyType type, int tileColumn, int tileRow) {
+        EnemyAtlasCache.CreatureVisual visual = atlasCache.visualFor(type);
+        if (visual == null) return;
+        EnemyEffectSet.Burst burst = visual.burst(EnemyEffectSet.BurstId.IMPACT);
+        if (burst == null) return;
+        float tileX = tileColumn + 0.5f;
+        float tileY = tileRow    + 0.5f;
+        float viewerTileX = viewerWorldX / Constants.CELL_SIZE;
+        float viewerTileY = viewerWorldY / Constants.CELL_SIZE;
+        float clearanceTiles = EffectConstants.ENEMY_EFFECT_PROJECTILE_IMPACT_LEAD_TILES;
+        if (GameMath.distance(viewerTileX, viewerTileY, tileX, tileY) < clearanceTiles) {
+            tileX = viewerTileX + viewerDirectionX * clearanceTiles;
+            tileY = viewerTileY + viewerDirectionY * clearanceTiles;
+        }
+        float tilesPerPixel = type.heightMultiplier() / visual.manifest.canvasHeight;
+        effects.emit(burst, tileX, tileY, 0f, tilesPerPixel, 0f, 0f);
     }
 
     /**

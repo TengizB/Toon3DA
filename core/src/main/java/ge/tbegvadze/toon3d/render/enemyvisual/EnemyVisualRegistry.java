@@ -34,6 +34,7 @@ public final class EnemyVisualRegistry {
         register(EnemyType.EYE_TYRANT,  "eye_tyrant");
         register(EnemyType.GORE_BITER,  "gore_biter");
         register(EnemyType.MIRE_WRAITH, "mire_wraith");
+        register(EnemyType.SUMP_WRETCH, "sump_wretch");
     }
 
     public static void register(EnemyType type, String creatureId) {

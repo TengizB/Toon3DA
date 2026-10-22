@@ -47,7 +47,7 @@ One commit per checkpoint, pushed immediately, prefixed `sump-wretch-acid-death/
       live. DONE WHEN: build + test green.
 - [x] **CP3** — GameMath.deathSplashThreatPoints + baseThreatPoints term + DEATH_SPLASH_ADJACENT_SHARE + the one
       BalanceAuditTest method. DONE WHEN: test green, A12 + A13.
-- [ ] **CP4** — registry row + AcidSplash seam -> ACID_SPLASH bursts; A1, A2-A8, A15 verified in-engine.
+- [x] **CP4** — registry row + AcidSplash seam -> ACID_SPLASH bursts; A1, A2-A8, A15 verified in-engine.
 - [ ] **CP5** — balanceSim green (A14).
 - [ ] **CP6** — docs; reviewer PASS; STATUS IMPLEMENTED.
 
@@ -87,3 +87,25 @@ C-ENEMY / C-HAZARD admitted; telegraph row OK; every other archetype's splash te
 "rest EV discount 0.58 OUT-OF-BAND" in the report is pre-existing (identical at CP2) and not an audit failure.
 Snapshot re-baselined again (62efb6fb...). V7 note to report: linear_corridor can exceed the 3-per-room cap when the
 roster shifts — the placer cap is not airtight on that layout (pre-existing, sensitive to seeds).
+
+**CP4:** `register(SUMP_WRETCH, "sump_wretch")`; World wires `hazardManager.setAcidSplashListener` ->
+`EnemyVisualLayer.onAcidSplash(type, col, row)` = the dead creature's IMPACT burst (sump_wretch overrides IMPACT ->
+ACID_SPLASH) at the tile floor; a tile within ENEMY_EFFECT_PROJECTILE_IMPACT_LEAD_TILES of the viewer bursts that far in
+front of the camera (the projectile-impact rule) so the player's own splash is seen. No order-5 "burst at a tile" seam
+existed to reuse (the arrival splash rides the projectile). The listener carries the EnemyType (the idea sketched
+(col,row) only) because the burst is the creature's. Melee wretch never launches a projectile: scheduleShot is only
+reached from onRangedAttack. Height 0.75 kept (reads lower than the Mire Wraith on screen).
+IN-ENGINE (run-game, depth 1, temporary `probe` command added to the MIRROR's CaptureLauncher only — not committed):
+A1 moves 21->20->19->18 on every 2nd turn, attacks only once adjacent (-8 = 10 - toughness 2). A2 adjacent kill: player
+POISONED x3 the same turn, armour unchanged (0) — BUT ticks are 4/2/1 = 7 HP, not 6/4/2 = 12: the player's existing DoT
+pipeline (Player.applyDoTDamage) applies the TOUGHNESS flat reduction (and armour absorption) to EVERY poison tick,
+exactly as for a toxic tile; the splash itself is not a hit (R5 holds). Pricing therefore over-estimates slightly
+(conservative). Record as a DECISION at CP6, do not change the shared poison path. A3 a wretch dying 2 tiles away in the
+same column: no poison. A4 diagonal kill: no poison. A5 Gore Biter + second wretch adjacent got x4; the wounded wretch
+(7 HP) died of the poison on turn 2 (DIED cause=STATUS) and left its own puddle. A6 each puddle 'q' lasted 3 turns then
+became the 'm' stain; toxic creep onto a neighbour seen (allowed, 0.10/turn). A7 ACID_SPLASH bursts visible on the
+splashed tiles + in front of the camera (screens: scratchpad swA_sheet.png). A10 ORA: "It bursts when it dies. Not next
+to you - next to its friends." (needs the ABERRATION family line spent first — the existing per-trigger schedule). A15:
+only MIRE_WRAITH -> mire_wraith. A8 not staged (no barrel spawner): by construction the splash only touches the
+player + the enemy list, and the hook runs on every death cause including a barrel kill.
+Pre-existing chainAlertQueue overflow hit again when two dormant spawns woke on one turn (workaround: alert by index).
