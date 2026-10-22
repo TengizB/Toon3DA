@@ -65,6 +65,43 @@ MATERIALS = {
     # translucent gland membrane over the family's ichor light (the Mire Wraith's acid glands, the Hulk's blisters)
     "membrane": dict(ramp=ramp("1c1019", "36202d", "553342", "7a4e5a", "a17470", "c79f92"), glow="ichor", spec=(0.55, 44), grain=(0.03, 3), wet=(0.70, 80)),
     "pupil":    dict(ramp=ramp("060408", "0c0910", "151019", "1f1924", "2b2331", "3a3042"), spec=(0.60, 60), grain=(0.0, 4), wet=(0.90, 110)),
+    # ENVIRONMENT materials (generated-wall-art order 1, walls.py; docs/wall-art-creation-guide.txt section 9).
+    # Appended LAST, like every addition before them, so each earlier material keeps its index and every enemy
+    # sprite regenerates byte-identical. The first eight are the 2026-10-22 prototypes' (approved in-engine).
+    # poured structural concrete: warm grey, matte, coarse grain
+    "concrete":    dict(ramp=ramp("15161a", "24252a", "37373b", "4d4c4e", "686562", "8c8780"), spec=(0.04, 8), grain=(0.07, 3)),
+    "concrete_dk": dict(ramp=ramp("0b0c0f", "141519", "1e1f24", "2b2b30", "3b3a3e", "4f4d4f"), spec=(0.03, 8), grain=(0.06, 2.5)),
+    # glazed abattoir tile: pale greige-celadon, glossy, almost no grain
+    "ceramic":     dict(ramp=ramp("1c2221", "323b39", "4f5a56", "717c76", "97a19a", "c3c8bf"), spec=(0.65, 40), grain=(0.015, 6)),
+    # bump rails, door seals, cable sheaths: near-black, low specular
+    "rubber":      dict(ramp=ramp("060708", "0d0e10", "15171a", "1e2125", "2a2e33", "3a3f45"), spec=(0.15, 10), grain=(0.02, 3)),
+    # oxidised steel: umber-brown, never a saturated orange
+    "rust":        dict(ramp=ramp("140c0a", "2a1812", "432619", "5f3a24", "7d5435", "9f7552"), spec=(0.10, 10), grain=(0.09, 2)),
+    # SOUL: the harvested planet-soul as printer fuel - pale, cold, low saturation (emissive)
+    "soul":        dict(ramp=ramp("2a2c3a", "4a4e63", "767c94", "a5abc1", "d2d6e2", "f3f4f7"), emissive=True),
+    # nacre: the Core's mineral-bone, pearl grey with a faint violet shadow (never a semantic purple)
+    "nacre":       dict(ramp=ramp("17141c", "2b2633", "45404d", "665f6b", "8f8790", "bdb5b6"), spec=(0.45, 30), grain=(0.03, 3)),
+    # translucent capsule glass over the soul light (glow=0 on a shape: plain dark glass)
+    "capsule":     dict(ramp=ramp("0f1418", "1a2228", "28343b", "3a4a52", "566b73", "7f979d"), glow="soul", spec=(0.7, 60), grain=(0.0, 4)),
+    # Region A (the Habitation Rings). livery_dk: the ring corridors' painted panels, one ramp step under the
+    # enemies' livery (the prototype read too bright and flat at range - guide 15.8)
+    "livery_dk":   dict(ramp=ramp("1b1d22", "2e3137", "45484d", "63666a", "85878a", "a9a9a6"), spec=(0.30, 22), grain=(0.035, 4)),
+    # paint_teal: the medical wing's painted "care" band - a muted facility teal, never a saturated green/blue
+    "paint_teal":  dict(ramp=ramp("0d1a1d", "16292d", "21393e", "2f4c51", "426267", "5d7d80"), spec=(0.25, 20), grain=(0.03, 4)),
+    # insulation: containment's quilted insulated panels - cool grey canvas, matte
+    "insulation":  dict(ramp=ramp("111418", "1d2227", "2c3238", "3e454b", "545b60", "6f7579"), spec=(0.06, 10), grain=(0.05, 2.5)),
+    # frost: the pale rime on cold seams and frosted glass - cold grey-white, glossy, never pure white
+    "frost":       dict(ramp=ramp("1e262b", "36434a", "55646b", "77878d", "9eacb0", "c4cfd1"), spec=(0.50, 30), grain=(0.05, 2)),
+    # cloth: the crew's left-behind fabric - faded, dusty, low saturation
+    "cloth":       dict(ramp=ramp("16130f", "28221c", "3d342b", "54493d", "6d6052", "897b6b"), spec=(0.03, 6), grain=(0.08, 1.5)),
+    # grime: the dirt at a panel's foot and under a seep - a warm dark grey within two steps of livery_dk (R-2)
+    "grime":       dict(ramp=ramp("15140f", "26241f", "39372f", "4e4b42", "666256", "7f7a6c"), spec=(0.08, 10), grain=(0.06, 2)),
+    # KEYCARD inks: the exact keycard colours (RenderConstants.KEYCARD_AURA_*: red 1.00/0.18/0.16, yellow
+    # 1.00/0.86/0.18, blue 0.22/0.58/1.00), emissive, so no mood shifts them. Only on keycard doors (guide 11.1).
+    # The upper three steps ARE the exact colour; the lower ones only shade a lamp's rim.
+    "key_red":     dict(ramp=ramp("4d0e0c", "801714", "bf2320", "ff2e29", "ff2e29", "ff2e29"), emissive=True),
+    "key_yellow":  dict(ramp=ramp("4d420e", "806e17", "bfa423", "ffdb2e", "ffdb2e", "ffdb2e"), emissive=True),
+    "key_blue":    dict(ramp=ramp("112d4d", "1c4a80", "2a6fbf", "3894ff", "3894ff", "3894ff"), emissive=True),
 }
 
 # The wet sheen's glint colour: near-white with the slightest warmth (never pure white: the hit flash owns it).
@@ -249,6 +286,25 @@ def teeth_row(x1, y1, x2, y2, count, length, r, mat="bone", side=1.0, sag=0.0, r
         shapes += spike(bx, by, bx + tx * length * size, by + ty * length * size, r * (0.85 + 0.3 * size), mat,
                         tip=tip, segments=3, k=k, **kw)
     return shapes
+
+
+def chamfer_rect(x0, y0, x1, y1, c):
+    """The corner points of a rectangle with 45-degree chamfered corners (generated-wall-art order 1) - the
+    UiKit panel shape, so walls and the interface chrome rhyme. Feed it to slab() / riveted_plate()."""
+    return [(x0 + c, y0), (x1 - c, y0), (x1, y0 + c), (x1, y1 - c), (x1 - c, y1), (x0 + c, y1), (x0, y1 - c), (x0, y0 + c)]
+
+
+def tile_copies(shapes, period, columns=3, rows=1):
+    """TILING (generated-wall-art order 1): stamp shapes at every (column x period, row x period) offset on a
+    canvas `columns` x `rows` periods large. Rendered on that canvas and cropped to the middle period, the
+    result tiles seamlessly: the smooth max, the per-shape grain (it rides each copy's own frame), the cavity
+    blur (np.roll wraps a periodic canvas) and the Bayer dither (period % 4 == 0) are all translation-
+    invariant. Walls tile horizontally (columns=3, rows=1); floors and ceilings in both axes (3 x 3)."""
+    out = []
+    for row in range(rows):
+        for column in range(columns):
+            out += Xf.move(column * period, row * period)(shapes)
+    return out
 
 
 def mirror(shapes, axis):
@@ -636,7 +692,12 @@ STENCIL_FONT = {"0": "111101101101111", "1": "010110010010111", "2": "1110011111
                 "P": "110101110100100",
                 # order 5 (the Aberrations): tank, specimen, pen and sump marks
                 "T": "111010010010010", "S": "111100111001111", "G": "111100101101111", "M": "101111111101101",
-                "A": "010101111101101", "B": "110101110101110"}
+                "A": "010101111101101", "B": "110101110101110",
+                # generated-wall-art order 1: the rest of the capitals, for wall stencils and signage
+                "C": "111100100100111", "H": "101101111101101", "I": "111010010010111", "L": "100100100100111",
+                "N": "110101101101101", "O": "010101101101010", "U": "101101101101111", "V": "101101101101010",
+                "Y": "101101010010010", "F": "111100110100100", "X": "101101010101101", "Z": "111001010100111",
+                "J": "001001001101111", "Q": "010101101110011"}
 
 
 def stencil(img, text, x, y, color, alpha=255):

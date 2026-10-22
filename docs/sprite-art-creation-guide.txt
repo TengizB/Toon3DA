@@ -691,3 +691,5 @@ WALLS, DOORS, COLUMNS, FLOORS, CEILINGS
 OTHER CONTENT (props, pickups, effect particles, room dressing)
   The same kit and the same rules apply. A new kind of content gets its own builder file beside
   bestiary.py (e.g. props.py), its own output folder under assets/, and its own section here.
+  WALLS, DOORS, COLUMNS, FLOORS, CEILINGS: walls.py + <region>_walls.py -> assets/textures/walls/generated/;
+  THE METHOD for them lives in docs/wall-art-creation-guide.txt (not here).

@@ -1,9 +1,19 @@
-STATUS: NOT IMPLEMENTED
+STATUS: IMPLEMENTED
 CATEGORY: Visual
 TITLE: Wall art order 1 - wall kit + Outer Facility region set
 CREATED: 2026-10-22
-IMPLEMENTED: -
+IMPLEMENTED: 2026-10-22
 ---
+IMPLEMENTATION NOTE (2026-10-22, reviewer PASS): built as planned, with these differences.
+  - Region builders live in outer_facility_walls.py (its REGION row is imported into walls.py REGIONS), like a
+    creature's <name>_rig.py, so later regions are one file each.
+  - The exact keycard colours come from RenderConstants.KEYCARD_AURA_* (ItemConstants / CombatPalette, named in
+    R10, hold none): red (255,46,41), yellow (255,219,46), blue (56,148,255) - kit key_red/key_yellow/key_blue.
+  - The manifest adds "atlas", "glow" and "atlasSize" to R11 (additive; documented in guide section 12).
+  - A glow frame of level 0 is baked at 0.06 (just above kit.GLOW_DEAD) so the "off" frame holds the dark tube.
+  - CONTAINMENT seams use a new `frost` material, not `capsule`; kit.py gained 17 appended materials in all
+    (the 8 prototype ones + livery_dk, paint_teal, insulation, frost, cloth, grime, key_red/yellow/blue).
+  - Crossing the tile edge needed walls.grammar() (k=0 + a brushed grain frame) - guide 15.14.
 
 THE WALL KNOWLEDGE DOCUMENT IS docs/wall-art-creation-guide.txt - how walls, doors, columns, floors
 and ceilings must be created: the format, tiling, trim lines, the region set, the placement rules, the
@@ -204,7 +214,9 @@ ASSUMPTIONS
 
 DECISIONS
 ---------
-  (none yet)
+  D1  OWNER GATE (A7): the region A set - hall, the six room families, the crew-quarters signature, doors,
+      columns, floor and ceiling - APPROVED as shown (contact sheets, tiled strips, the LIGHT flicker GIF and
+      in-engine captures of a hall, the medical set and the doors under cool_steel). Order 1 closed.  (2026-10-22)
 
 
 OPEN QUESTIONS
