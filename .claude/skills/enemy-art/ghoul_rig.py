@@ -14,11 +14,13 @@ SNOUT_END = 30.0                  # the canister's centre below the head centre 
 
 # BULK (owner, 2026-10-22: "too thin, looks weak"): limb, torso and joint radii x BULK, shoulders and hips set wider
 # so the thicker limbs keep their gaps. No muscle detail - the suit is just fuller over a heavier frame.
-BULK = 1.35
-LEG_BULK = 1.55                   # the legs a touch heavier again (owner, 2026-10-22: "a little more thicker legs")
+BULK = 1.6
+LEG_BULK = 1.8                    # the legs heavier again (owner, 2026-10-22: "even thicker legs and arms and body")
 
-SKELETON = Humanoid(pelvis=(80.0, 112.0), spine=58.0, neck=9.0, head=11.0, shoulder_half=17.5, hip_half=10.5,
-                    upper_arm=44.0, fore_arm=42.0, hand=12.0, thigh=58.0, shin=60.0, foot=9.0,
+# Owner, 2026-10-22: the body ~12% longer (spine 58 -> 65) and the arms ~12% longer (44/42 -> 50/47); the pelvis moved
+# down 6 px so the head keeps its place on the canvas, the legs giving back ~5% (still far longer than a person's).
+SKELETON = Humanoid(pelvis=(80.0, 118.0), spine=65.0, neck=9.0, head=11.0, shoulder_half=19.5, hip_half=12.0,
+                    upper_arm=50.0, fore_arm=47.0, hand=12.0, thigh=55.0, shin=57.0, foot=9.0,
                     arm_rest=0.11, leg_rest=0.035)
 
 GHOUL_POSE = Humanoid.params(
@@ -127,7 +129,7 @@ def ghoul_build(p):
     torso = [
         # a long torso: the suit hangs off the shoulders and narrows at the belt
         limb(cx, cy - 2, wx, wy, 13.0 * BULK, 9.5 * BULK, "overalls", k=8),
-        limb(wx, wy, px, py, 9.5 * BULK, 10.5 * BULK, "overalls", k=8),
+        limb(wx, wy, px, py, 9.5 * BULK, 8.6 * BULK, "overalls", k=8),
         blob(*j["l_shoulder"], 6.5 * BULK, 5.5 * BULK, "overalls", depth=5.5 * BULK, k=6),
         blob(*j["r_shoulder"], 6.5 * BULK, 5.5 * BULK, "overalls", depth=5.5 * BULK, k=6),
         limb(*j["neck"], cx, cy, 5.0 * 1.15, 6.0 * 1.15, "overalls", k=5),
@@ -138,7 +140,7 @@ def ghoul_build(p):
         *fold_lines(cx - 10, cy + 6, wx - 4, wy + 10, 3, 9, mat="overalls", seed=31, angle=0.9),
         *fold_lines(cx + 10, cy + 6, wx + 4, wy + 10, 3, 9, mat="overalls", seed=32, angle=-0.9, side=-1),
         # the hips of the suit, the thighs grow out of them
-        limb(px - 9, py + 1, px + 9, py + 1, 7.5 * BULK, 7.5 * BULK, "overalls", k=6),
+        limb(px - 10, py + 2, px + 10, py + 2, 7.5 * 1.25, 7.5 * 1.25, "overalls", k=8),
     ]
     # the ID badge on its lanyard, clipped left of the zip, swinging a little
     bx, by = cx - 8 + 2.0 * p.badge, cy + 24

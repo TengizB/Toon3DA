@@ -144,3 +144,7 @@ hip_half 9.5, belt and hip band widened. Rest still sent (before/after). COMMITT
 still the thin one. On approval: rebake ghoul, re-check in-engine, send GIFs; on rejection: adjust BULK.
 Owner: "better, but a little more thicker legs, just a bit" -> LEG_BULK = 1.55 on the legs only (hips, knees, shins,
 boots), hip_half 10.5. Still re-sent; still awaiting approval, still UNBAKED.
+Owner: "even thicker legs and arms and body, the body 10-15% longer, the hands 10-15% longer" -> BULK 1.6, LEG_BULK 1.8,
+spine 58 -> 65, upper_arm/fore_arm 44/42 -> 50/47 ("hands" read as the ARMS, as in the first brief; fingers unchanged),
+pelvis y 112 -> 118 with thigh/shin 58/60 -> 55/57 so the head keeps its place, shoulder_half 19.5, hip_half 12; the hip band
+and the pelvis end of the lower torso narrowed (they swelled into a waist bulge). Still re-sent; awaiting approval; UNBAKED.
