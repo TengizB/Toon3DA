@@ -155,7 +155,18 @@ ASSUMPTIONS
 
 DECISIONS
 ---------
-(none yet)
+  D1  OWNER GATE (CP3, 2026-10-22): the family stills sheet, the clip GIFs + strips, the aberration effect sheet and the
+      in-engine burst GIFs (cool_steel + amber_hot) were sent. The owner APPROVED the Plague Hulk, the Eye Tyrant and the
+      Gore Biter ("Everything else looks really good and you have my approval"), including the runtime changes named in
+      the CP3 checkpoint notes. They are wired.
+  D2  The Mire Wraith is REJECTED as drawn ("looks like an egg ... doesn't look like a dangerous enemy, it looks really
+      weak"). Per A1 it is redesigned and re-gated, never wired as drawn.
+  D3  The rejected Mire Wraith art is KEPT, not deleted: it becomes the creature `sump_wretch` (sump_wretch_rig.py +
+      its shipped atlas/glow/manifest, pixels unchanged) for a NEW low-level enemy that "will splash acid when killed".
+      That enemy is new gameplay content (a new EnemyType + an on-death mechanic, balance-bearing), so it is OUT of this
+      order: its own idea file comes from creative-game-designer and the owner approves it separately.
+  D4  The acid gets an ARRIVAL SPLASH where it lands (owner: "yes also add a splash where the acid lands") - a runtime
+      projectile-arrival burst, named in the IMPLEMENTATION NOTE.
 
 
 OPEN QUESTIONS

@@ -615,8 +615,9 @@ SETS = {
                                charge=placement("ground", (0, -3), 32), stun=placement("eye", (0, -36), 14),
                                poison=placement("hit_centre", (0, -20), 26), body=placement("hit_centre", (0, -10), 24),
                                bursts={"CHARGE": "SCUFF"}),
-            # the leak is the torn hose; the acid is its own, so the projectile is a per-creature override (order 4 idiom)
-            "mire_wraith": dict(leak=placement("hit_centre", (60, -38), 1), burn=placement("hit_centre", (0, -20), 34),
+            # the leak is the torn hose; the acid is its own, so the projectile is a per-creature override (order 4 idiom).
+            # The first Mire Wraith design, kept as its own creature for a new enemy (owner, 2026-10-22).
+            "sump_wretch": dict(leak=placement("hit_centre", (60, -38), 1), burn=placement("hit_centre", (0, -20), 34),
                                 charge=placement("hit_centre", (0, 30), 26), stun=placement("eye", (0, -30), 14),
                                 poison=placement("hit_centre", (0, 0), 30), body=placement("hit_centre", (0, 20), 30),
                                 bursts={"PROJECTILE": "SPIT", "TRAIL": "SPIT_TRAIL", "MUZZLE": "SPIT_MUZZLE",

@@ -1,10 +1,10 @@
 {
  "version": 1,
- "creature": "mire_wraith",
+ "creature": "sump_wretch",
  "canvas": [160,240],
  "groundY": 232,
- "atlas": "mire_wraith.atlas.png",
- "glow": "mire_wraith.glow.png",
+ "atlas": "sump_wretch.atlas.png",
+ "glow": "sump_wretch.glow.png",
  "atlasSize": [2048,2048],
  "clips": {
   "IDLE": {

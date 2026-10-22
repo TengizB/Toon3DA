@@ -53,9 +53,15 @@ file's tick in the same commit as the work**. Never more than one checkpoint unc
       DONE WHEN: `--stills` renders all four with no edge warning and the sheet is sent.
 - [x] **CP3** — all clips + ability clips + the aberration effect set; runtime additions; clip GIFs + in-engine burst
       GIFs (default + one mood) sent. DONE WHEN: the GIFs are sent and the build is green.
-- [ ] **CP4** — owner approval recorded in the idea's DECISIONS (stop until it is).
-- [ ] **CP5** — four registry rows wired; A2-A5 verified in-engine; build green.
-- [ ] **CP6** — docs (guide, art-direction 16, SKILL.md); reviewer PASS; STATUS: IMPLEMENTED.
+- [x] **CP4** — owner answer recorded (D1-D4): Hulk / Eye Tyrant / Gore Biter approved; Mire Wraith rejected -> redesign;
+      its art kept as `sump_wretch`; arrival splash approved. DONE WHEN: DECISIONS written, sump_wretch renamed
+      pixel-identical, committed.
+- [ ] **CP5** — three rows wired (PLAGUE_HULK, EYE_TYRANT, GORE_BITER) + the acid arrival splash (runtime IMPACT burst);
+      A2-A5 for the three re-verified in-engine; build green.
+- [ ] **CP5b** — the NEW Mire Wraith (dangerous, alive, not an egg): rig + full clip set + effects row; stills, clip GIFs
+      and in-engine bursts (default + one mood) sent. DONE WHEN: sent; build green.
+- [ ] **CP5c** — owner approval of the new Mire Wraith recorded (stop until it is); then its row wired, A2 verified.
+- [ ] **CP6** — docs (guide, art-direction 16, SKILL.md, enemy-system); reviewer PASS; STATUS: IMPLEMENTED.
 
 ## NOTES CARRIED FORWARD
 
@@ -111,3 +117,9 @@ and Mire Wraith never commit a WIND_UP (no heavy) - their WIND_UP shows only off
 runtime hook (projectile arrival burst) - the splash is at the spout instead. Captures: scratchpad tools/gen.py ->
 hulkA/hulkB/tyrant/biters/wraith.txt via tools/cap.sh, GIFs by tools/assemble.py (labels from logmoments).
 Build: only StoryBarkTest red. WAITING for owner approval (CP4).
+
+**CP4 (gate):** owner 2026-10-22 -> idea DECISIONS D1-D4. Rename done: mire_wraith_rig.py -> sump_wretch_rig.py (rig name
+"sump_wretch", same seed 43 and geometry: atlas pixels identical; manifest "creature"/file names changed), CREATURES row and
+the effects creatures row renamed. The new-enemy idea file (acid splash on death, built on sump_wretch) was handed to
+creative-game-designer - separate full-lane work, owner approves it separately; NOT part of this order. The new Mire
+Wraith needs its own effects creatures row (mire_wraith) at CP5b - none exists at this commit.

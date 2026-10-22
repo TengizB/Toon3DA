@@ -1,4 +1,7 @@
-"""MIRE WRAITH rig + clips (ABERRATION, SOLDIER). Imported by bestiary.py.
+"""SUMP WRETCH rig + clips (ABERRATION). Imported by bestiary.py.
+
+The FIRST Mire Wraith design (generated-enemy-art order 5), rejected for the Mire Wraith by the owner (2026-10-22: "looks like
+an egg ... weak") and KEPT as its own creature for a new low-level acid enemy (its own idea file wires it). Unchanged art.
 
 A drooping, half-liquid thing from the facility sump: a translucent sagging belly of glowing acid glands, a
 hunched draped body under a sagging hood, a long spout hanging from under the hood and aimed at the player, a
@@ -12,7 +15,7 @@ from kit import blob, limb, chain, riveted_plate, mirror, with_glow, Xf, Figure,
 W, H, AX = 160, 240, 80
 BASE = (80, 226)                  # the body scales and leans about its puddle
 
-WRAITH_POSE = dict(
+WRETCH_POSE = dict(
     cx=0.0, cy=0.0,                              # whole creature offset
     bx=0.0, by=0.0, bs=1.0, lean=0.0,            # body: offset, scale toward the viewer, roll about the base
     slosh=0.0, slosh_jig=0.0,                    # the belly's sideways slosh (px) and its lagging wobble
@@ -30,7 +33,7 @@ WRAITH_POSE = dict(
 )
 
 
-def mire_wraith_build(p):
+def sump_wretch_build(p):
     root = Xf.move(p.cx, p.cy)
     m = p.melt
     body_xf = (Xf.scale(p.bs * (1 + 0.55 * m) * (1 + 0.10 * p.splash), p.bs * (1 - 0.72 * m) * (1 - 0.07 * p.splash), BASE)
@@ -130,7 +133,7 @@ def mire_wraith_build(p):
     return Figure(layers, anchors, stencils)
 
 
-MIRE_WRAITH = Rig("mire_wraith", mire_wraith_build, WRAITH_POSE, seed=43)
+SUMP_WRETCH = Rig("sump_wretch", sump_wretch_build, WRETCH_POSE, seed=43)
 
 
 # IDLE: the belly sloshes side to side and wobbles after itself (jiggle), the glands pulse, the hood sags and
@@ -146,7 +149,7 @@ IDLE = Clip("IDLE", _IDLE.keys
             duration=1.5, mode="loop")
 _DRAWN = dict(draw=1.0, aim=1.0, gland=1.0, gland_glow=1.25, by=-4.0, hood=-0.6, eye_glow=1.5, spit=0.2)
 
-WRAITH_CLIPS = [
+WRETCH_CLIPS = [
     IDLE,
     IDLE.variant("DORMANT", speed=0.5, fps=6, by=5.0, gland_glow=0.4, eye_glow=0.3, hood=1.2, bs=0.97),
     Clip("ALERT", [        # it heaves up out of its puddle, the hood lifts, the glands flare, the spout comes up
