@@ -211,3 +211,4 @@ an A8 gate. Fix taken during the probe: `GameMath.wallMipLevel` counts halvings 
 column (+6.8% -> +5.4%; same floor(log2) result, no log call
 per column). R1 re-run on the final code (after CP7's SymbolCategories change): 35 200 / 35 200 identical to
 r1-baseline.txt. `:core:test`: 481 tests, the one baseline failure (StoryBarkTest bark.depth.core.2) only.
+`:core:balanceSim`: BalanceSimTest 18 tests, 0 failures (run 2026-10-22 on 9e17e42).
