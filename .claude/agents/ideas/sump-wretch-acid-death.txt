@@ -1,0 +1,569 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Enemies
+TITLE: Sump Wretch - low-level chaff that bursts into acid
+CREATED: 2026-10-22
+IMPLEMENTED: -
+---
+
+
+OVERVIEW
+--------
+The SUMP WRETCH is a new CHAFF archetype for the early floors: a slow, weak, hunched sump creature
+that crawls up to you and spits point-blank. When it dies, any cause of death, it BURSTS. Acid
+splashes the four tiles orthogonally next to it and poisons whatever is standing there, the player
+and other enemies alike. Then the creature melts into a small live acid puddle for a few turns. It
+asks the player one readable, Doom-RPG question: where is it when it dies? Kill it a step away and
+it costs nothing. Let it hug you and it costs you HP. Kill it next to its pack and it fights for you.
+
+Raw request (owner, 2026-10-22): keep the rejected first Mire Wraith sprite (now the generated
+creature `sump_wretch`) and make a NEW low-level enemy from it "that will splash acid when killed".
+Underlying need: the art is good but read as weak, so give it a role where looking weak is
+correct. It is fodder whose danger is its corpse, not its claws. The design gives the player a
+cheap early lesson in positioning and a two-sided tool against packs.
+
+
+SCOPE
+-----
+IN
+  - EnemyType.SUMP_WRETCH, with role CHAFF, family ABERRATION (trait FLESH inherited), melee, slow,
+    no special move-set and no heavy.
+  - The DEATH SPLASH: on death, every living host on the 4 orthogonal neighbour tiles gets POISONED
+    stacks (one count for the player, a larger one for enemies). The death tile becomes a live
+    toxic pool ('q') for a short, dedicated lifetime.
+  - Archetype data on EnemyType (defaults 0, so every other archetype is unchanged):
+    deathSplashPlayerStacks(), deathSplashEnemyStacks(), deathPuddleTurns().
+  - ONE shared death-hazard method on HazardManager, called by BOTH World and SimWorld. It replaces
+    the two duplicated listener lambdas, so the game and the balance simulator can never drift.
+  - New FIXED spawn symbol 'o', under the CLAUDE.md STRICT RULE.
+  - Pricing: the splash adds a TP term (a new GameMath formula), and the splash is declared as a
+    K11 hazard row.
+  - The ORA archetype line (story.bark.enemy.sump_wretch), in the properties file AND in
+    BarkStrings.
+  - Visual wiring: one EnemyVisualRegistry row SUMP_WRETCH -> "sump_wretch". An ACID_SPLASH burst
+    (the aberration set's existing burst) plays on each splash tile. The legacy-sprite fallback is
+    the Mire Wraith's legacy region.
+  - Encounter pool membership (EncounterBudgetPlanner.SPAWN_POOL), so generated floors field it.
+
+OUT (deliberately not doing now)
+  - Any change to the art. The rig, clips, effects and remains ship as they are. The art's
+    DEBUFF_PLAYER (acid volley) clip stays unused, because chaff has no special.
+  - A ranged attack. A ranged enemy kites to RANGED_KITE_MIN_TILES = 2, so it would never be
+    adjacent when it dies and the splash would never matter to the player. Melee is the design.
+  - Acid detonating or igniting barrels. Acid is not fire or explosive. A barrel that KILLS a
+    wretch still triggers its splash, because the splash fires on death by any cause.
+  - A floor danger marker or a "danger tile" for the splash. That system means "a HEAVY is coming"
+    and the TACTICAL sim policy reads it. The splash is not a heavy (see BALANCE ADMISSION).
+  - Direct (non-status) splash damage, a vignette flash, or a new sound. The existing TOXIC_SPILL
+    sound already plays when the puddle appears, and the family DEATH voice plays.
+  - A new TeachingTopic or tutorial. ORA's first-sight archetype line is the teaching.
+  - A max-spawn-depth gate. No chaff has one. The R-LADDER keeps it relevant deeper down.
+  - Placing it in hand-made levels. The symbol works in them, but no level is edited.
+  - Changing the Plague Hulk's death cloud or the Mire Wraith in any way. The Hulk's existing
+    behaviour moves into the shared method byte-for-byte.
+  - Fixing LevelLoader's spawn-character list, which is missing '}' (see RISKS). Report it as
+    short-lane work.
+
+
+GAMEPLAY LOOP
+-------------
+  1. A wretch wakes (ALERT) and shuffles toward the player. It moves only on every second enemy turn
+     (moveEveryNTurns 2), the same pace as the Ghoul.
+  2. If it reaches an orthogonally adjacent tile, it attacks every turn (cadence 1). This is an
+     ordinary melee hit, played with its spit ATTACK clip.
+  3. The player kills it, by weapon, DoT, barrel, hazard, relic corpse burst or another wretch's
+     poison. In the SAME resolution as the death (EnemyManager's death path, after the drop is
+     placed and where the death-hazard hook already fires):
+       a. SPLASH. For each of the 4 orthogonal neighbours of the death tile, every LIVING host
+          standing there gets POISONED stacks: the player SUMP_WRETCH_SPLASH_PLAYER_STACKS (3),
+          an enemy SUMP_WRETCH_SPLASH_ENEMY_STACKS (4). Stacks add to any poison already there, up
+          to POISON_MAX_STACKS, through the same applyPoisonStacks path a toxic tile uses.
+       b. PUDDLE. The death tile becomes a toxic tile ('q') for SUMP_WRETCH_PUDDLE_LIFETIME_TURNS
+          (3) turns. From then on it is an ordinary toxic tile: two-sided, stacks per turn stood,
+          may creep at HAZARD_TOXIC_SPREAD_CHANCE, never overwrites fire.
+       c. FEEDBACK. An ACID_SPLASH burst plays on the death tile and on each non-wall neighbour.
+          The puddle's appearance plays TOXIC_SPILL through the existing hazard visual listener.
+  4. Poison ticks in the ordinary status phase from then on. On the player the splash costs
+     3+2+1 = 6 stack-turns, which is 12 HP at 130 max HP (about 9%). A splashed enemy that dies of
+     the poison bursts in turn, if it is a wretch.
+  5. Optimal play: back-step one tile while it is adjacent (it is slow, so it usually cannot follow
+     at once), then kill it from 2 tiles. Better still, kill it while it stands next to its pack mate.
+
+
+RULES
+-----
+  R1  SUMP_WRETCH is CHAFF, ABERRATION, melee (range 1, isRanged false), moveEveryNTurns 2, attack
+      cadence 1, positional POSITIONAL_MULT_MELEE, move-set MOVESET_NONE, heavyWindUp null,
+      minSpawnDepth 1, spawnChar 'o'.
+  R2  The splash fires on EVERY death of a type whose deathSplashPlayerStacks() or
+      deathSplashEnemyStacks() is > 0, whatever the cause. Today that is only SUMP_WRETCH.
+  R3  Splash footprint: the 4 orthogonally adjacent tiles only. Never diagonals, never range 2, and
+      not the death tile itself (nothing living stands there at that moment).
+  R4  The splash applies status only. It deals no direct damage, so one death can NEVER cause
+      another death inside the same resolution. Chains run only through later poison ticks, which
+      bounds them and keeps them readable.
+  R5  On the player, the splash is NOT a hit. Armour does not shield it and does not pay the
+      ARMOUR_STATUS_COST, GUARD does not reduce it, and the relic first-hit shield is not spent.
+      This is the same rule as standing on a toxic tile: position is the counter-play.
+  R6  Poison immunity and resistance (StatusResistance) apply as usual. An immune host is
+      unaffected.
+  R7  Puddle: the death tile is ignited as TOXIC with lifetime deathPuddleTurns() through a new
+      HazardManager.igniteToxic(column, row, lifetimeTurns) overload. Eligibility is the existing
+      rule (Level.isHazardSpreadable). It is skipped if a pickup or keycard drop landed on the tile
+      or if the tile is already FIRE. A tile that is already TOXIC has its lifetime set to
+      deathPuddleTurns() (the existing ignite() behaviour). The
+      splash in R3 still happens whether or not the puddle can be placed.
+  R8  Acid never interacts with explosive barrels (no detonation, no ignition).
+  R9  Plague Hulk behaviour is unchanged: the ordinary cloud at HAZARD_PLAGUE_HULK_DEATH_CLOUD_RADIUS,
+      and the massive cloud when selfDestructMassive. The Cinderforge last-fire tile is unchanged.
+      Both move unchanged into the shared method.
+  R10 The splash is resolved in the simulation (headless). The ACID_SPLASH burst is cosmetic and is
+      fired through a listener that is null in SimWorld.
+
+
+PLAYER EXPERIENCE
+-----------------
+Floor 1 or 2: a hunched, glowing, dripping thing slumps toward you, slowly. ORA's first-sight line:
+"It bursts when it dies. Not next to you - next to its friends." A player who kills it at arm's
+length sees the splash, gets POISONED (3) on the status row, and loses about 9% HP over three turns.
+That is a cheap, legible lesson with the cause on screen: a green splash on your tile and the
+poison icon. A player who listens learns one step back, then shoot.
+
+Then comes the decision the enemy exists for. A Gore Biter pair arrives with a wretch between them.
+Do you kill the wretch now, while it is next to the biters (poisoning both, possibly melting a
+wounded second wretch), or kill the biters first? The wretch is a grenade the enemy carries for you.
+
+Thumb-only: nothing new to press. Forward, Back, Strafe and Fire already express "step away, then
+shoot".
+
+
+TECHNICAL NOTES
+---------------
+A plan, not code. Builders: java-architect (sim/data), math-expert (formula), libgdx-specialist
+(visual seam).
+
+DATA (enemy, util)
+  - EnemyType.SUMP_WRETCH, inserted AFTER the last non-boss row (VERDANT_SPIRESOWER) and BEFORE the
+    bosses. Fields: maxHealth EnemyConstants.SUMP_WRETCH_MAX_HEALTH, attackDamage ..._ATTACK_DAMAGE,
+    attackRangeTiles 1, moveEveryNTurns ..._MOVE_EVERY_N_TURNS, isRanged false, heightMultiplier
+    ..._HEIGHT_MULTIPLIER, baseCreditReward GameBalance.CREDIT_REWARD_SUMP_WRETCH, displayName
+    "Sump Wretch", family ABERRATION, role CHAFF, positionalMultiplier POSITIONAL_MULT_MELEE,
+    attackCadenceTurns 1, spawnChar 'o', tacticalVerb
+      "BURSTER: it splashes acid when it dies - kill it a step away, or beside its friends."
+    moveSet MOVESET_NONE, heavyWindUp null, plus the three death-splash overrides.
+  - New base-class data methods on EnemyType, defaulting to 0 and documented in the same block style
+    as leavesTrailFireTurns(): deathSplashPlayerStacks(), deathSplashEnemyStacks(),
+    deathPuddleTurns().
+  - BalanceConfig (stats block beside the other aberrations): SUMP_WRETCH_MAX_HEALTH 24,
+    SUMP_WRETCH_ATTACK_DAMAGE 10, SUMP_WRETCH_MOVE_EVERY_N_TURNS 2, CREDIT_REWARD_SUMP_WRETCH 5;
+    (hazards section) SUMP_WRETCH_SPLASH_PLAYER_STACKS 3, SUMP_WRETCH_SPLASH_ENEMY_STACKS 4,
+    SUMP_WRETCH_PUDDLE_LIFETIME_TURNS 3; (pricing section, beside DEBUFF_TP_EQUIVALENCE)
+    DEATH_SPLASH_ADJACENT_SHARE 0.5.
+  - EnemyConstants mirrors the stats as the other types do, plus SUMP_WRETCH_HEIGHT_MULTIPLIER
+    0.75f, which is visual and not balance. GameBalance mirrors CREDIT_REWARD_SUMP_WRETCH.
+  - BalanceSchema:
+      * every new BalanceConfig field goes in CONSTANT_SUBJECTS: stats ->
+        ENEMY_THREAT_POINTS / ENEMY_HITS (as the builder finds the existing aberration stats
+        classified, since those are GRANDFATHERED, choose the RuleKind that reads them); splash
+        stacks + puddle -> HAZARD; DEATH_SPLASH_ADJACENT_SHARE -> ENEMY_THREAT_POINTS;
+        CREDIT_REWARD_SUMP_WRETCH -> CREDITS. Never GRANDFATHERED (shrink-only).
+      * TELEGRAPH_ATTACKS row: "Sump Wretch spit", SUMP_WRETCH_ATTACK_DAMAGE, "NONE", false.
+      * HAZARD_DECLARATIONS row: id "sump_wretch_acid_splash", symbol 'q' (the cell it leaves),
+        player constants {"POISON_TICK_FRACTION"}, enemy constants
+        {"SUMP_WRETCH_SPLASH_ENEMY_STACKS"}, status POISONED, damage class null with the same
+        reason text as the toxic row, placement owner "hazard.HazardManager".
+
+SPAWN SYMBOL - requires new symbol: follow the CLAUDE.md STRICT RULE (tile-symbols.txt, Level.java,
+renderer, constants, budget) in one commit. 'o' is confirmed unassigned in docs/tile-symbols.txt
+(budget list "o ) / , _"), unused in code (only PixelFontGlyphs draws the letter) and absent from
+assets/levels/*.txt. That commit touches:
+  - docs/tile-symbols.txt: an ENEMY SPAWN MARKERS row ("o   Sump Wretch spawn   Aberration. Slow,
+    weak melee chaff that bursts into acid on death - the 4 orthogonal neighbours are poisoned and
+    its tile becomes a short toxic pool. Floors 1+."), budget counts updated (90 -> 91 assigned,
+    5 -> 4 unassigned), 'o' removed from the unassigned list, and the EXCAVATION_SITE pencil note
+    updated to say 'o' is taken.
+  - level/LevelLoader: 'o' added to the spawn-character test, and to the comment.
+  - enemy/EnemyManager.buildInitialEnemies: case 'o' -> SUMP_WRETCH.
+  - Level.java and the renderer: a spawn marker has no category and no sprite (it is replaced with
+    floor at load), so these get NO change. State this in the commit message so the STRICT RULE
+    reviewer sees it was considered.
+  - CLAUDE.md "Enemy spawns (15)" summary line -> 16, with 'o' added.
+
+SHARED DEATH HAZARD (hazard)
+  - New method HazardManager.applyEnemyDeathHazard(EnemyType type, int tileColumn, int tileRow,
+    boolean selfDestructMassive, Player player). Its body is: the existing Plague Hulk cloud branch
+    (verbatim), the existing leavesTrailFireTurns branch (verbatim), then the new splash (R3-R6,
+    using the player's tile from its position / CELL_SIZE) and the puddle (R7).
+    World.java:~1708 and SimWorld.java:~505 both replace their lambda bodies with one call to it.
+    HazardManager already imports Player and owns the StatusEffectController and the EnemyManager
+    it needs.
+  - New overload HazardManager.igniteToxic(int tileColumn, int tileRow, int lifetimeTurns),
+    mirroring the existing igniteFire overload. The no-lifetime version delegates to it with
+    HAZARD_TOXIC_LIFETIME_TURNS.
+  - New headless seam for the cosmetic burst: an AcidSplashListener interface (hazard package, one
+    method onAcidSplash(int tileColumn, int tileRow)), set on HazardManager, called once per
+    splashed tile (death tile + each non-wall neighbour). World wires it to the enemy effect layer
+    (render/enemyvisual EnemyEffectSystem: the aberration set's ACID_SPLASH burst at that tile's
+    floor). SimWorld leaves it null. If the builder finds an existing seam that already emits a
+    family burst at a tile (order 5's acid arrival-splash), reuse that instead and say so in the
+    checkpoint handover.
+  - Iterating enemies while splashing must not modify the list. The splash only applies status,
+    so it never removes anyone (R4). If the death happens inside the status-tick loop (a DoT kill),
+    stacks applied to a host the loop has not reached yet may tick this phase. That is acceptable,
+    and the order is whatever the existing loop gives.
+
+PRICING (util; balance-bearing; math-expert)
+  - GameMath.deathSplashThreatPoints(int playerPoisonPerStack, int splashStacks,
+    float adjacentDeathShare), with the mandatory comment block:
+      splashDamage = perStack x stacks x (stacks + 1) / 2     (poison decays 1 stack per turn and
+                                                               ticks perStack x liveStacks)
+      threat       = splashDamage x adjacentDeathShare
+    Edge cases: stacks <= 0 or share <= 0 -> 0. It ignores pre-existing poison and the
+    POISON_MAX_STACKS cap (the splash alone is 3 < 6).
+  - EnemyType.baseThreatPoints() returns the existing product PLUS deathSplashThreatPoints(...) fed
+    with perStack = GameMath.statusTickDamage(POISON_TICK_FRACTION,
+    expectedPlayerAtDepth(1).maxHealth, 1), deathSplashPlayerStacks() and
+    DEATH_SPLASH_ADJACENT_SHARE. The term is 0 for every archetype whose deathSplashPlayerStacks()
+    is 0, so every existing TP is byte-identical.
+  - XP stays derived (round(XP_PER_THREAT_POINT x TP)). It is never hand-set.
+
+ENCOUNTERS (level)
+  - EncounterBudgetPlanner.SPAWN_POOL: SUMP_WRETCH inserted after VORTEX_EYE (the chaff run of the
+    tie-break order). It fills CHAFF and MELEE_CHAFF slots by role, exactly like the Ghoul: RABBLE,
+    SKIRMISH, FIRETEAM, ESCORT and PAIR pairs, the BATTERY melee pair, BROOD. Chaff pairs are
+    DIFFERENT archetypes, which produces the wretch + Gore Biter / Ghoul / Crawler combinations
+    the design wants.
+
+STORY (narrative)
+  - story.bark.enemy.sump_wretch =
+      "It bursts when it dies. Not next to you - next to its friends."
+    in assets/story/story-strings.properties AND the BarkStrings default. BestiaryCatalog loops
+    EnemyType, so no catalog edit is needed. The ABERRATION family lines and family voices already
+    exist. Checked against docs/narrative-authority.txt: one behaviour, no number, no proper noun
+    (no StoryTerm needed), and the dry turn is the DELIVERY of a tactical observation.
+
+AUDIO
+  - None new. The ABERRATION family voices (ALERT/ATTACK/DEATH) bind structurally. The puddle's
+    hazard placement plays TOXIC_SPILL at its tile through the existing HazardVisualListener.
+
+PERSISTENCE: none.
+
+
+VISUAL DESIGN
+-------------
+  - render/enemyvisual/EnemyVisualRegistry: register(EnemyType.SUMP_WRETCH, "sump_wretch"). The
+    creature's files already ship in assets/textures/enemies/generated/. This idea must NOT ship
+    while any row maps MIRE_WRAITH to "sump_wretch" (generated-enemy-art order 5 had such a
+    TEMPORARY capture-only row; it must be gone or replaced by the Mire Wraith's new creature).
+  - render/EnemyRenderer legacy map: SUMP_WRETCH -> the Mire Wraith's legacy blight-sheet region,
+    used only if the atlas fails to load. There is no new texture.
+  - The telegraph is the creature itself: the always-on glow atlas (its acid glands) and the
+    order-3 WOUNDED idle once it is hurt. No marker is added.
+  - Death: the art's DEATH clip melts it into the puddle remains (RemainsRegistry, for the floor).
+    The live 'q' toxic decal sits on the same tile for SUMP_WRETCH_PUDDLE_LIFETIME_TURNS and then
+    only the remains stay. ACID_SPLASH bursts (aberration.fx.json, already shipped) play on the
+    death tile and each non-wall orthogonal neighbour at the moment of death.
+  - SUMP_WRETCH_HEIGHT_MULTIPLIER 0.75: a slumped, low creature, visibly smaller than the Mire
+    Wraith (0.80). Tune by eye during CP4, within 0.65-0.85.
+
+
+BALANCE NOTES
+-------------
+All numbers below land in BalanceConfig, BalanceSchema, GameMath (a new TP term) and the sim pool,
+so both gates apply.
+
+  Stat block vs the R8 reference (Assault Rifle COMMON L1 at 3 tiles = 15.2/hit, player eHP 205,
+  REFERENCE_PLAYER_DPT 25, PLAYER_MAX_HEALTH 130):
+    hits to kill  24 / 15.2 = 1.58 -> 2       (CHAFF target 1-2)  OK
+    hits to die   205 / 10  = 20.5            (CHAFF target >= 10) OK
+    base TP       10 x (24 / 25) x 1.00 = 9.6
+    splash TP     perStack round(0.015 x 130) = 2; 2 x 3 x 4 / 2 = 12 HP; x 0.5 = 6.0
+    total TP      ~15.6   (CHAFF band ~6.2-20; Gore Biter 15.5, Ghoul 15.6)
+    XP            round(0.35 x 15.6) = 5
+  Splash on the player: 12 HP at 130 max = 9.2%, well under the 25% un-telegraphed cap
+  (R-TELEGRAPH). It is a fraction of max HP, so it does not go stale with depth.
+  Splash on enemies: perStack = max(1, round(0.015 x HP)). At depth 1, 4 stacks = 4+3+2+1 = 10 HP:
+  36% of a Gore Biter, 42% of a fresh wretch, so a wretch already hit once (about 9 HP left) melts
+  and chains. Deeper floors raise enemy HP, so the share drops (about 11% of a depth-10 Gore
+  Biter). This is deliberate: it is an early-floor tool that fades.
+  Tuning ranges if a gate fails (move only the WRETCH's numbers, never another archetype's):
+    HP 20-28, damage 8-12, player stacks 2-4, enemy stacks 3-6, puddle 2-4 turns, adjacent share
+    0.3-0.7.
+
+
+BALANCE ADMISSION
+-----------------
+Two items: the archetype (K1) and its death splash (K11). It adds no status (POISONED is reused,
+K10 untouched), no verb (the splash is archetype data like the Cinderforge trail, not a
+SpecialAbility, so K3 does not apply) and no family (ABERRATION exists). The new BalanceConfig
+numbers are covered by K18.
+
+K1  ENEMY ARCHETYPE - SUMP_WRETCH
+    DECLARE  role CHAFF; family ABERRATION (trait FLESH, inherited, no override); base HP 24;
+             base damage 10; cadence 1; melee (range 1); positional POSITIONAL_MULT_MELEE (1.00);
+             move-set: none (MOVESET_NONE); HEAVY: none (heavyWindUp null); min spawn depth 1 (all
+             regions); template slots: every CHAFF slot (RABBLE / SKIRMISH / FIRETEAM / ESCORT /
+             PAIR pairs, BROOD) plus the BATTERY MELEE_CHAFF pair; move every 2 turns; death
+             splash data 3 / 4 / 3; tacticalVerb "BURSTER: it splashes acid when it dies - kill
+             it a step away, or beside its friends."
+    BAND     TP ~15.6 inside the CHAFF band (~6.2-20); R8 depth-1 targets 2 | 20.5 (CHAFF 1-2 |
+             >= 10); trait-aware eHP = 24 (FLESH is neutral to BALLISTIC); R-LADDER L1 holds
+             through the shared depth growth; no heavy, so R-HEAVY does not apply.
+    PRICE    TP via EnemyType.baseThreatPoints: the stat-block product plus
+             GameMath.deathSplashThreatPoints (the new term, 0 for every other archetype). XP is
+             derived from TP. Credits 5, the chaff standard.
+    REGISTER EnemyType row; new FIXED spawn symbol 'o' under the STRICT RULE in one commit;
+             EncounterBudgetPlanner.SPAWN_POOL membership (slots by role); ABERRATION family voice
+             and bestiary lines come structurally; TELEGRAPH_ATTACKS row "Sump Wretch spit".
+    COMMUNICATE no trait glyph (FLESH has none, by design); no intent icon beyond the ordinary melee
+             attack; no danger marker (not a heavy); ORA archetype line
+             story.bark.enemy.sump_wretch resolves; the creature's glow and its WOUNDED idle; the
+             splash itself (ACID_SPLASH burst + POISONED on the status row).
+    DONE     C-ENEMY green for SUMP_WRETCH; it appears in the BalanceReport ENEMIES and LADDER
+             tables in band; the sim FLOOR REPORT shows it fielded at depths 1+.
+
+K11 HAZARD - sump_wretch_acid_splash (the death splash + its puddle)
+    DECLARE  damage as a FRACTION: player POISON_TICK_FRACTION (0.015 of max HP per stack per
+             turn) x SUMP_WRETCH_SPLASH_PLAYER_STACKS 3 (6 stack-turns, about 9% max HP); enemies
+             SUMP_WRETCH_SPLASH_ENEMY_STACKS 4 at their own max HP (min 1 per stack); two-sided
+             (player AND enemies on the 4 orthogonal neighbours); status POISONED (existing K10
+             row); DamageClass none (reason: poison stacks are not a weapon damage class, the same
+             as toxic 'q'); lifetime: the splash is instant, the puddle is
+             SUMP_WRETCH_PUDDLE_LIFETIME_TURNS 3 on the death tile, then ordinary toxic rules
+             (spread 0.10/turn); placement: never placed by a generator, only created by
+             HazardManager.applyEnemyDeathHazard when a SUMP_WRETCH dies.
+    BAND     un-telegraphed player damage 9.2% <= 25% (R-TELEGRAPH); the puddle tile prices as the
+             existing Toxic 'q' row in the HAZARDS table; the splash's player threat is priced
+             into the archetype's TP (K1 PRICE) rather than the floor hazard budget, because it
+             only exists where a wretch was budgeted.
+    REGISTER existing symbol 'q' only (the puddle); a HAZARD_DECLARATIONS row; created only by
+             HazardManager's death hook, never hand-placed by a generator.
+    COMMUNICATE visible before it hurts: the glowing acid belly (glow atlas) at all times, plus the
+             WOUNDED idle once hurt; ORA's first-sight line names the rule; on resolution, the
+             ACID_SPLASH bursts on every splashed tile, the toxic decal and TOXIC_SPILL on the
+             puddle, and POISONED (n) on the player's status row.
+    DONE     C-HAZARD green for sump_wretch_acid_splash; the BalanceReport HAZARDS "Declared
+             hazards" list prints it.
+
+K18 NEW BALANCE NUMBERS
+    DECLARE  SUMP_WRETCH_MAX_HEALTH, SUMP_WRETCH_ATTACK_DAMAGE, SUMP_WRETCH_MOVE_EVERY_N_TURNS,
+             CREDIT_REWARD_SUMP_WRETCH, SUMP_WRETCH_SPLASH_PLAYER_STACKS,
+             SUMP_WRETCH_SPLASH_ENEMY_STACKS, SUMP_WRETCH_PUDDLE_LIFETIME_TURNS,
+             DEATH_SPLASH_ADJACENT_SHARE: each one in CONSTANT_SUBJECTS with the RuleKind that
+             bands it (TECHNICAL NOTES). None is UNBANDED and none is GRANDFATHERED.
+    DONE     C-CONSTANT green.
+
+
+INTERACTIONS
+------------
+  - EnemyManager death path: the existing enemyDeathHazardListener hook is the only entry point.
+    Drops are placed first, then WILDFIRE, then the hook. So a carried pickup on the death tile
+    blocks the puddle (R7), and a burning wretch both passes its burn (WILDFIRE) and splashes.
+  - Plague Hulk toxic cloud: when a wretch dies on a tile that is already toxic, the existing
+    ignite() SETS that tile's lifetime to the new value (3), whatever was left. This is accepted
+    as-is: it can shorten a Hulk cloud tile from up to 6 remaining turns to 3, which is rare and
+    harmless. The builder must not add special-casing.
+  - Fire: a wretch dying on a fire tile gets no puddle (fire is never overwritten) but still splashes.
+  - Barrels: no interaction from acid (R8). A barrel blast that kills a wretch triggers its splash.
+  - Relics: the CORPSE_BLAST burst and the splash are independent. A kill made by a corpse burst
+    still splashes (the splash is not a corpse burst, so the no-chain rule of R8 relics is
+    untouched). The first-hit shield and the damage-taken multiplier are not involved (R5).
+  - Status system: POISONED stacks, decay and cap are unchanged. Enemies with poison resistance or
+    immunity resist it.
+  - Encounter planner: one more chaff in the pool shifts every generated floor's composition
+    slightly. That is why both gates run at CP5.
+  - Floor twists: HUNTED picks its hunter by its own rules. If a wretch is ever the hunter, it
+    splashes on death as normal. SALVAGE/BLACKOUT are unaffected.
+  - Narrative: the first-sight archetype line is REACTIVE (held through a combat spike), as are all
+    non-boss archetype lines. A player may be splashed before hearing it. That is acceptable at 9%,
+    and the cause is on screen.
+  - Sim: SimWorld calls the same HazardManager method, so the bands measure the real splash. The
+    TACTICAL policy is NOT taught to back off. Its splash losses are what the 0.5 adjacent-share
+    assumption prices.
+
+
+EDGE CASES
+----------
+  - The wretch is killed by the player's own shot while adjacent: the player is splashed (that is
+    the lesson).
+  - The player dies this turn: the splash still resolves, and death handling is unchanged.
+  - Two wretches adjacent, one dies: the other gets 4 stacks. If it was already wounded, it dies on
+    a later poison tick and splashes in turn. No same-resolution recursion (R4).
+  - A wretch dies from a poison tick during the status phase: it splashes there. Hosts the loop has
+    not reached yet may tick their new stacks this phase. No ConcurrentModification is allowed,
+    because the splash never removes from the enemy list.
+  - The death tile holds a pickup, a key, or the exit: no puddle; the splash still happens.
+  - A neighbour is a wall or closed door: nothing to hit; no burst is drawn on a wall tile.
+  - An open door tile neighbour with a host on it is splashed (it is orthogonally adjacent).
+  - Floor transition the turn it dies: the HazardManager is rebuilt per floor, so the puddle dies
+    with the floor. Player poison carries over exactly as any poison does today.
+  - Hard-pause overlay (level-up, relic offer, pause) opens the same turn: the sim resolved
+    already; the cosmetic burst plays when rendering resumes, or has already finished. Nothing is
+    queued.
+  - App paused: no state outside the existing hazard and status state.
+  - Hand-made level with 'o': spawns a wretch (LevelLoader + EnemyManager mapping). It is not
+    depth-gated.
+  - Generated vs hand-made: same behaviour.
+  - Boss floors: no change; no boss summons wretches.
+
+
+ACCEPTANCE CRITERIA
+-------------------
+  A1  A hand-made test level containing 'o' (a scratch copy, not committed) spawns a Sump Wretch
+      that uses the sump_wretch animated sprite. It moves only on every second enemy turn and
+      attacks only from an orthogonally adjacent tile.
+  A2  Killing a wretch while standing orthogonally adjacent puts POISONED with 3 stacks on the
+      player's status row the same turn. Over the next turns the player loses 2 HP per stack per
+      tick, decaying 3 -> 2 -> 1 (12 HP total at 130 max HP). The player's armour value does not
+      change.
+  A3  Killing a wretch from 2+ tiles away (same column) applies no poison to the player.
+  A4  A diagonally adjacent player is never splashed.
+  A5  An enemy orthogonally adjacent to a dying wretch receives 4 POISONED stacks. A second wretch
+      at <= 10 HP adjacent to the first dies of the poison on a later turn and splashes its own
+      neighbours.
+  A6  The death tile shows the toxic decal for 3 turns, then only the remains puddle. A player
+      stepping onto it in that window gets the ordinary toxic-tile stacks. The tile is untouched if
+      a pickup dropped there.
+  A7  ACID_SPLASH bursts play on the death tile and each non-wall orthogonal neighbour at the
+      moment of death. TOXIC_SPILL is heard at the puddle.
+  A8  A barrel adjacent to a dying wretch does not detonate. A barrel blast that kills a wretch
+      produces its splash.
+  A9  Plague Hulk death clouds (normal and self-destruct) and the Cinderforge last fire tile behave
+      exactly as before. World and SimWorld both call HazardManager.applyEnemyDeathHazard, and
+      neither contains a death-hazard lambda body any more.
+  A10 On first sight ORA says "It bursts when it dies. Not next to you - next to its friends." No
+      !id! marker appears.
+  A11 docs/tile-symbols.txt lists 'o' under ENEMY SPAWN MARKERS and the SYMBOL BUDGET reads 91
+      assigned / 4 unassigned, all in the same commit as the code that reads 'o'.
+  A12 BalanceReport lists Sump Wretch in ENEMIES as CHAFF, in band, with TP within 15.6 +/- 1 and
+      kill|die 2|20 (or 2|21). The HAZARDS declared list includes sump_wretch_acid_splash. The
+      ADMISSION table shows C-ENEMY, C-HAZARD and C-CONSTANT admitted.
+  A13 Every pre-existing archetype's TP in BalanceReport is unchanged to the printed precision.
+  A14 ./gradlew test and ./gradlew balanceSim are both green, and the sim FLOOR REPORT shows Sump
+      Wretches fielded at depth 1-5.
+  A15 No row in EnemyVisualRegistry maps MIRE_WRAITH to "sump_wretch".
+
+
+IMPLEMENTATION PLAN
+-------------------
+  1. SEAM (java-architect)  HazardManager.applyEnemyDeathHazard + the igniteToxic lifetime overload
+                            + the EnemyType death-splash data methods (all default 0). World and
+                            SimWorld switched over. Behaviour-neutral.
+  2. CONTENT (java-architect)  EnemyType.SUMP_WRETCH + BalanceConfig/EnemyConstants/GameBalance
+                            constants + CONSTANT_SUBJECTS + TELEGRAPH and HAZARD declaration rows +
+                            spawn symbol 'o' (STRICT RULE, one commit) + ORA line (properties +
+                            BarkStrings) + legacy renderer fallback + SPAWN_POOL membership. The
+                            splash goes live here through the data methods.
+  3. PRICING (math-expert, then java-architect)  GameMath.deathSplashThreatPoints + the
+                            baseThreatPoints term + DEATH_SPLASH_ADJACENT_SHARE.
+  4. RENDER (libgdx-specialist)  EnemyVisualRegistry row, AcidSplashListener -> EnemyEffectSystem
+                            ACID_SPLASH bursts, height multiplier tuned by eye.
+  5. TESTS  Balance-bearing: extend util/BalanceAuditTest with ONE method asserting that
+            GameMath.deathSplashThreatPoints is 0 for every archetype whose
+            deathSplashPlayerStacks() is 0, and that SUMP_WRETCH's TP includes the term and lands
+            in the CHAFF band. The C-ENEMY / C-HAZARD / C-CONSTANT tests already iterate the new
+            rows, so they need no edit. No new test file; nothing outside balance. Both gates
+            (test + balanceSim).
+  6. DOCS   docs/tile-symbols.txt (in the STRICT RULE commit); docs/enemy-system.txt (the new type,
+            the death-splash data, the shared death-hazard method); docs/game-balance-knowledge.txt
+            SECTION 7 table + the hazards section; docs/game-balance-authority.txt (R-ENEMY pricing
+            note: the death-splash TP term + the HAZARD_DECLARATIONS list); docs/sprite-art-creation-
+            guide.txt section 10 and docs/art-direction.txt 16 (registry rows); .claude/CLAUDE.md
+            (the enemyvisual "today ..." row list and the "Enemy spawns" summary).
+
+RISKS AND UNKNOWNS
+  - LevelLoader's spawn-character test does not include '}' (Verdant Spiresower), yet EnemyManager
+    maps it. Confirm how '}' reaches EnemyManager on generated floors before assuming LevelLoader
+    is the only gate for 'o'. Add 'o' to LevelLoader regardless. Report the '}' gap as short-lane
+    work; do not fix it here.
+  - Adding a chaff to SPAWN_POOL redistributes every generated floor. If an S-* band moves, tune
+    ONLY the wretch inside the BALANCE NOTES ranges. If that cannot fix it, stop and report. Never
+    retune another archetype and never add a waiver from this idea.
+  - Order 5 is in progress and its working tree had a TEMPORARY MIRE_WRAITH -> sump_wretch row.
+    This idea can be built before or after order 5, but A15 must hold at merge.
+  - The effect seam: if order 5 lands an equivalent "burst at tile" seam first, reuse it (TECHNICAL
+    NOTES). Do not build two.
+  - The melee ATTACK clip has a spit "emit" event. Confirm the visual layer does not launch a
+    projectile for a melee (range-1) type. If it does, the attack clip still plays and only the
+    projectile is suppressed by the existing ranged check. Note what you find in the handover.
+
+
+CHECKPOINTS
+-----------
+  CP   DONE WHEN - a state that can be CHECKED, never an action
+  ---  ---------------------------------------------------------------
+  CP0  .claude/checkpoints/sump-wretch-acid-death.md exists on the branch, committed and pushed.
+  CP1  HazardManager.applyEnemyDeathHazard and igniteToxic(column, row, lifetimeTurns) exist.
+       EnemyType has deathSplashPlayerStacks / deathSplashEnemyStacks / deathPuddleTurns, all 0.
+       World and SimWorld call the shared method and keep no lambda body. ./gradlew build and
+       ./gradlew test are green; behaviour is unchanged (A9).
+  CP2  EnemyType.SUMP_WRETCH exists with its constants, CONSTANT_SUBJECTS entries, TELEGRAPH and
+       HAZARD_DECLARATIONS rows, the ORA line in both places, the legacy renderer fallback and
+       SPAWN_POOL membership. 'o' is wired in LevelLoader + EnemyManager AND documented in
+       docs/tile-symbols.txt in the SAME commit (STRICT RULE). The splash is live (A2-A6, A8 hold
+       in a scratch level). ./gradlew build + ./gradlew test are green. The splash is not yet
+       priced: TP is the stat-block ~9.6, still in band, and CP3 finishes it.
+  CP3  GameMath.deathSplashThreatPoints exists with its comment block. EnemyType.baseThreatPoints
+       includes the term. DEATH_SPLASH_ADJACENT_SHARE is declared. The BalanceAuditTest method
+       exists. ./gradlew test is green and A12 + A13 hold in BalanceReport.
+  CP4  EnemyVisualRegistry maps SUMP_WRETCH -> "sump_wretch". ACID_SPLASH bursts fire through the
+       splash seam (A7). The height multiplier is final. A1 + A15 verified in lwjgl3:run / the
+       run-game skill. ./gradlew build is green.
+  CP5  ./gradlew balanceSim is green, with any tuning inside the BALANCE NOTES ranges recorded in
+       the handover and A14 verified.
+  CP6  Every doc in IMPLEMENTATION PLAN step 6 is updated. reviewer has returned PASS and STATUS:
+       IMPLEMENTED with the date.
+
+
+ASSUMPTIONS
+-----------
+  AS1  Name "Sump Wretch" (display) / SUMP_WRETCH (enum) / sump_wretch (creature id). It is cheap to
+       rename later: one displayName and one string.
+  AS2  CHAFF, not a weak SOLDIER. The danger is its corpse, so its body must be cheap: 2 hits.
+  AS3  Melee, not ranged. A ranged chaff kites at 2 tiles and would never splash the player, which
+       would make the core mechanic moot for the player.
+  AS4  Slow (moves every 2 turns). This is what makes "step back, then shoot" a real, learnable
+       answer.
+  AS5  The splash is POISON (reusing POISONED and the toxic hazard path), not a new ACID status or a
+       direct hit. It reuses K10, keeps the two-sided hazard model, and needs no new HUD icon.
+  AS6  Footprint is the orthogonal plus (4 tiles), matching cardinal-only game geometry. No
+       diagonals.
+  AS7  Two-sided by design (hazards in this game always are). Enemies take MORE stacks than the
+       player (4 vs 3), mirroring fire's enemy multiplier, so using it against a pack is worth it.
+  AS8  Not shielded by armour, guard or the relic first-hit shield. It is a hazard, not a hit; the
+       counter-play is position.
+  AS9  The puddle is the death tile only, for 3 turns. The cross-shaped toxic cloud stays the Plague
+       Hulk's signature, and the two enemies must not read the same.
+  AS10 No floor danger marker. The heavy-danger system means "a big hit is coming", and the
+       splash's 9% does not earn it.
+  AS11 Acid does not touch barrels.
+  AS12 No max spawn depth (no chaff has one). It is "low-level" by role and by the fading enemy-side
+       poison share, not by a gate.
+  AS13 Credits 5, the chaff standard.
+  AS14 TP prices the splash at DEATH_SPLASH_ADJACENT_SHARE 0.5: half of wretch deaths are assumed
+       to happen next to the player. The sim validates this.
+  AS15 No new sound. TOXIC_SPILL plus the family DEATH voice carry the moment.
+  AS16 The unused DEBUFF_PLAYER clip in the art stays unused.
+  AS17 The tacticalVerb is a code string (not localised), like every other archetype's. The player
+       hears the ORA line, not the verb.
+  AS18 It joins chaff PAIRS / BROOD by role. No new group template.
+
+
+DECISIONS
+---------
+(none yet)
+
+
+OPEN QUESTIONS
+--------------
+None.
+
+
+RELATED
+-------
+  Ideas:  generated-enemy-art-order-5.txt (where the sump_wretch art came from),
+          plague-hulk-self-destruct.txt (the other death hazard), hazard-chain-reactions-fire-toxic-
+          explosive.txt, elemental-golem-cinderforge-colossus.txt (archetype-data hazard idiom),
+          narrative-rework-order-5.txt (bestiary voice), balance-overhaul-order-8.txt (ADD CONTENT)
+  Docs:   docs/enemy-system.txt, docs/tile-symbols.txt, docs/game-balance-authority.txt SECTION 5,
+          docs/game-balance-knowledge.txt SECTION 7, docs/story-ui-system.txt (ADD AN ENEMY),
+          docs/narrative-authority.txt, docs/sprite-art-creation-guide.txt section 10
