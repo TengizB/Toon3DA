@@ -202,3 +202,12 @@ dev-only).
 **CP8a:** LEAK (A8): 20 floor transitions (rooms, cavern, corridor, boss arena, med bay) - `Texture.getNumManagedTextures()`
 stays 11-29 depending on floor/overlay state, no growth (a per-floor atlas leak would add +2 per floor). Docs updated
 (see ledger). Probe A/B (base worktree /tmp/base-wt at c163c98, runtime /tmp/base-rt) running; results go in CP8b.
+
+**CP8b:** PROBE (A8), same seed-7 start room, `--probe cpu --fps 0`, 15 s timed window, base (c163c98) and new
+alternated 4 + 4 runs: wall pass mean 0.826 ms (base, 32 windows) -> 0.871 ms (new, 16 windows after the fix
+below) = +5.4%, inside +10%. Wall draw calls 4 -> 2 (one atlas: base pass + glow pass), independent of how many
+distinct walls are on screen. Floor pass 0.37 -> 0.45 ms (10 -> 12 draws: the set's floor/ceiling PNGs), not
+an A8 gate. Fix taken during the probe: `GameMath.wallMipLevel` counts halvings instead of two `Math.log` per
+column (+6.8% -> +5.4%; same floor(log2) result, no log call
+per column). R1 re-run on the final code (after CP7's SymbolCategories change): 35 200 / 35 200 identical to
+r1-baseline.txt. `:core:test`: 481 tests, the one baseline failure (StoryBarkTest bark.depth.core.2) only.

@@ -1783,17 +1783,22 @@ public final class GameMath {
      *   per unit aliases (shimmer while turning, lesson 15.12), so each halving of the source (mip m has
      *   faceSize >> m texels) is chosen once texelsPerPixel x bias reaches 2^m:
      *     mip = clamp(floor(log2(max(1, texelsPerPixel x bias))), 0, maxMip)
-     *   log2 is computed as ln(x) / ln(2).
+     *   floor(log2(x)) is the number of exact halvings that keep x >= 2, counted up to maxMip (no
+     *   Math.log per screen column; halving by 0.5 is exact in float, so powers of two land exactly).
      * Edge cases:
-     *   lineHeight <= 0 (a degenerate stripe) returns maxMip; max(1, ...) keeps log2 >= 0, so a near
-     *   wall (texelsPerPixel < 1) is mip 0; maxMip < 0 is treated as 0.
+     *   lineHeight <= 0 (a degenerate stripe) returns maxMip; a near wall (texelsPerPixel < 2, including
+     *   < 1) is mip 0; maxMip < 0 is treated as 0.
      */
     public static int wallMipLevel(float lineHeight, int faceSize, float mipBias, int maxMip) {
         int ceiling = Math.max(0, maxMip);
         if (lineHeight <= 0f) return ceiling;
-        float texelsPerPixel = Math.max(1f, faceSize / lineHeight * mipBias);
-        int mip = (int) Math.floor(Math.log(texelsPerPixel) / Math.log(2.0));
-        return Math.max(0, Math.min(ceiling, mip));
+        float texelsPerPixel = faceSize / lineHeight * mipBias;
+        int mip = 0;
+        while (mip < ceiling && texelsPerPixel >= 2f) {
+            texelsPerPixel *= 0.5f;
+            mip++;
+        }
+        return mip;
     }
 
     /*
