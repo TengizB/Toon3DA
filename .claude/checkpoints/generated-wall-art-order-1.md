@@ -59,7 +59,7 @@ file's tick in the same commit as the work**. Never more than one checkpoint unc
 - [x] **CP4** — doors, columns, floor, ceiling generated; the five shipped files committed.
       DONE WHEN: A1, A3, A4 hold on the committed files.
 - [x] **CP5** — docs/wall-art-creation-guide.txt (2, 12, 15, 16 A) + SKILL.md + sprite guide pointer updated (A6).
-- [ ] **CP6** — owner verdict recorded in DECISIONS (approval, or the requested changes done and re-shown).
+- [x] **CP6** — owner verdict recorded in DECISIONS (approval, or the requested changes done and re-shown).
 
 ## NOTES CARRIED FORWARD
 
@@ -138,3 +138,6 @@ no capture shows the P1-P9 placement (order 2). Not seen in-engine: the glow lay
 containment/security/research/storage/signature rooms. The Java hack is reverted (tree clean). NEXT: record the
 owner's verdict in the idea file's DECISIONS (D1...), apply requested changes + re-show, then tick CP6, reviewer,
 STATUS IMPLEMENTED. Do NOT start order 2.
+
+**CP6:** owner APPROVED the set as shown (2026-10-22) -> D1 in the idea file. Next: reviewer gate, then STATUS
+IMPLEMENTED + IMPLEMENTATION NOTE. Order 2 is NOT started.

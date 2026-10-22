@@ -204,7 +204,9 @@ ASSUMPTIONS
 
 DECISIONS
 ---------
-  (none yet)
+  D1  OWNER GATE (A7): the region A set - hall, the six room families, the crew-quarters signature, doors,
+      columns, floor and ceiling - APPROVED as shown (contact sheets, tiled strips, the LIGHT flicker GIF and
+      in-engine captures of a hall, the medical set and the doors under cool_steel). Order 1 closed.  (2026-10-22)
 
 
 OPEN QUESTIONS
