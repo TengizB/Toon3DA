@@ -502,16 +502,9 @@ public final class SimWorld implements LevelTransitionListener {
         // 100-HP soldier and mispricing its floors. SpireManager is headless (no GPU / listener needed).
         SpireManager spireManager = new SpireManager(level, doorManager);
         enemyManager.setSpireHitTarget(spireManager);
-        enemyManager.setEnemyDeathHazardListener((deadType, tileColumn, tileRow, selfDestructMassive) -> {
-            if (deadType == ge.tbegvadze.toon3d.enemy.EnemyType.PLAGUE_HULK) {
-                hazardManager.spawnToxicCloud(tileColumn, tileRow, selfDestructMassive
-                        ? BalanceConfig.PLAGUE_HULK_SELF_DESTRUCT_TOXIC_RADIUS_TILES
-                        : BalanceConfig.HAZARD_PLAGUE_HULK_DEATH_CLOUD_RADIUS);
-            }
-            if (deadType.leavesTrailFireTurns() > 0) {
-                hazardManager.igniteFire(tileColumn, tileRow, deadType.leavesTrailFireTurns());
-            }
-        });
+        // The SAME death-hazard path the played game uses (sump-wretch-acid-death), so the bands measure it.
+        enemyManager.setEnemyDeathHazardListener((deadType, tileColumn, tileRow, selfDestructMassive) ->
+                hazardManager.applyEnemyDeathHazard(deadType, tileColumn, tileRow, selfDestructMassive, player));
 
         bossFloorController = null;
         floorBoss           = null;

@@ -696,6 +696,19 @@ public enum EnemyType {
     public int leavesTrailFireTurns() { return 0; }
 
     /**
+     * POISONED stacks this archetype's DEATH SPLASH puts on the PLAYER standing orthogonally next to it when it dies, by
+     * any cause; 0 (the default) means it does not splash (sump-wretch-acid-death R2). Resolved by the shared
+     * {@code HazardManager.applyEnemyDeathHazard}: status only, never a hit (R4, R5).
+     */
+    public int deathSplashPlayerStacks() { return 0; }
+
+    /** POISONED stacks the same death splash puts on each ENEMY standing orthogonally next to it; 0 = none. */
+    public int deathSplashEnemyStacks() { return 0; }
+
+    /** Turns of the toxic puddle this archetype leaves on its death tile; 0 (the default) = no puddle (R7). */
+    public int deathPuddleTurns() { return 0; }
+
+    /**
      * The shallowest floor the encounter planner may spend budget on this archetype (1 = any floor).
      * A DATA gate, not a switch: {@code EncounterBudgetPlanner} filters BOTH its anchor pool and its fill
      * pool by this value, so banding a new archetype to deeper floors costs one override and no generator

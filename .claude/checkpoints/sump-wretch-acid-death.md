@@ -41,7 +41,7 @@ One commit per checkpoint, pushed immediately, prefixed `sump-wretch-acid-death/
 ## STEP LEDGER
 
 - [x] **CP0** — this file, committed and pushed.
-- [ ] **CP1** — shared `HazardManager.applyEnemyDeathHazard` + `igniteToxic(c, r, lifetime)` + EnemyType death-splash data
+- [x] **CP1** — shared `HazardManager.applyEnemyDeathHazard` + `igniteToxic(c, r, lifetime)` + EnemyType death-splash data
       (all 0); World + SimWorld call it. DONE WHEN: build + test green, behaviour unchanged (A9).
 - [ ] **CP2** — SUMP_WRETCH + constants + schema rows + 'o' (STRICT RULE) + ORA line + legacy fallback + SPAWN_POOL; splash
       live. DONE WHEN: build + test green.
@@ -54,3 +54,12 @@ One commit per checkpoint, pushed immediately, prefixed `sump-wretch-acid-death/
 ## NOTES CARRIED FORWARD
 
 **CP0:** baseline d02528f.
+
+**CP1:** `HazardManager.applyEnemyDeathHazard(EnemyType, col, row, selfDestructMassive, Player)` is THE death-hazard path;
+World and SimWorld both pass `(t,c,r,m) -> hazardManager.applyEnemyDeathHazard(t,c,r,m,player)`. Splash = private
+`splashAcid` (status only; player tile via floor(position / CELL_SIZE); live-list iteration is safe since nothing is
+removed). Cosmetic seam already in place: `HazardManager.AcidSplashListener.onAcidSplash(type, col, row)` fired for the
+death tile + each non-wall neighbour; `setAcidSplashListener` — CP4 wires it from World to EnemyVisualLayer (sim leaves it
+null). `igniteToxic(c, r, lifetime)` overload; the 2-arg one delegates. EnemyType `deathSplashPlayerStacks()` /
+`deathSplashEnemyStacks()` / `deathPuddleTurns()` default 0. Gates: build red only on the known StoryBarkTest;
+balanceSim summary byte-identical to the pre-change baseline (scratchpad sim_baseline_summary.txt) → A9 holds.
