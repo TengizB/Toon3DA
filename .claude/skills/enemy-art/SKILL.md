@@ -45,8 +45,20 @@ writes byte-identical files. Previews go to the owner and are never committed.
 ## Walls, doors, columns, floors, ceilings
 
 The same kit makes the environment (the generated-wall-art series). THE METHOD for that lives in
-`docs/wall-art-creation-guide.txt` — read it first. `walls_prototype.py` is the record of the 2026-10-22
-prototypes (`python3 walls_prototype.py /tmp/w [A_ C_ ...]`); `walls.py` replaces it in order 1.
+`docs/wall-art-creation-guide.txt` — read it first. `walls.py` is the builder (the 3-face tiling bake, wall
+primitives, mips, the atlas packer, the manifest, previews); each region's set is one `<region>_walls.py`
+(`outer_facility_walls.py` = region A) holding its builders and its `REGION` row. Shipped per region, in
+`assets/textures/walls/generated/`: `<region>.walls.png` (opaque RGB atlas, every face + mips 128/64),
+`<region>.glow.png`, `<region>.walls.json`, `<region>.floor.png`, `<region>.ceiling.png`.
+
+```bash
+cd .claude/skills/enemy-art
+python3 walls.py ../../../assets/textures/walls/generated outer_facility        # ship one region (~3 min)
+python3 walls.py /tmp/w --preview /tmp/w/preview outer_facility                  # + sheets, strips, GIF, seam report
+```
+After ANY kit.py change, regenerate the enemies (`bestiary.py`, `effects.py`) into a scratch folder and `cmp`
+every committed file — they must be byte-identical. `walls_prototype.py` is the record of the 2026-10-22
+prototypes (`python3 walls_prototype.py /tmp/w [A_ C_ ...]`), deleted by series order 4.
 
 ## The rules every sprite obeys (the style lock)
 

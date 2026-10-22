@@ -78,22 +78,36 @@ CONTENTS
 ====================================================================================================
 2. TOOLS AND FILES
 ====================================================================================================
-  .claude/skills/enemy-art/kit.py             the renderer (shared with the enemies)
+  .claude/skills/enemy-art/kit.py             the renderer (shared with the enemies; environment materials,
+                                              the keycard inks, every stencil capital, chamfer_rect and
+                                              tile_copies appended in order 1)
+  .claude/skills/enemy-art/walls.py           the wall builder: the 3-face tiling bake (bake_face) and the
+                                              3x3 surface bake (bake_surface), the wall primitives (backing,
+                                              band, rail, grammar, grammar2d, panel, tile_field, pipe_run,
+                                              grille, tear_edge, vein, lock_panel), mips, the skyline atlas
+                                              packer, the manifest writer, the owner previews, the REGIONS table
+  .claude/skills/enemy-art/<region>_walls.py  one per region set: its trim, seed, builders and its REGION row
+                                              (outer_facility_walls.py = region A) - like a creature's _rig.py
   .claude/skills/enemy-art/walls_prototype.py the 2026-10-22 prototypes (the record; deleted by order 4)
-  .claude/skills/enemy-art/walls.py           [PLANNED: order 1] the wall builder: tiling bake, the
-                                              REGIONS table, atlas/glow/mips/manifest/surface writers,
-                                              previews; CLI mirrors bestiary.py
   .claude/skills/enemy-art/sheet.py           contact sheets
-  assets/textures/walls/generated/            [PLANNED: order 1] shipped output per region:
-                                              <region>.walls.png, .glow.png, .walls.json, .floor.png,
-                                              .ceiling.png
-  Requirements: Python 3, numpy, Pillow. A wall face takes ~4 s to bake (768x256 canvas); a full region
-  set (~38 textures) ~3 minutes.
+  assets/textures/walls/generated/            shipped output per region: <region>.walls.png (opaque RGB
+                                              atlas), <region>.glow.png, <region>.walls.json, <region>.floor.png,
+                                              <region>.ceiling.png
+  Requirements: Python 3, numpy, Pillow. A face takes ~1.5-4 s to bake (768x256 canvas); a full region set
+  (36 faces + 3 glow frames + 2 surfaces) ~2.5 minutes in the cloud container.
 
-  Commands (walls.py, order 1):
+  Commands:
     cd .claude/skills/enemy-art
     python3 walls.py ../../../assets/textures/walls/generated outer_facility      # ship one region
-    python3 walls.py /tmp/w --preview /tmp/w/preview outer_facility               # + sheets, strips, GIFs
+    python3 walls.py /tmp/w --preview /tmp/w/preview outer_facility               # + sheets, strips, GIF, seams
+  The preview folder (never committed) holds: <region>_<group>_sheet.png (each group at 2x, labelled),
+  <region>_base_strips.png (every BASE x6 + variants mixed), <region>_runs.png (the hall run and one
+  BASE BASE ACCENT BASE BASE run per family), <region>_focal_alone.png, <region>_doors_columns_1x.png +
+  _sheet.png, <region>_floor_3x3.png / _ceiling_3x3.png, <id>_flicker.gif per animated face, and
+  <region>_seams.txt (join ratios: the colour step across a join over the mean step inside the faces;
+  a self-tiling base reads ~0.2-0.5, two different families meeting ~1-1.6).
+  After ANY kit.py change: regenerate bestiary.py + effects.py into a scratch folder and cmp every committed
+  enemy file (byte-identical; ~5.5 min in the container).
   Prototype record:
     python3 walls_prototype.py /tmp/w [A_ C_ ...]
 
@@ -129,11 +143,20 @@ CONTENTS
   The backing: one full-face slab PER COPY, overlapping its neighbours by ~12 px (`backing()`), never one
   slab spanning the canvas (its grain would not repeat).
 
+  CROSSING THE EDGE SAFELY (order 1, lesson 15.14): a shape that crosses the tile edge overlaps its own copy
+  there. Build it with walls.grammar() (band(), rail(), backing() already do): a HARD union (k=0 - a smooth
+  max of two equal heights raises the overlap by k/4) and a BRUSHED grain frame (grain varies with y only, so
+  both copies carry the same grain where they overlap). Never carve or add across the edge: overlapping
+  carves and adds SUM. A joint across the face = two bands with a gap. Surfaces use grammar2d() (a FLAT grain
+  frame) because they tile in both axes. Every face of a set is rendered with the region's ONE seed, so the
+  shared trim carries identical pixels on every face and two different walls meet cleanly.
+
   THE EDGE RULE: a shape may cross the tile edge ONLY if it belongs to the region's shared grammar - the
   trim lines (section 5) or a structure every wall of the set continues the same way (the hall's
   manifold, a rail). A FOCAL object (a drill, a gauge, a lamp, a sign) stays fully inside its own face,
   with >= 8 px of margin: its neighbour will be a DIFFERENT wall that does not continue it. (Lesson
-  15.6: the prototype drill's collar crossed the edge and was cut off against the next wall.)
+  15.6: the prototype drill's collar crossed the edge and was cut off against the next wall.) A builder
+  lists its focal shapes in Face(focal=...) and the bake WARNS when one comes within 8 px of the edge.
 
 
 ====================================================================================================
@@ -144,7 +167,8 @@ CONTENTS
   or an accent changes what is BETWEEN the lines, never the lines themselves. That is what lets a LIGHT
   sit beside a BASE, or a MEDICAL wall meet a hall wall at a doorway, and read as one building.
 
-  Region A (agreed): cornice 0-30, cable tray 24-33, panel field 40-196, bump rail 205, kick plate 214-255.
+  Region A (shipped, order 1): cornice 0-30, cable tray 24-33, panel field 40-196, bump rail 205, kick plate
+  214-249 + floor strip 251-255 (the joint between them). outer_facility_walls.trim() builds them for every A face.
   Regions B-E: declared by the order that builds them, written into section 16 when shipped.
   Organic regions (D, E) keep at least a floor line and the torn-plating top edge (D) / lattice rhythm (E)
   as their grammar.
@@ -277,7 +301,7 @@ and supply never change. Design every wall knowing how often it will be seen:
 9. MATERIALS
 ====================================================================================================
 The kit's library (sprite guide section 4) plus ENVIRONMENT materials, appended to kit.MATERIALS
-(the prototype defines them at runtime; order 1 appends them to kit.py):
+(appended to kit.py in order 1; a region file may NOT define materials at runtime in shipped code):
   concrete, concrete_dk   poured structure: warm grey, matte, coarse grain
   ceramic                 glazed abattoir tile: pale greige-celadon, glossy, almost no grain
   rubber                  bump rails, seals, cable sheaths: near-black, low spec
@@ -285,6 +309,10 @@ The kit's library (sprite guide section 4) plus ENVIRONMENT materials, appended 
   soul (emissive)         the harvested planet-soul / printer fuel: pale, cold, low saturation
   nacre                   the Core's mineral-bone: pearl grey, faint violet shadow (never a semantic purple)
   capsule (translucent)   glass over the soul light (condenser columns, conduit windows)
+Region A appended (order 1): livery_dk (the ring corridors' panels, one step under livery - 15.8), paint_teal
+(the medical care band, muted), insulation (containment pads), frost (rime, frosted glass), cloth (the crew's
+left-behind fabric), grime (dirt at a panel's foot - within two steps of livery_dk, R-2), and the three
+emissive KEYCARD inks key_red / key_yellow / key_blue (section 11.1).
 Reused from the enemies: livery, gunmetal, darkmetal (Organization hardware), flesh, flesh_dk, membrane,
 bone, chitin, chitin_dk (the planet's body), cyan (the facility's light), ichor (planet tissue light).
 Inks by region: A cyan lamps; B cyan-white lamps; C soul; D ichor; E soul. Magma is not used on walls.
@@ -300,7 +328,9 @@ brightest moods (sprite guide 4.5).
     exempt from the mood grade (art-direction V6), so a lamp keeps its colour in every region.
   - Glow per face <= ~6% of its pixels; on BASE walls none or a continuous line only (R-3).
   - Animation is a 2-8 frame cycle of the GLOW layer only (the base face stays one image). Bake each
-    frame by calling the builder at that frame's glow level; keep only its glow image. Each animated
+    frame by calling the builder at that frame's glow level; keep only its glow image. A frame level of 0
+    ("off") is baked at walls.GLOW_FRAME_FLOOR = 0.06, just above kit.GLOW_DEAD, so the dark tube is IN that
+    frame's glow image and covers the lit lamp of the base face (an empty frame would show the base's lamp). Each animated
     face is flagged in the manifest: "animate": "all" (every face of that sprite) or "some" (a seeded
     ~1 in 6 - a failing tube), and the engine offsets the phase per face so nothing pulses in sync.
   - Agreed animated walls: A LIGHT flicker (some), C LIGHT + condenser pulse, D LIGHT heartbeat + a
@@ -313,10 +343,13 @@ brightest moods (sprite guide 4.5).
 ====================================================================================================
 11.1 DOORS - four per region (plain + red/yellow/blue keycard), 256x256 faces, region materials. The
      keycard colour appears ONLY on a lock panel and a frame stripe, emissive, in the exact keycard
-     colours (ItemConstants / CombatPalette), so no mood shifts it; it must read at 6 tiles in the
+     colours (RenderConstants.KEYCARD_AURA_*: red (255,46,41), yellow (255,219,46), blue (56,148,255) - the kit's
+     key_red / key_yellow / key_blue, whose top three ramp steps ARE those values), so no mood shifts it; it must read at 6 tiles in the
      region's mood. The plain door must read as a door against its region's walls at 4 tiles by shape
      (frame, seam, porthole), never by colour. Door slide animation is the engine's - author a closed door.
-11.2 COLUMNS - round and square per region, authored as 256x256 faces (the column path draws a stripe).
+11.2 COLUMNS - round and square per region, authored as 256x256 faces (the column path draws a stripe). A
+     round column is built from tilted STAVES (slabs with tilt = the cylinder's slope at their centre): a
+     smooth dome's slow gradient dithers into blotches (lesson 15.17).
 11.3 FLOORS / CEILINGS - 64x64, opaque, tiling in both axes (3x3 canvas), no glow (the floor pipeline
      has none). Value bands (art-direction section 6): floors 0.10-0.24, ceilings 0.06-0.18 average
      luminance, so they sit below the walls. No period of 8 texels or less (moire at the far band).
@@ -324,22 +357,41 @@ brightest moods (sprite guide 4.5).
 
 
 ====================================================================================================
-12. OUTPUT: ATLAS, MIPS, MANIFEST  [PLANNED: order 1]
+12. OUTPUT: ATLAS, MIPS, MANIFEST                                   [shipped: order 1]
 ====================================================================================================
-  - One atlas per region (<= 2048x2048) holding every wall, door and column face plus mips 128 and 64
-    (2x2 box filter), 2 px padding filled with duplicated edge texels (Nearest sampling at a column edge
-    never bleeds); one glow atlas with the same packing; packing order = manifest order.
-  - Manifest <region>.walls.json, version 1:
+  - One atlas per region, <region>.walls.png: RGB (no alpha), fully opaque, a power-of-two square
+    <= 2048x2048 (region A: 2048). It holds every wall, door and column face (256) plus mips 128 and 64
+    (2x2 box filter of the face). Every rect has 2 px of padding filled with its duplicated edge texels
+    (Nearest at a column edge never bleeds); unused atlas area is black.
+  - PACKING: a deterministic bottom-left skyline. Items go in this order: every face (each followed by its
+    extra glow-frame slots, if animated) in manifest order, then every 128 mip, then every 64 mip. Rects are
+    explicit in the manifest - the engine never re-derives them. Under a glow-frame slot the RGB atlas holds a
+    copy of the face (it stays opaque).
+  - One glow atlas, <region>.glow.png: RGBA, binary alpha, the same packing: a face's emissive pixels at
+    its rect and at its mip rects (a mip texel glows when >= 2 of its 4 parents do; colour = their mean),
+    and each extra glow frame at its own slot. A face without emissives leaves its slots transparent.
+  - Manifest <region>.walls.json, version 1 (one face per line):
       { "version": 1, "region": "outer_facility", "size": 256, "mips": 3,
-        "trim": {...}, "breach": {"base": 0.0, "step": 0.03},
+        "atlas": "outer_facility.walls.png", "glow": "outer_facility.glow.png", "atlasSize": [2048, 2048],
+        "trim": {"cornice": [0,30], "cableTray": [24,33], "panelField": [40,196], "bumpRail": 205,
+                 "kickPlate": [214,255]},
+        "breach": {"base": 0.0, "step": 0.03},
         "walls":   [ {"id": "wall_a_hall_base_0", "group": "HALL", "slot": "BASE", "variant": 0,
                       "rect": [x,y], "mipRects": [[x,y],[x,y]], "glowRect": [x,y] | null,
-                      "glowFrames": [{"rect": [x,y], "duration": 0.08}, ...] | null,
+                      "glowFrames": [{"rect": [x,y], "duration": 0.4}, ...] | null,
                       "animate": "all" | "some" | null }, ... ],
-        "doors":   [ {"id": "door_a_plain" | "door_a_red" | "door_a_yellow" | "door_a_blue", ...} ],
-        "columns": [ {"id": "column_a_round" | "column_a_square", ...} ],
+        "doors":   [ {"id": "door_a_plain" | "door_a_red" | "door_a_yellow" | "door_a_blue", "rect", "mipRects",
+                      "glowRect", "glowFrames", "animate"} ],
+        "columns": [ {"id": "column_a_round" | "column_a_square", ...the door fields} ],
         "surfaces": {"floor": "outer_facility.floor.png", "ceiling": "outer_facility.ceiling.png"} }
-  - Ids are STABLE (wall_<region letter>_<group>_<slot>[_<variant>]) and never renamed once shipped.
+    rect / mipRects / glowRect are TOP-LEFT pixel corners in the image (row 0 = top; sizes are size >> mip).
+    variant is 0 for non-BASE slots. glowFrames[0] is the face's own glowRect; glowFrames carry no mips.
+    The order of "walls" is HALL (BASE 0-2, STRUCTURE, LIGHT, SERVICE, VENT, MARKER, BREACH), then per family
+    MEDICAL, SECURITY, CONTAINMENT, MACHINERY, RESEARCH, STORAGE, SIGNATURE (BASE 0, BASE 1, ACCENT).
+  - Ids are STABLE (wall_<region letter>_<group>_<slot>[_<variant>], door_<letter>_<kind>,
+    column_<letter>_<kind>) and never renamed once shipped.
+  - Surfaces: <region>.floor.png and .ceiling.png, 64x64 RGB, no mips (the floor pipeline builds its own).
+  - Deterministic: the same script writes byte-identical files (verify with a second bake and cmp).
 
 
 ====================================================================================================
@@ -402,12 +454,54 @@ brightest moods (sprite guide 4.5).
        the briefing exchange and LEAVE IT on the relic offer first).
 
 
+  15.14 (order 1) Shapes crossing the tile edge overlap their own copy. A smooth max of two equal heights
+       raises the overlap by k/4, a grain frame that moves with the copy blends two different grains there,
+       and carves/adds sum: all three left small repeating marks every 256 px on the first bake (the rail, the
+       kick-plate joint). -> walls.grammar(): k=0 + a brushed frame; joints are gaps between bands.
+  15.15 A fixture in the SAME layer as a panel of higher plateau + prio is swallowed: the union paints the
+       panel's material (the first doors lost their porthole, lock panel and frame stripe; the first marker
+       board showed the panel seams through it). Give fixtures their own layer; paint ON a surface with "add".
+  15.16 E5 is about silhouettes, not subjects: a scarf built from round hanging chains read as a limb, two
+       equal tails read as trousers. The shipped scarf is a FLAT folded band, one long fringed tail, one short
+       fold. Judge every cloth / hanging shape at 1x for a body read.
+  15.17 A smooth cylinder (a 128-radius dome) dithers into blotches across its slow gradient; tilted staves
+       shade in clean bands (the round column).
+  15.18 Surfaces are darker than they look on a sheet: flat darkmetal/gunmetal plates measured 0.20-0.26 mean
+       luminance; the ceiling band (<= 0.18) needed concrete_dk. Measure (walls.luminance), never guess.
+  15.19 Panel gaps must be EVEN across the tile edge (4..124 / 132..252: 8 px both ways) or the BASE beats as
+       pairs of panels.
+
+
 ====================================================================================================
 16. THE FIVE REGIONS (design briefs - the orders hold the full per-slot lists)
 ====================================================================================================
-  A  OUTER FACILITY / Habitation Rings (cool_steel). An evacuated company town: painted livery panels,
-     rubber bump rail, riveted kick plate, cable tray. Prototype ring panel = hall BASE (approved).
-     Signature: crew quarters (lockers with scratched name plates, one ajar - no figure, no photo face).
+  A  OUTER FACILITY / Habitation Rings (cool_steel) - SHIPPED order 1 (outer_facility_walls.py, seed 101).
+     An evacuated company town: painted livery panels, rubber bump rail, riveted kick plate, cable tray.
+     HALL  BASE x3: two livery_dk panels (4..124, 132..252) with a mid seam, a vented lower inset and grime at
+           the foot; variants: a faint dent, a vent row fewer, kick-plate scuffs, serials R-07/R-08/R-12.
+           STRUCTURE a riveted gunmetal pilaster with capital and foot, "R1 S-07", the rail behind it.
+           LIGHT a recessed cyan strip tube behind a wire cage (4 flicker glow frames 1.0/0.25/1.0/0 over
+           0.40/0.08/0.20/0.12 s, animate=some). SERVICE a lipped cut-out with a riser pipe pair, clamps and a
+           rust valve wheel. VENT a full-height access hatch, grille, hinges, pull handle. MARKER the
+           evacuation board: two empty frames, notices torn off at their pins, a painted arrow, "R1", "EVAC".
+           BREACH the base with a cracked seam weeping a 1-2 px ichor line over a grime streak.
+     MEDICAL one rounded white livery panel with wipe joints + the muted teal care band at rail height /
+           ACCENT a dispenser unit (dark window, slot, cyan lamp) beside a dogged scrub hatch.
+     SECURITY riveted gunmetal over a darkmetal lower half with carved chevrons / ACCENT a mesh-fronted
+           weapons niche, two rifles racked, one slot empty, "ARMS".
+     CONTAINMENT quilted insulation pads with frost in the seams / ACCENT a dogged frosted porthole, "SEALED".
+     MACHINERY two darkmetal breaker cabinets under a conduit bundle / ACCENT the main breaker panel: six
+           breakers, a gauge, a lever, a cyan status lamp, "MAIN".
+     RESEARCH narrow dark panels crossed by two continuous cyan data seams / ACCENT a wall terminal with cyan
+           text lines and a keyboard ledge.
+     STORAGE a roll-up shutter in guide channels / ACCENT the shutter half up, a dark gap, a crate's edge.
+     SIGNATURE crew quarters: four lockers with scratched-off name plates, "Q7-1" / ACCENT one locker ajar,
+           dark inside, a shelf, a scarf left on its hook (no figure, no photo face - 15.16).
+     DOORS a framed livery sliding leaf, porthole, grab recess, ribbed kick strip; plain = cyan lamp; keycard
+           = lock panel + header stripe in the exact ink. COLUMNS round = eight painted staves with the rail
+           ring; square = a boxed cable riser. FLOOR dark deck plates under a worn rubber runner (0.176).
+           CEILING concrete panels, a cable tray, dark strip-lamp housings (0.177).
+     Story details (W8): ring serials, the evacuation board, scratched name plates, the left scarf, the seep.
   B  RESEARCH WING / Harvesting Galleries (clinical_white). An abattoir passed off as a lab: glazed tile,
      hook rail, form-tied concrete, drains, desaturated stains. Prototype gallery tile = hall BASE
      (approved; the hook moves to one variant + the signature). Signature: the killing floor - hooks on

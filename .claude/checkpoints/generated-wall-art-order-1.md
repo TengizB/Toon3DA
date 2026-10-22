@@ -58,7 +58,7 @@ file's tick in the same commit as the work**. Never more than one checkpoint unc
       DONE WHEN: manifest lists 30 walls; every room-family strip seamless; 6-copy BASE strips pass.
 - [x] **CP4** — doors, columns, floor, ceiling generated; the five shipped files committed.
       DONE WHEN: A1, A3, A4 hold on the committed files.
-- [ ] **CP5** — docs/wall-art-creation-guide.txt (2, 12, 15, 16 A) + SKILL.md + sprite guide pointer updated (A6).
+- [x] **CP5** — docs/wall-art-creation-guide.txt (2, 12, 15, 16 A) + SKILL.md + sprite guide pointer updated (A6).
 - [ ] **CP6** — owner verdict recorded in DECISIONS (approval, or the requested changes done and re-shown).
 
 ## NOTES CARRIED FORWARD
@@ -114,3 +114,9 @@ Shipped: assets/textures/walls/generated/outer_facility.{walls.png (RGB 2048, op
 floor.png, ceiling.png}; a second bake into the scratchpad is byte-identical (A1). A3: 30 walls + 4 doors + 2
 columns + surfaces. A4: every join ratio in the seams report <= 1.6 (cross-family joins expected > 1), self-seams
 0.27-0.32, surfaces 0.0 / 0.2.
+
+**CP5:** docs/wall-art-creation-guide.txt: section 2 (tools, files, commands, preview list, regen rule), 4 (CROSSING
+THE EDGE SAFELY + the bake's focal warning), 5 (region A trim shipped), 9 (region A materials), 10 (glow frame
+floor 0.06), 11.1 (exact keycard values from RenderConstants), 11.2 (staves), 12 rewritten as SHIPPED (no [PLANNED:
+order 1] marker left), 15.14-15.19 new lessons, 16 A = the shipped design. SKILL.md walls section; sprite guide 13
+pointer; CLAUDE.md docs-table line count 456 -> 550. Remaining: CP6 = owner gate (HARD STOP).
