@@ -66,8 +66,8 @@ public final class BossArenaGenerator implements ILevelGenerator {
     private final int    gridWidth  = LevelGenConstants.LEVEL_GEN_GRID_WIDTH;  // 80
     private final int    gridHeight = LevelGenConstants.LEVEL_GEN_GRID_HEIGHT; // 45
     private final Random random;
-    // Raw floor seed, kept for deterministic per-level BASE-WALL selection (independent of `random`,
-    // so it never perturbs the generated grid). See LevelPalettes.generatedWithBaseWall.
+    // Raw floor seed: the LevelFinisher's own wall-dressing stream derives from it (independent of
+    // `random`, so it never perturbs the generated grid). See LevelFinisher.
     private final long   seed;
 
     private BossArenaLayout layout;
@@ -186,7 +186,9 @@ public final class BossArenaGenerator implements ILevelGenerator {
                 spawnPoints, new FloorPopulator.EncounterFacts(-1, 0f, 0f, 0, 0), config,
                 FloorPopulator.specOf(config, ge.tbegvadze.toon3d.route.RouteNodeType.BOSS), dungeonDepth, seed);
         return populated.attachTo(new Level(matrix, populated.spawnPoints, populated.weaponSpawnPoints,
-                         LevelPalettes.generatedWithBaseWall(seed)));
+                         LevelFinisher.request(matrix, seed).config(config)
+                                 .floorGroup(ge.tbegvadze.toon3d.tileset.WallGroup.SIGNATURE)
+                                 .basePalette(LevelPalettes.legacy()).finish()));
     }
 
     // -------------------------------------------------------------------------

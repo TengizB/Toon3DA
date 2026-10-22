@@ -881,7 +881,7 @@ REGION THEMING / ACTS (RegionAmbienceRegistry)
   biases). Order-10 adds each region's IDENTITY as a RegionAmbience row keyed by RouteRegion.themeId
   in RegionAmbienceRegistry (register once at bootstrap; NOTHING hard-codes the list — a new region is
   one row + a crest). A RegionAmbience carries: displayName, crestPainterId (order-5 crest) +
-  overlayThemeId (order-4 tint), wallPalette (the wall symbols its generators lean on), enemyFactionId
+  overlayThemeId (order-4 tint), wallSetId (the region wall set its floors are built from — generated-wall-art order 2; startup fails on an unregistered id), enemyFactionId
   (which faction dominates — a hook EnemyManager reads later), the AMBIENCE HOOKS (redAlertFrequency,
   lightingMoodId, musicId — ids/flags the audio + red-alert systems read LATER; NO audio assets added
   here; lightingMoodId is now CONSUMED by World.resolveLightingMood -> render/LightingMoodRegistry
@@ -977,7 +977,7 @@ pool (unlisted types/generators stay at 1.0, so every registered type/generator 
   2     reactor_depths     REACTOR DEPTHS   11-15   radiation trefoil       reactor brutes   ELITE/REST/SHOP up; CAVERN leaned; red-alert common
   3     the_breach         THE BREACH       16-20   cracked/corrupted sigil necrotic          ELITE/REST/SHOP up; CAVERN leaned
   4     the_core           THE CORE         21-25   core lattice            core wardens     ELITE up, REST/SHOP down; ROOMS_MST leaned; run-final boss (fallback)
-  Each region also carries (RegionAmbience, order-10): overlayThemeId tint, wallPalette, enemyFactionId,
+  Each region also carries (RegionAmbience, order-10): overlayThemeId tint, wallSetId, enemyFactionId,
   redAlertFrequency / lightingMoodId / musicId ambience hooks, bossId, and gateFlavour announce copy.
   Exact multiplier values live in RouteMapConstants.REGION_{A,B,C,D,E}_* — tune there, never inline.
 
@@ -1026,7 +1026,7 @@ ADD A NEW SPECIAL LEVEL (for an existing or new node)  — full recipe in SPECIA
   bespoke. Register the profile, point the node type's levelProfileId at it, update this doc.
 
 ADD A NEW REGION  — full recipe in NARRATIVE / EVENT NODES & REGION THEMING. Short form: add a
-  RegionAmbience row (crest + tint + wallPalette + faction + hooks + boss + gateFlavour) in
+  RegionAmbience row (crest + tint + wallSetId + faction + hooks + boss + gateFlavour) in
   RouteRegistries.registerRegionAmbience, its RegionSpec band in RegionPlan, and a RegionCrestPainter
   (order-5). Add a REGION CATALOG row here. The region themes + announces itself with NO World edits.
 

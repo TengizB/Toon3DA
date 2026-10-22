@@ -11,10 +11,11 @@ import java.util.Set;
  * The PER-LEVEL BINDING for the symbol/sprite-reuse migration (order-3): the immutable map that says,
  * for ONE level, which {@link TileCategory} each environment symbol belongs to and which
  * {@link EnvironmentSpriteDefinition} (by stable id) that symbol renders. A level's SYMBOL is a SLOT in a
- * fixed category, but WHICH sprite fills that slot is chosen per level — for FIXED symbols it is a
- * permanent binding ('x' → "wall_plain"); for FLEXIBLE symbols it is whatever the allocator (order-4)
- * assigned. Every level carries one of these (see {@code Level.getPalette()}); hand-crafted levels and,
- * for now, generated levels use the shared {@link LevelPalettes#legacy()} instance.
+ * fixed category, but WHICH sprite fills that slot is chosen per level — for a FIXED symbol it is a
+ * permanent binding ('@' → "prop_vendor"); for FLEXIBLE symbols it is whatever the allocator (order-4)
+ * assigned; for a wall symbol and 'P' it is the floor's region wall set face (generated-wall-art order 2,
+ * {@link RegionPaletteBuilder}). Every level carries one of these (see {@code Level.getPalette()});
+ * hand-crafted levels use the shared {@link LevelPalettes#legacy()} instance.
  *
  * <p>ID-ONLY, HEADLESS: LevelPalette resolves symbol → category + sprite id (a string). It holds NO
  * textures — the render layer turns sprite ids into textures later (order-6). Keeping it id-only keeps
@@ -36,10 +37,14 @@ public final class LevelPalette {
     private final Map<Character, TileCategory> categoryBySymbol;
     // char -> the stable EnvironmentSpriteDefinition id this level renders for the symbol.
     private final Map<Character, String> spriteIdBySymbol;
+    // The REAL region wall set (generated-wall-art order 2) whose faces the wall + column bindings name;
+    // null for a palette that binds no region set.
+    private final String wallSetId;
 
     private LevelPalette(Builder builder) {
         this.categoryBySymbol = Collections.unmodifiableMap(new HashMap<>(builder.categoryBySymbol));
         this.spriteIdBySymbol = Collections.unmodifiableMap(new HashMap<>(builder.spriteIdBySymbol));
+        this.wallSetId        = builder.wallSetId;
     }
 
     /**
@@ -68,7 +73,7 @@ public final class LevelPalette {
     /**
      * The DISTINCT sprite ids this level actually renders — the small set the render layer realizes into
      * textures for this level (order-6). De-duplicated: several symbols bound to the same sprite id (e.g.
-     * two levels' worth of walls collapsing onto "wall_plain") contribute that id once, so exactly one
+     * every BASE wall symbol of a family collapsing onto its variant-0 face) contribute that id once, so exactly one
      * texture is built per shared sprite. Unmodifiable snapshot; order is unspecified.
      */
     public Set<String> distinctSpriteIds() {
@@ -76,6 +81,11 @@ public final class LevelPalette {
     }
 
     /** Starts a fresh palette builder. Package-private: only the allocator and {@link LevelPalettes}. */
+    /** The region wall set the wall + column bindings come from (order 2), or null. */
+    public String wallSetId() {
+        return wallSetId;
+    }
+
     static Builder builder() {
         return new Builder();
     }
@@ -88,6 +98,7 @@ public final class LevelPalette {
     static final class Builder {
         private final Map<Character, TileCategory> categoryBySymbol = new HashMap<>();
         private final Map<Character, String> spriteIdBySymbol = new HashMap<>();
+        private String wallSetId;
 
         private Builder() {}
 
@@ -102,6 +113,19 @@ public final class LevelPalette {
             Objects.requireNonNull(spriteId, "spriteId");
             categoryBySymbol.put(symbol, category);
             spriteIdBySymbol.put(symbol, spriteId);
+            return this;
+        }
+
+        /** Copies every binding of {@code source} (its wall set too), to be overridden per symbol. */
+        Builder copyOf(LevelPalette source) {
+            categoryBySymbol.putAll(source.categoryBySymbol);
+            spriteIdBySymbol.putAll(source.spriteIdBySymbol);
+            wallSetId = source.wallSetId;
+            return this;
+        }
+
+        Builder wallSetId(String value) {
+            this.wallSetId = value;
             return this;
         }
 

@@ -12,7 +12,7 @@ import java.util.Objects;
  *
  * <ul>
  *   <li>{@link #requiredSprites()} — symbol → the exact sprite id this room MUST render for that symbol
- *       (e.g. a CRYO room reserves its flexible wall slot 'Z' → "wall_cryo"). Step 2 of the allocator
+ *       (e.g. a CRYO room reserves its bio-pod prop '&' → "prop_biopod"). Step 2 of the allocator
  *       binds these verbatim so per-level variety can never overwrite a room's signature look.</li>
  *   <li>{@link #categoryCounts()} — how many GENERIC (unspecified) slots of each category the room also
  *       wants. This is metadata order-5's {@code RoomBlueprint} fills in and order-8 consumes when it

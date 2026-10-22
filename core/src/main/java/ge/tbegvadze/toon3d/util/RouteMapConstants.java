@@ -720,17 +720,18 @@ public final class RouteMapConstants {
     public static final String GATE_ANNOUNCE_PREFIX     = "ENTERING: ";
 
     // ---- Region ambience / theming registry (RegionAmbienceRegistry) -------
-    // Per-region IDENTITY data future systems read: crest + overlay tint (order-4/5), the wall
-    // palette its generators lean on, the enemy faction that dominates, ambience hooks (red-alert
+    // Per-region IDENTITY data future systems read: crest + overlay tint (order-4/5), the region wall
+    // set its floors are built from, the enemy faction that dominates, ambience hooks (red-alert
     // frequency, lighting mood, music id — no audio assets added here), the closing boss, and the
     // REGION_GATE announce flavour. Keyed by RouteRegion.themeId. NOTHING hard-codes the region list.
 
-    // Wall palettes (chars from docs/tile-symbols.txt) each region's generators lean toward.
-    public static final String REGION_A_WALL_PALETTE = "xck";   // clean industrial steel
-    public static final String REGION_B_WALL_PALETTE = "MNDQ";  // clinical lab white-green
-    public static final String REGION_C_WALL_PALETTE = "UhXj";  // amber-hot reactor
-    public static final String REGION_D_WALL_PALETTE = "GF";    // gore + force-field corruption
-    public static final String REGION_E_WALL_PALETTE = "wtSZ";  // the machine heart: wires, terminals, cryo
+    // The region wall set (tileset/RegionWallSets, generated-wall-art order 2) every floor of the region is
+    // built from — resolved per floor like the lighting mood. Startup fails loud on an unregistered id.
+    public static final String REGION_A_WALL_SET = TilesetConstants.WALL_SET_OUTER_FACILITY;
+    public static final String REGION_B_WALL_SET = TilesetConstants.WALL_SET_RESEARCH_WING;
+    public static final String REGION_C_WALL_SET = TilesetConstants.WALL_SET_REACTOR_DEPTHS;
+    public static final String REGION_D_WALL_SET = TilesetConstants.WALL_SET_THE_BREACH;
+    public static final String REGION_E_WALL_SET = TilesetConstants.WALL_SET_THE_CORE;
 
     // Enemy faction ids that dominate each region's spawns (descriptive hook for EnemyManager).
     public static final String REGION_A_FACTION = "baseline_demons";

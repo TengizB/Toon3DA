@@ -5,17 +5,21 @@ Single source of truth for every character used in level .txt files.
 FIXED vs FLEXIBLE (the shipped model — see docs/environment-tileset-system.txt for the full system).
 A level-file symbol is a SLOT in a fixed CATEGORY; its category/meaning never changes. Symbols come
 in two tiers:
-  * FIXED — permanent meaning AND sprite; never reassigned. Player start 'p', exit '>', doors, floor
-    lighting, keycards, pickups, ammo, hazards, enemy spawns, the plain wall 'x', and the shop '@'.
+  * FIXED — permanent meaning AND sprite; never reassigned. Player start 'p', exit '>', floor
+    lighting, keycards, pickups, ammo, hazards, enemy spawns, and the shop '@'.
     A FIXED symbol's row below is a permanent binding.
+  * WALL SLOTS, DOORS AND THE COLUMN (generated-wall-art order 2) — a wall symbol names a SLOT (a wall
+    GROUP + SLOT); the floor's REGION WALL SET names the picture. Doors d R Y B and the column 'P' keep
+    their fixed meaning; their pictures also come from the region set. See the WALLS table below,
+    docs/wall-art-creation-guide.txt (6.4, 7) and docs/environment-tileset-system.txt section 15.
   * FLEXIBLE — fixed CATEGORY, sprite chosen PER LEVEL from that category's registered pool by the
-    deterministic allocator. The accent walls, the column 'P', and the decoration props/decals are
-    flexible. For a flexible symbol, the "sprite" column below is the LEGACY DEFAULT (what hand-crafted
+    deterministic allocator. The decoration props/decals are flexible. For a flexible symbol, the "sprite" column below is the LEGACY DEFAULT (what hand-crafted
     levels and the legacy palette render) — NOT a permanent binding; a generated level may render a
     different sprite of the same category.
 
-ADDING ART NO LONGER CONSUMES A SYMBOL. New wall/column/prop/decal art is RECIPE A (register one
-EnvironmentSpriteDefinition + one texture generator); a new room is RECIPE B (register one
+ADDING ART NO LONGER CONSUMES A SYMBOL. New prop/decal art is RECIPE A (register one
+EnvironmentSpriteDefinition + one texture generator); new WALL art is a face of a region wall set
+(docs/wall-art-creation-guide.txt RECIPES); a new room is RECIPE B (register one
 RoomBlueprint). Neither needs a new symbol and neither edits the generator/renderers/Level. See the
 RECIPES in docs/environment-tileset-system.txt §9. New level-file SYMBOLS are now rare — needed only
 for a genuinely new FIXED gameplay meaning.
@@ -36,46 +40,44 @@ disagree, fix the code to match this file.
 
 WALLS (solid — block movement and raycasting)
 ---------------------------------------------
-x   Plain wall          Default. Use for 80-90% of all wall tiles.           lab_wall_plain.jpg
-    (BASE-WALL VARIETY: 'x' stays a FIXED WALL symbol, but on GENERATED levels the allocator picks its
-     base-wall sprite per floor seed from a small set — "wall_plain" (neutral) OR the warm
-     "wall_plain_sandstone" / the bright "wall_plain_clean" / the sage-teal "wall_plain_tiled" — so each
-     floor feels like a different facility. Hand levels keep "wall_plain". See
-     docs/environment-tileset-system.txt, BASE-WALL VARIETY.)
-c   Conduit wall        Utility corridors, visible pipes. Sparse.             lab_wall_conduit.jpg
-v   Vent wall           Room interior side walls. 1-2 per room max.           lab_wall_vent.jpg
-t   Terminal wall       Rare. Corner alcoves, dead-ends. Max 1-2 per level.   lab_wall_terminal.jpg
-w   Wires wall          Near server/generator areas. Sparse.                  lab_wall_wires.jpg
-h   Hazard wall         Industrial caution stripes (yellow/black). Near explosive barrels.
-j   Rust wall           Corroded steel. Near unlit floors or oil pools.
-G   Gore wall           Wet demonic flesh membrane. Near corpse clusters. High-res procedural
-                        texture: tiling metaball flesh field with bump-relief shading, wet sheen,
-                        sinew vessels, infected pustules, open gashes with blood drips, bone nodules.
-k   Bulkhead wall       Heavy armoured plates. Dead ends, stairwells.
-N   Glass wall          Reinforced containment glass. Special rooms only.
-Q   Bio/Quarantine wall Biohazard warning markings. Containment areas.
-S   Emergency strip wall Emergency lighting corridor walls.
-M   Medical wall        Hospital/clinic room walls.
-Z   Cryo wall           Frost-damaged cryogenic chamber walls.
-U   Radiation wall      Radiation-burned power-plant walls.
-X   Blast wall          Battle-scarred armory walls.
-D   Holo-data wall      Glowing cyan data-panel display wall. Research Lab far wall.
-F   Force-field wall    Electric-blue energy barrier. Research Lab alcove mouth.
-"   Viewport dome wall  Curved reinforced star-window: brushed-titanium mullion arch framing a
-                        deep-indigo nebula backdrop (starfield, planet crescent). STELLAR_OBSERVATORY
-                        room only — see room notes below.
-'   Magrail conduit wall Brushed hull panel threaded with violet->cyan pulsing magnetic-rail
-                        conduits. STELLAR_OBSERVATORY room only.
-`   Hull plate wall     Riveted brushed-titanium hull segment; clean, cool, intact ship skin — the
-                        default rotunda shell. Lighter and cleaner than the Bulkhead wall 'k'.
-                        STELLAR_OBSERVATORY room only.
+A wall symbol names a SLOT of the floor's REGION WALL SET (generated-wall-art order 2; the table is
+TilesetConstants.WALL_SLOT_TABLE). Every one is a WALL to Level.isWall; the picture comes from the floor's
+region set (set A, outer_facility, on every floor until regions B-E ship their own). BASE slots carry
+variants, picked by the renderer per tile face. Generated levels write only 'x' for walls; the LevelFinisher
+dresses them by the placement rules (docs/wall-art-creation-guide.txt section 7). In a HAND-MADE level the
+symbols are drawn as written, read through this table with set A.
+sym  group        slot        what it is (in every region's style)
+x    HALL         BASE        The dominant hall / generic-room wall (3 variants). Use for most walls.
+k    HALL         STRUCTURE   Pilaster / rib / frame: the hall rhythm and the door frames.
+S    HALL         LIGHT       The region's light source (emissive; set A's tube may flicker).
+c    HALL         SERVICE     Pipes, risers, valves — the building working.
+'    HALL         VENT        Grilles, hatches, extraction mouths.
+h    HALL         MARKER      Signage, stencils, quota boards (focal; 1-3 per floor).
+G    HALL         BREACH      The NEXT region leaking through (grows with depth in a region).
+M    MEDICAL      BASE        Medical room wall (2 variants).
+Q    MEDICAL      ACCENT      Medical room's telling fixture (set A: dispenser + scrub hatch).
+X    SECURITY     BASE        Security room wall (armory, command centre, gate airlock).
+w    SECURITY     ACCENT      Security fixture (set A: mesh-fronted rifle niche).
+Z    CONTAINMENT  BASE        Containment wall (cryo chamber, containment block).
+N    CONTAINMENT  ACCENT      Containment fixture (set A: dogged frosted porthole).
+U    MACHINERY    BASE        Machinery wall (power plant, atmospheric plant, reactor).
+j    MACHINERY    ACCENT      Machinery fixture (set A: breaker panel).
+t    RESEARCH     BASE        Research wall (server room, research lab).
+D    RESEARCH     ACCENT      Research fixture (set A: wall terminal).
+v    STORAGE      BASE        Storage wall (salvage bay, supply cache, storage bay).
+"    STORAGE      ACCENT      Storage fixture (set A: shutter half up).
+F    SIGNATURE    BASE        The region's special-room wall (observatory, gore nest, boss arena, event room).
+`    SIGNATURE    ACCENT      The special room's fixture.
+A slot a set lacks falls back (ACCENT / BREACH -> BASE of the group, others -> HALL BASE).
 
 DOORS (solid until opened; runtime state managed by DoorManager)
 ----------------------------------------------------------------
-d   Plain door          Unlocked. Opens on player interaction.                lab_door_1.jpg
-R   Red keycard door    Locked. High-res procedural twin-leaf blast door: red hazard chevrons, seam light strips, keycard reader. Requires red keycard (pickup 'r').
-Y   Yellow keycard door Locked. High-res procedural twin-leaf blast door: yellow hazard chevrons, seam light strips, keycard reader. Requires yellow keycard (pickup 'y').
-B   Blue keycard door   Locked. High-res procedural twin-leaf blast door: blue hazard chevrons, seam light strips, keycard reader. Requires blue keycard (pickup 'b').
+Pictures: the floor's region set (door_<letter>_plain / red / yellow / blue); the keycard colour shows only
+on the lock panel and the frame stripe, emissive, in the exact keycard colours.
+d   Plain door          Unlocked. Opens on player interaction.
+R   Red keycard door    Locked. Requires red keycard (pickup 'r').
+Y   Yellow keycard door Locked. Requires yellow keycard (pickup 'y').
+B   Blue keycard door   Locked. Requires blue keycard (pickup 'b').
 
 FLOOR LIGHTING (walkable; brightness multiplier applied to wall/floor shading)
 -------------------------------------------------------------------------------
@@ -87,7 +89,8 @@ f          Flickering floor Animated failing fluorescent. Use 1-3 tiles at choke
 SPECIAL TILES
 -------------
 p   Player start        Exactly one per level. Never on a map edge.
-P   Cylindrical column  Solid. Rendered as 3D cylinder (ray-circle intersection). Groups of 2-4.
+P   Cylindrical column  Solid. Rendered as 3D cylinder (ray-circle intersection). Groups of 2-4. Picture: one of
+                        the region set's two columns (round / square), picked per floor.
 >   Portal / exit       Level exit. Full-height interdimensional rift portal. Exactly one per generated level.
 
 SOLID PROPS (block player movement; rendered as billboard sprites)
@@ -203,13 +206,12 @@ The symbol/sprite-reuse system (docs/environment-tileset-system.txt) REMOVED the
 used to track. Symbol count no longer limits how much environment art or how many rooms the game can
 have: art is added by RECIPE A (register a sprite in a category pool) and rooms by RECIPE B (register a
 blueprint), NEITHER of which consumes a symbol. The 91 assigned symbols split into:
-  * FIXED symbols — permanent meaning AND sprite (start/exit/doors/floor-lighting/keycards/pickups/ammo/
-    hazards/enemy-spawns, plus the plain wall 'x' and the shop '@'). Authoritative list: the FIXED
-    partition in SymbolBudget (docs/environment-tileset-system.txt §2).
-  * FLEXIBLE symbols — a fixed CATEGORY, sprite per level: the accent walls, the column 'P', and the
-    decoration props/decals. Their category pool holds MANY sprites (already more than there are
-    symbols, e.g. the COLUMN slot 'P' → round OR square, and extra WALL variety art); a level uses a
-    small per-level subset.
+  * FIXED symbols — permanent meaning AND sprite (start/exit/floor-lighting/keycards/pickups/ammo/
+    hazards/enemy-spawns, plus the shop '@'). Authoritative list: the FIXED partition in SymbolBudget
+    (docs/environment-tileset-system.txt §2).
+  * WALL SLOTS (21), the four DOORS and the column 'P' — fixed meaning, picture from the floor's region
+    wall set (generated-wall-art order 2; docs/environment-tileset-system.txt section 15).
+  * FLEXIBLE symbols — a fixed CATEGORY, sprite per level: the decoration props/decals.
 
 Unassigned characters (available if a genuinely new FIXED gameplay meaning is ever needed):
 ) / , _
@@ -217,13 +219,13 @@ Unassigned characters (available if a genuinely new FIXED gameplay meaning is ev
   .claude/agents/ideas/excavation-monolith-chamber-room.txt — NOT IMPLEMENTED. '}' from that block is
   now the Verdant Spiresower enemy-spawn marker and ':' its runtime crystal-spire prop; 'o' is now the
   Sump Wretch enemy-spawn marker (sump-wretch-acid-death), so EXCAVATION_SITE may not use it. " ' ; ? < \ ] - | `
-  are ASSIGNED to the STELLAR_OBSERVATORY room as FLEXIBLE symbols; the allocator keeps their
-  observatory sprites contained to that room via the "observatory" theme tag.)
+  are ASSIGNED: " ' ` are wall slots (STORAGE ACCENT, HALL VENT, SIGNATURE ACCENT); ; ? < \ ] - | are the
+  STELLAR_OBSERVATORY room's FLEXIBLE props/decals, kept in that room by the "observatory" theme tag.)
   ('~' and '*' are Ghoul / Blight Corruptor enemy-spawn markers; '(', '{' and '[' are the Auric
   Sentinel, Cinderforge Colossus and Rimeshell Lancer markers, taken from that same pencilled-in
   excavation block — the golem faction claims the bracket block, so if EXCAVATION_SITE is ever built it
   uses the remaining brackets and '_' instead.)
-Uppercase taken: K V (enemy spawns), D F I J W, Z (cryo) — check WALLS / DOORS above.
+Uppercase taken: K V (enemy spawns), D F (wall slots), I J W, Z (wall slot) — check WALLS / DOORS above.
 Lowercase taken: 'z' (Crawler spawn), 'o' (Sump Wretch spawn), e i j n q ('i' fire hazard, 'q' toxic hazard).
 
 PREFERRED SYMBOLS FOR A NEW FIXED SYMBOL (rare)

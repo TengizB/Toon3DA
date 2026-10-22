@@ -18,13 +18,17 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class LevelPaletteTest {
 
     @Test
-    void legacyMapsAccentWallToItsHistoricSprite() {
+    void legacyMapsWallsThroughSetAAndPropsToTheirHistoricSprites() {
         LevelPalette legacy = LevelPalettes.legacy();
-        // Spot-checks across the categories, one per category, matching the historic 1:1 table.
-        assertEquals("wall_cryo", legacy.spriteIdOf('Z'));
-        assertEquals("wall_plain", legacy.spriteIdOf('x'));
-        assertEquals("wall_medical", legacy.spriteIdOf('M'));
-        assertEquals("column_round", legacy.spriteIdOf('P'));
+        // generated-wall-art order 2: a wall symbol names a SLOT; hand levels read set A through the slot
+        // table (variant 0 — the renderer picks the BASE variant per face). Props and decals keep the
+        // historic 1:1 table.
+        assertEquals("outer_facility", legacy.wallSetId());
+        assertEquals("wall_a_containment_base_0", legacy.spriteIdOf('Z'));
+        assertEquals("wall_a_hall_base_0", legacy.spriteIdOf('x'));
+        assertEquals("wall_a_medical_base_0", legacy.spriteIdOf('M'));
+        assertEquals("wall_a_hall_light", legacy.spriteIdOf('S'));
+        assertEquals("column_a_round", legacy.spriteIdOf('P'));
         assertEquals("prop_locker", legacy.spriteIdOf('L'));
         assertEquals("prop_vendor", legacy.spriteIdOf('@'));
         assertEquals("decal_blood", legacy.spriteIdOf('.'));
@@ -32,66 +36,43 @@ class LevelPaletteTest {
     }
 
     @Test
-    void generatedWithBaseWallVariesOnlyTheBaseWall() {
-        // The palette every non-dungeon generator uses: identical to legacy EXCEPT the bulk wall symbol
-        // 'x', which becomes a seed-chosen base wall. This is how ALL generators (caverns, corridors, boss
-        // arenas, special rooms, the staging room, ...) get base-wall variety without changing their other
-        // art. Hand-crafted levels keep legacy (covered above), so they never vary.
+    void regionPaletteRebindsOnlyTheWallsAndTheColumn() {
+        // The palette every generated floor gets from the LevelFinisher: the base palette's props and decals
+        // untouched, every wall symbol and 'P' rebound to the floor's REAL region set (an alias resolves to
+        // the set it borrows), and the set recorded on the palette.
         LevelPalette legacy = LevelPalettes.legacy();
-        SymbolBudget budget = SymbolBudget.standard();
-        java.util.Set<String> baseWalls = new java.util.HashSet<>(budget.baseWallSpriteIds());
-        java.util.Set<String> observed = new java.util.HashSet<>();
-
-        for (long seed = 0; seed < 200; seed++) {
-            LevelPalette generated = LevelPalettes.generatedWithBaseWall(seed);
-            // 'x' resolves to a registered base wall in the WALL category.
-            assertTrue(baseWalls.contains(generated.spriteIdOf('x')),
-                    "generated 'x' is not a base wall at seed " + seed + ": " + generated.spriteIdOf('x'));
-            assertEquals(TileCategory.WALL, generated.categoryOf('x'));
-            observed.add(generated.spriteIdOf('x'));
-            // Deterministic: same seed => same base wall.
-            assertEquals(generated.spriteIdOf('x'),
-                    LevelPalettes.generatedWithBaseWall(seed).spriteIdOf('x'));
-            // Every OTHER environment symbol matches legacy exactly (accents/props/decals untouched).
+        RegionWallSetRegistry sets = RegionWallSets.registry();
+        for (String setId : sets.ids()) {
+            RegionWallSet set = sets.resolve(setId);
+            LevelPalette region = RegionPaletteBuilder.build(set, legacy);
+            assertEquals(set.id(), region.wallSetId());
             for (char symbol = 32; symbol <= 126; symbol++) {
-                if (symbol == 'x') {
-                    continue;
-                }
-                assertEquals(legacy.spriteIdOf(symbol), generated.spriteIdOf(symbol),
-                        "symbol '" + symbol + "' drifted from legacy at seed " + seed);
+                if (WallSlotTable.isWallSymbol(symbol) || symbol == 'P') continue;
+                assertEquals(legacy.spriteIdOf(symbol), region.spriteIdOf(symbol),
+                        "symbol '" + symbol + "' drifted from the base palette for set " + setId);
             }
         }
-        // Across seeds the base wall actually varies (the alternates are used, not just the default).
-        assertTrue(observed.size() > 1, "base wall never varied across 200 seeds: " + observed);
-        assertTrue(baseWalls.containsAll(observed), "an unexpected base wall was chosen: " + observed);
-        // Legacy itself is unchanged — hand levels keep the default plain wall.
-        assertEquals("wall_plain", legacy.spriteIdOf('x'));
     }
 
     @Test
-    void generatedBaseWallSpriteIsAlwaysRealizableAndPlainIsNotAssumed() {
-        // Regression guard for the startup crash: WallRenderer defaults its wall array to the level's BASE
-        // WALL sprite, which MUST be in the palette's realized sprite set. It must NOT assume "wall_plain"
-        // is realized — once 'x' varies to an alternate base wall, "wall_plain" is no longer referenced by
-        // the level and EnvironmentTextureSet.textureFor("wall_plain") would throw (the crash). This test
-        // proves (a) the base-wall sprite is always among distinctSpriteIds (safe to realize), and (b) on
-        // many seeds "wall_plain" is genuinely absent — so hardcoding it as the default is a bug.
-        int seedsWherePlainAbsent = 0;
-        for (long seed = 0; seed < 300; seed++) {
-            LevelPalette generated = LevelPalettes.generatedWithBaseWall(seed);
-            String baseWallSprite = generated.spriteIdOf('x');
-            assertNotNull(baseWallSprite);
-            assertTrue(generated.distinctSpriteIds().contains(baseWallSprite),
-                    "base wall " + baseWallSprite + " not realizable at seed " + seed);
-            if (!"wall_plain".equals(baseWallSprite)
-                    && !generated.distinctSpriteIds().contains("wall_plain")) {
-                seedsWherePlainAbsent++;
+    void regionPaletteBindsEveryWallSymbolToAFaceOfItsOwnSet() {
+        // The guard "every wall symbol resolves to a registered sprite", per region set (series rule W10):
+        // the renderer realizes faces from the floor's atlas, so a wall bound outside the set would be a
+        // missing wall. Every wall symbol is a WALL bound to one of the set's wall ids; 'P' to a set column.
+        RegionWallSetRegistry sets = RegionWallSets.registry();
+        for (String setId : sets.ids()) {
+            RegionWallSet set = sets.resolve(setId);
+            LevelPalette region = RegionPaletteBuilder.build(set, LevelPalettes.legacy());
+            for (char symbol : WallSlotTable.symbols().toCharArray()) {
+                String spriteId = region.spriteIdOf(symbol);
+                assertNotNull(spriteId, setId + " leaves '" + symbol + "' unbound");
+                assertEquals(TileCategory.WALL, region.categoryOf(symbol));
+                assertTrue(set.allWallIds().contains(spriteId),
+                        setId + " binds '" + symbol + "' to " + spriteId + ", outside its set");
             }
+            assertEquals(TileCategory.COLUMN, region.categoryOf('P'));
+            assertTrue(set.columnIds().contains(region.spriteIdOf('P')));
         }
-        assertTrue(seedsWherePlainAbsent > 0,
-                "expected some generated levels to omit wall_plain from the realized set");
-        // The legacy (hand-level) palette always keeps wall_plain realizable.
-        assertTrue(LevelPalettes.legacy().distinctSpriteIds().contains("wall_plain"));
     }
 
     @Test
@@ -107,7 +88,8 @@ class LevelPaletteTest {
     @Test
     void legacyBindsEveryRegisteredEnvironmentSprite() {
         // The palette must cover the whole art catalog: every sprite id in the registry appears as some
-        // symbol's binding, so no sprite is stranded and every symbol resolves to a real registered id.
+        // symbol's binding, so no sprite is stranded and every symbol resolves to a real registered id. Walls
+        // and 'P' resolve to region set A instead (generated-wall-art order 2).
         LevelPalette legacy = LevelPalettes.legacy();
         EnvironmentSpriteRegistry registry = TilesetRegistries.sprites();
 
@@ -118,13 +100,18 @@ class LevelPaletteTest {
             if (spriteId == null) {
                 continue;
             }
+            if (WallSlotTable.isWallSymbol(candidate) || candidate == 'P') {
+                assertTrue(legacy.spriteIdOf(candidate).startsWith("wall_a_")
+                        || legacy.spriteIdOf(candidate).startsWith("column_a_"));
+                continue;
+            }
             boundSymbols++;
             assertTrue(registry.contains(spriteId),
                     "legacy bound '" + candidate + "' to unregistered sprite " + spriteId);
             boundSpriteIds.add(spriteId);
         }
         // One symbol per sprite (a 1:1 legacy table), covering the full registry EXCEPT the order-8
-        // variety-only art (e.g. "column_square") that no legacy symbol maps to.
+        // variety-only art that no legacy symbol maps to (none since walls left the catalog).
         int legacyCatalogSize = registry.size() - TilesetRegistries.VARIETY_ONLY_SPRITE_IDS.size();
         assertEquals(legacyCatalogSize, boundSymbols);
         assertEquals(legacyCatalogSize, boundSpriteIds.size());

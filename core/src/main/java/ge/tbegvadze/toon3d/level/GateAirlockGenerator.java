@@ -24,8 +24,8 @@ import java.util.Random;
 public class GateAirlockGenerator implements ILevelGenerator {
 
     private final Random random;
-    // Raw floor seed, kept for deterministic per-level BASE-WALL selection (independent of `random`,
-    // so it never perturbs the generated grid). See LevelPalettes.generatedWithBaseWall.
+    // Raw floor seed: the LevelFinisher's own wall-dressing stream derives from it (independent of
+    // `random`, so it never perturbs the generated grid). See LevelFinisher.
     private final long   seed;
 
     // The floor's config (balance-overhaul order 2): the node's supply spec, the carried ammo types and
@@ -114,7 +114,9 @@ public class GateAirlockGenerator implements ILevelGenerator {
                 enemySpawnPoints, new FloorPopulator.EncounterFacts(-1, 0f, 0f, 0, 0), config,
                 FloorPopulator.specOf(config, ge.tbegvadze.toon3d.route.RouteNodeType.REGION_GATE), dungeonDepth, seed);
         return populated.attachTo(new Level(grid, populated.spawnPoints, populated.weaponSpawnPoints,
-                         LevelPalettes.generatedWithBaseWall(seed)));
+                         LevelFinisher.request(grid, seed).config(config)
+                                 .floorGroup(ge.tbegvadze.toon3d.tileset.WallGroup.SECURITY)
+                                 .basePalette(LevelPalettes.legacy()).finish()));
     }
 
     /** Carves an inclusive rectangle of lit floor 'l'. */

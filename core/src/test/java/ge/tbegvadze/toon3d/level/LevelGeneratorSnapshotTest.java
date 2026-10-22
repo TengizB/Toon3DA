@@ -156,8 +156,13 @@ class LevelGeneratorSnapshotTest {
     // SPAWN_POOL (minSpawnDepth 1), so the chaff roulette draws differently from floor 1 and every generated
     // roster, spawn tile and later RNG-consuming pass moved; pricing its death splash into its TP (CP3) moved the
     // planner's budget arithmetic again. A deliberate change.
+    // RE-BASELINE (generated-wall-art order 2 — REGION WALL SETS): wall SYMBOLS change by design. The
+    // generators no longer dress walls; the LevelFinisher stamps each room's family (P2/P3) and the hall
+    // placement (P4-P9) from the floor's region set on its own seeded stream. The walkable mask and every
+    // fixed symbol are unchanged for every seed (R1, proven separately over 200 seeds x every generator x
+    // depths 1-25 — see .claude/checkpoints/generated-wall-art-order-2.md). Stable across two JVM runs.
     private static final String EXPECTED_DIGEST =
-            "62efb6fbf3d7c64b515977ef6d1b979c2e903aa79ab0477e1581e37cbd05e633";
+            "f00a581da9550a16febf055bb6d2916b308482f81d20c15de9a12f4d2591828e";
 
     @Test
     void generatedGridsAreByteForByteStableAcrossSeedsAndDepths() {

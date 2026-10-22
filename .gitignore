@@ -167,3 +167,7 @@ Thumbs.db
 **/resource-config.json
 javac.*.args
 .claude/worktrees/
+
+# Runtime caches of procedurally synthesised sound (written by the game at launch; never assets)
+assets/game-audio/
+assets/story-audio/

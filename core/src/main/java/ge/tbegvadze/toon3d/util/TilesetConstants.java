@@ -15,50 +15,13 @@ package ge.tbegvadze.toon3d.util;
  * matching sprite id lives in the environment-sprite registry (order-1). The chars here mirror
  * {@code Level}'s predicates and {@code TilesetRegistries}'s registration order, minus the fixed
  * exceptions called out in {@link #FIXED_SPRITE_SYMBOLS}.
+ *
+ * <p>Walls and the column are not in the partition (generated-wall-art order 2): a wall symbol names a SLOT of
+ * the floor's region wall set — see {@link #WALL_SLOT_TABLE} and the REGION WALL SETS block below.
  */
 public final class TilesetConstants {
 
     private TilesetConstants() {}
-
-    // ── FIXED WALL (the plain-wall default) ──────────────────────────────────────────────────────
-    // 'x' is the 80-90% default wall and every hand-crafted level leans on it heavily; it stays a
-    // FIXED WALL slot permanently bound to "wall_plain" so generic corridors always read the same and
-    // existing hand levels render their bulk walls unchanged. Flexibility applies to the ACCENT walls.
-    /** The single plain-wall symbol, permanently bound to {@link #FIXED_WALL_SPRITE_ID}. */
-    public static final String FIXED_WALL_SYMBOL    = "x";
-    /**
-     * The DEFAULT sprite 'x' is bound to (registered in order-1's wall pool). Hand-crafted levels and the
-     * legacy palette always render 'x' as this. GENERATED levels may instead pick one of the alternate
-     * base walls below, seeded from the floor seed (see {@link #BASE_WALL_ALTERNATE_SPRITE_IDS}).
-     */
-    public static final String FIXED_WALL_SPRITE_ID = "wall_plain";
-
-    /**
-     * Extra base-wall sprites (beyond {@link #FIXED_WALL_SPRITE_ID}) the per-level allocator may pick for
-     * the bulk wall symbol 'x' on GENERATED levels, so two seeds no longer share one base wall — the fix
-     * for "every level looks the same". Each carries a distinct FACILITY IDENTITY (material + hue) and is
-     * LIGHT, not gray: "wall_plain_sandstone" (a warm sandstone-block facility), "wall_plain_clean" (a
-     * bright clinical-lab facility), and "wall_plain_tiled" (a sage/teal glazed ceramic-tile facility).
-     * Comma-separated stable sprite ids, all registered in the WALL pool
-     * with their own procedural texture generators (and listed in
-     * {@code TilesetRegistries.VARIETY_ONLY_SPRITE_IDS}, since no legacy symbol maps to them). Together
-     * with {@link #FIXED_WALL_SPRITE_ID} these form the ordered base-wall candidate list the allocator
-     * rolls against. Adding another base wall is: register the sprite + generator, then append its id here.
-     * Hand-crafted / legacy levels ignore this list entirely and keep {@link #FIXED_WALL_SPRITE_ID}.
-     */
-    public static final String BASE_WALL_ALTERNATE_SPRITE_IDS =
-            "wall_plain_sandstone,wall_plain_clean,wall_plain_tiled";
-
-    // ── FLEXIBLE slots (category fixed, sprite assigned per level by the allocator, order-4) ──────
-    /**
-     * Reassignable WALL accent symbols — every {@code Level.isWall} char EXCEPT the plain 'x'. Includes
-     * the three STELLAR_OBSERVATORY walls ('"' viewport, ''' magrail, '`' hull plate); the allocator
-     * keeps room-contained art in its room via the sprite theme tags, not via this budget.
-     */
-    public static final String FLEXIBLE_WALL_SYMBOLS      = "cvtwhjGkNQSMZUXDF\"'`";
-
-    /** Reassignable COLUMN symbol: 'P'. Its MEANING (column) is fixed; the filling sprite is flexible. */
-    public static final String FLEXIBLE_COLUMN_SYMBOLS    = "P";
 
     /**
      * Reassignable SOLID_PROP decoration symbols — every {@code Level.isPropSolid} char EXCEPT the
@@ -94,4 +57,44 @@ public final class TilesetConstants {
      * allocator ships.
      */
     public static final long PALETTE_SEED_SALT = 0x7011_5E7_ADA_C0DEL;
+
+    // ── REGION WALL SETS (generated-wall-art order 2) ─────────────────────────────────────────────
+    // A wall symbol no longer names a picture: it names a SLOT (group + slot), and the floor's region
+    // wall set names the picture. The 21 wall symbols cover the slots exactly (guide section 6.4; the
+    // master idea's SYMBOL TABLE). One entry per symbol, ';'-separated: "<symbol> <WallGroup> <WallSlot>".
+    // Parsed once by tileset/WallSlotTable. Every symbol stays a WALL (Level.isWall) exactly as before.
+    public static final String WALL_SLOT_TABLE =
+            "x HALL BASE;k HALL STRUCTURE;S HALL LIGHT;c HALL SERVICE;' HALL VENT;h HALL MARKER;G HALL BREACH;"
+          + "M MEDICAL BASE;Q MEDICAL ACCENT;X SECURITY BASE;w SECURITY ACCENT;"
+          + "Z CONTAINMENT BASE;N CONTAINMENT ACCENT;U MACHINERY BASE;j MACHINERY ACCENT;"
+          + "t RESEARCH BASE;D RESEARCH ACCENT;v STORAGE BASE;\" STORAGE ACCENT;"
+          + "F SIGNATURE BASE;` SIGNATURE ACCENT";
+
+    /** The column symbol; its pictures (round / square) come from the floor's region set. */
+    public static final char WALL_SET_COLUMN_SYMBOL = 'P';
+    /** The four door symbols, in the order of {@link #WALL_SET_DOOR_KIND_TOKENS}. */
+    public static final String WALL_SET_DOOR_SYMBOLS = "dRYB";
+    /** Door id tokens (door_&lt;letter&gt;_&lt;token&gt;, guide section 12), one per door symbol. */
+    public static final String WALL_SET_DOOR_KIND_TOKENS = "plain,red,yellow,blue";
+    /** Column id tokens (column_&lt;letter&gt;_&lt;token&gt;), in registry order. */
+    public static final String WALL_SET_COLUMN_KIND_TOKENS = "round,square";
+
+    // Region wall set ids = the manifest's "region" value and the file stem under
+    // assets/textures/walls/generated/ (<id>.walls.json / .walls.png / .glow.png / .floor.png / .ceiling.png).
+    public static final String WALL_SET_OUTER_FACILITY = "outer_facility";
+    public static final String WALL_SET_RESEARCH_WING  = "research_wing";
+    public static final String WALL_SET_REACTOR_DEPTHS = "reactor_depths";
+    public static final String WALL_SET_THE_BREACH     = "the_breach";
+    public static final String WALL_SET_THE_CORE       = "the_core";
+    /** The set every floor falls back to (start room, hand-made levels, a set that fails to load: R7). */
+    public static final String WALL_SET_DEFAULT        = WALL_SET_OUTER_FACILITY;
+
+    /** Where the shipped region set files live (internal asset path, trailing slash). */
+    public static final String WALL_SET_ASSET_DIRECTORY = "textures/walls/generated/";
+
+    /**
+     * Salt of the level finisher's own random stream (GameMath.wallSetSeed): the placement rules P1-P9
+     * never draw from the generator's java.util.Random, so layout, spawns and supply stay untouched (R1).
+     */
+    public static final long WALL_SET_SEED_SALT = 0x3A11_5E75_EED5_A17EL;
 }

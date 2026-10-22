@@ -7,7 +7,7 @@ import java.util.Objects;
  * FEEL like moving through a changing facility rather than a reskinned treadmill. Where
  * {@link RegionSpec} owns a region's DISTRIBUTION biases (which node types and generators the roll
  * leans toward), this owns its THEMING and AMBIENCE: the crest and overlay tint the render layer
- * draws, the wall palette its generators lean on, the enemy faction that dominates, the ambience
+ * draws, the region wall set its floors are built from, the enemy faction that dominates, the ambience
  * hooks the audio + red-alert systems read later, the boss that closes the region, and the
  * REGION_GATE announce flavour.
  *
@@ -26,7 +26,7 @@ public final class RegionAmbience {
     private final String displayName;
     private final String crestPainterId;
     private final String overlayThemeId;
-    private final String wallPalette;
+    private final String wallSetId;
     private final String enemyFactionId;
     private final String lightingMoodId;
     private final String musicId;
@@ -39,7 +39,7 @@ public final class RegionAmbience {
         this.displayName       = Objects.requireNonNull(builder.displayName, "displayName");
         this.crestPainterId    = Objects.requireNonNull(builder.crestPainterId, "crestPainterId");
         this.overlayThemeId    = Objects.requireNonNull(builder.overlayThemeId, "overlayThemeId");
-        this.wallPalette       = Objects.requireNonNull(builder.wallPalette, "wallPalette");
+        this.wallSetId       = Objects.requireNonNull(builder.wallSetId, "wallSetId");
         this.enemyFactionId    = Objects.requireNonNull(builder.enemyFactionId, "enemyFactionId");
         this.lightingMoodId    = Objects.requireNonNull(builder.lightingMoodId, "lightingMoodId");
         this.musicId           = Objects.requireNonNull(builder.musicId, "musicId");
@@ -68,9 +68,9 @@ public final class RegionAmbience {
         return overlayThemeId;
     }
 
-    /** The wall symbols (from {@code docs/tile-symbols.txt}) this act's generators lean on. */
-    public String wallPalette() {
-        return wallPalette;
+    /** The region wall set id (tileset/RegionWallSets) this act's floors are built from (wall-art order 2). */
+    public String wallSetId() {
+        return wallSetId;
     }
 
     /** The enemy faction id that dominates this act's spawns (descriptive hook for EnemyManager). */
@@ -114,7 +114,7 @@ public final class RegionAmbience {
         private String displayName;
         private String crestPainterId;
         private String overlayThemeId;
-        private String wallPalette;
+        private String wallSetId;
         private String enemyFactionId;
         private String lightingMoodId;
         private String musicId;
@@ -144,8 +144,8 @@ public final class RegionAmbience {
             return this;
         }
 
-        public Builder wallPalette(String wallPalette) {
-            this.wallPalette = wallPalette;
+        public Builder wallSetId(String wallSetId) {
+            this.wallSetId = wallSetId;
             return this;
         }
 

@@ -567,8 +567,6 @@ public final class LevelGenConstants {
     public static final int   MED_BAY_APPROACH_HALF_WIDTH = 1; // 2*half+1 = 3 tiles wide
     // Square cryo-pod alcove carved off the ward (top and/or bottom), floor side length.
     public static final int   MED_BAY_ALCOVE_SIZE       = 4;
-    // Width (columns) of the 'N' reinforced-glass viewing window band on the ward's top wall.
-    public static final int   MED_BAY_WINDOW_WIDTH      = 4;
 
     // -------------------------------------------------------------------------
     // EVENT ROOM (route-map order-10) — the bespoke small curated narrative room
@@ -754,4 +752,43 @@ public final class LevelGenConstants {
     public static final float LEVEL_GEN_GENERIC_ACCENT_ROOM_CHANCE  = 0.60f; // chance a generic room gets an accent theme
     public static final float LEVEL_GEN_GENERIC_ACCENT_WALL_CHANCE  = 0.14f; // per perimeter wall tile, if themed
     public static final float LEVEL_GEN_CORRIDOR_ACCENT_WALL_CHANCE = 0.05f; // per corridor-context wall tile
+
+    // ── REGION WALL SETS: THE PLACEMENT RULES P1-P9 (generated-wall-art order 2; guide section 7) ──
+    // The LevelFinisher dresses every floor's walls by rule on its OWN seeded stream (GameMath.wallSetSeed),
+    // never the generator's, so layout, spawns and supply are untouched (R1). Only exposed walls (a walkable
+    // 4-neighbour) are dressed and only a wall symbol ever replaces a wall symbol (P8).
+    /** P2: a room's ACCENT appears on this many tiles at least (the wall facing the entrance first). */
+    public static final int   WALL_SET_ROOM_ACCENT_MIN          = 1;
+    /** P2: ... and at most this many. */
+    public static final int   WALL_SET_ROOM_ACCENT_MAX          = 3;
+    /** Edge case: a room whose interior is narrower than this gets at most one ACCENT and no P4 rhythm. */
+    public static final int   WALL_SET_TINY_ROOM_INTERIOR       = 3;
+    /** P4: a straight exposed hall run this long or longer gets the STRUCTURE rhythm. */
+    public static final int   WALL_SET_RHYTHM_MIN_RUN           = 5;
+    /** P4: every Nth tile of such a run is STRUCTURE (phase seeded per run). */
+    public static final int   WALL_SET_RHYTHM_PERIOD            = 4;
+    /** P5: no exposed hall run of this many tiles without a LIGHT. */
+    public static final int   WALL_SET_LIGHT_MAX_GAP            = 7;
+    /** P6: SERVICE / VENT cover this fraction of the remaining hall base, at least ... */
+    public static final float WALL_SET_VARIETY_MIN_FRACTION     = 0.06f;
+    /** P6: ... and at most. */
+    public static final float WALL_SET_VARIETY_MAX_FRACTION     = 0.10f;
+    /** P6 / P7: a variety or breach cluster is 1..this many tiles along a run. */
+    public static final int   WALL_SET_CLUSTER_MAX              = 3;
+    /** P6: MARKER walls per floor, at least ... */
+    public static final int   WALL_SET_MARKER_MIN               = 1;
+    /** P6: ... and at most (one near the arrival point, one near the exit, then anywhere). */
+    public static final int   WALL_SET_MARKER_MAX               = 3;
+    /** P6: "near" the arrival point / the exit, in tiles (Chebyshev). */
+    public static final int   WALL_SET_MARKER_NEAR_TILES        = 6;
+    /** P3: caverns weight BREACH up by this much hall density on top of P7. */
+    public static final float WALL_SET_CAVERN_BREACH_BONUS      = 0.04f;
+    /** P9: two FOCAL walls keep at least this many tiles between them along a run (never adjacent). */
+    public static final int   WALL_SET_FOCAL_MIN_GAP            = 2;
+    /** P9: the SAME focal wall keeps at least this many tiles between copies. */
+    public static final int   WALL_SET_FOCAL_SAME_MIN_GAP       = 4;
+    /** P7 region A (outer_facility): hall breach density on the region's first floor (manifest "breach.base"). */
+    public static final float WALL_SET_A_BREACH_BASE            = 0.0f;
+    /** P7 region A: density added per floor into the region (manifest "breach.step"). */
+    public static final float WALL_SET_A_BREACH_STEP            = 0.03f;
 }

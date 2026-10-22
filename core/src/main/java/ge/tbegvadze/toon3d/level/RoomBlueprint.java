@@ -1,6 +1,7 @@
 package ge.tbegvadze.toon3d.level;
 
 import ge.tbegvadze.toon3d.tileset.RoomSymbolDemand;
+import ge.tbegvadze.toon3d.tileset.WallGroup;
 
 /**
  * A registered, self-describing room — the ROOM extensibility layer of the symbol/sprite-reuse series
@@ -64,6 +65,12 @@ public interface RoomBlueprint {
      * variety cannot overwrite the room's signature look; an absent room contributes no demand, freeing
      * its symbols. GENERIC rooms return an empty demand.
      */
+    /**
+     * The wall family this room is built from (generated-wall-art order 2, rule P2): the LevelFinisher
+     * stamps its region set's room BASE on the perimeter and its ACCENT on 1-3 tiles. HALL = no room set.
+     */
+    WallGroup wallGroup();
+
     RoomSymbolDemand symbolDemand();
 
     /**

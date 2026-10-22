@@ -23,13 +23,7 @@ import java.util.TreeSet;
  * <p>THE ALGORITHM (see docs/environment-tileset-system.txt § Allocation for the prose spec):
  * <ol>
  *   <li><b>Step 1 — FIXED bindings.</b> Every {@link SymbolBudget#fixedAssignments() fixed} sprite symbol
- *       ('@' → "prop_vendor", …) is bound verbatim and never rolled — EXCEPT the bulk wall symbol 'x',
- *       handled in Step 1b.</li>
- *   <li><b>Step 1b — BASE-WALL variety.</b> The bulk wall symbol 'x' resolves to one of the registered
- *       base walls (the default OR an alternate) chosen deterministically from the floor seed, so two
- *       seeds no longer share one base wall. It stays a base wall (WALL category, never an accent); hand
- *       / legacy levels keep the default because they use {@link LevelPalettes#legacy()}, not this
- *       allocator.</li>
+ *       ('@' → "prop_vendor") is bound verbatim and never rolled.</li>
  *   <li><b>Step 2 — RESERVE for placed rooms.</b> Each placed {@link RoomSymbolDemand}'s required symbols
  *       are bound to their required sprites and marked consumed so variety cannot overwrite them. A clash
  *       (two placed rooms wanting the same symbol for different sprites) is resolved by handing the second
@@ -51,13 +45,13 @@ import java.util.TreeSet;
  *   <li><b>R3 ANTI-REPETITION</b> — within one category on one level, two symbols avoid the same sprite
  *       unless the eligible pool is smaller than the slot count (then repeats are allowed,
  *       deterministically).</li>
- *   <li><b>R4 PLAIN-WALL FLOOR</b> — 'x' is bound to a base wall in Step 1b (the default OR an alternate,
- *       never an accent sprite), so accent variety only ever decorates the accent walls and corridors
- *       stay legible; the base wall merely varies which plain material fills the bulk.</li>
  *   <li><b>R5 DEPTH INFLUENCE</b> — deeper levels add a mild weight to {@code PALETTE_HARSH_THEME_TAGS}
  *       sprites, driven entirely by {@link GameBalance}.</li>
  * </ul>
  * All rules read registered data (tags, weights) — the allocator never switches on a specific char.
+ *
+ * <p>Props and decals only: since generated-wall-art order 2 walls and the column are not allocated — the
+ * LevelFinisher dresses them from the floor's region wall set (see {@link RegionPaletteBuilder}).
  */
 public final class SymbolAllocator {
 
@@ -89,27 +83,12 @@ public final class SymbolAllocator {
         Map<Character, String> boundSpriteBySymbol = new HashMap<>();
         Map<TileCategory, Set<String>> usedByCategory = new HashMap<>();
 
-        // Step 1 — FIXED bindings (never rolled), EXCEPT the bulk wall symbol 'x', which gets per-level
-        // BASE-WALL variety in Step 1b. Handling 'x' there (instead of binding its default here) keeps
-        // exactly one base-wall sprite recorded in usedByCategory, so anti-repetition (R3) treats the
-        // chosen base wall — not the unused default — as the spent WALL sprite.
-        char baseWallSymbol = budget.baseWallSymbol();
+        // Step 1 — FIXED bindings (never rolled).
         for (Map.Entry<Character, String> assignment : budget.fixedAssignments().entrySet()) {
-            char symbol = assignment.getKey();
-            if (symbol == baseWallSymbol) {
-                continue; // bound in Step 1b
-            }
             String spriteId = assignment.getValue();
             TileCategory category = registry.get(spriteId).category();
-            bind(paletteBuilder, boundSpriteBySymbol, usedByCategory, symbol, category, spriteId);
+            bind(paletteBuilder, boundSpriteBySymbol, usedByCategory, assignment.getKey(), category, spriteId);
         }
-
-        // Step 1b — BASE-WALL VARIETY. The bulk wall symbol resolves per level to one of the registered
-        // base walls (default OR an alternate), seeded from the floor seed so two seeds no longer share
-        // one base wall — the fix for "every generated level looks the same". Deterministic: same seed ⇒
-        // same base wall. It stays a base wall (WALL category, never an accent), and hand/legacy levels
-        // never reach here (they use LevelPalettes.legacy()), so their bulk walls are unchanged.
-        bindBaseWall(request, paletteBuilder, boundSpriteBySymbol, usedByCategory);
 
         // Step 2 — RESERVE the sprites required by every PLACED signature room.
         for (RoomSymbolDemand demand : request.placedRoomDemands()) {
@@ -138,50 +117,6 @@ public final class SymbolAllocator {
 
         // Step 4 — freeze.
         return paletteBuilder.build();
-    }
-
-    // Step 1b helper: bind the bulk wall symbol to a seed-chosen base wall via chooseBaseWall (below).
-    private static void bindBaseWall(SymbolAllocationRequest request,
-                                     LevelPalette.Builder paletteBuilder,
-                                     Map<Character, String> boundSpriteBySymbol,
-                                     Map<TileCategory, Set<String>> usedByCategory) {
-        SymbolBudget budget = request.budget();
-        EnvironmentSpriteRegistry registry = request.registry();
-        String chosen = chooseBaseWall(request.levelSeed(), budget, registry);
-        if (chosen == null) {
-            // Degenerate: not even the default base wall is registered in this registry. Leave the symbol
-            // unbound rather than call registry.get() on a missing id.
-            return;
-        }
-        TileCategory category = registry.get(chosen).category();
-        bind(paletteBuilder, boundSpriteBySymbol, usedByCategory, budget.baseWallSymbol(), category, chosen);
-    }
-
-    /**
-     * Picks the base-wall sprite id for a level from its seed — the SINGLE source of truth for base-wall
-     * selection, shared by the full allocator (Step 1b) and every other generator via
-     * {@link LevelPalettes#generatedWithBaseWall(long)}. It filters the budget's ordered base-wall
-     * candidates ({@link SymbolBudget#baseWallSpriteIds()}) to the ids actually registered, then rolls one
-     * with a dedicated per-symbol RNG stream (GameMath.paletteSymbolSeed(levelSeed, baseWallSymbol)) that is
-     * INDEPENDENT of a generator's own {@code Random}, so choosing a base wall never perturbs the generated
-     * grid. Pure and deterministic: same (seed, budget, registry) ⇒ same id. With a single registered
-     * candidate the pick is forced (reproduces the historic fixed base wall). Returns {@code null} only when
-     * no base wall — not even the default — is registered, so callers can leave the symbol on its existing
-     * binding.
-     */
-    public static String chooseBaseWall(long levelSeed, SymbolBudget budget,
-                                        EnvironmentSpriteRegistry registry) {
-        List<String> candidates = new ArrayList<>();
-        for (String spriteId : budget.baseWallSpriteIds()) {
-            if (registry.contains(spriteId)) {
-                candidates.add(spriteId);
-            }
-        }
-        if (candidates.isEmpty()) {
-            return null;
-        }
-        PaletteRng rng = new PaletteRng(GameMath.paletteSymbolSeed(levelSeed, budget.baseWallSymbol()));
-        return candidates.get(rng.nextIntInclusive(0, candidates.size() - 1));
     }
 
     // Binds one symbol and records it in the local mirrors so later steps see it as consumed.

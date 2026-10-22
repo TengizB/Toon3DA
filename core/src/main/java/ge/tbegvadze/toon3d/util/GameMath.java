@@ -1728,6 +1728,126 @@ public final class GameMath {
     }
 
     // =========================================================================
+    // REGION WALL SETS — placement seed, per-face variant, distance LOD, glow fade, glow frames
+    // (generated-wall-art order 2)
+    // =========================================================================
+    /*
+     * Formula: wallSetSeed
+     * Derivation / explanation:
+     *   The level finisher (P1-P9) dresses walls on its OWN random stream so the generator's sequence is
+     *   never touched (rule R1: layout, spawns and supply stay byte-identical). The seed is the
+     *   paletteSymbolSeed derivation with a different salt (TilesetConstants.WALL_SET_SEED_SALT) and the
+     *   fixed key 1:
+     *     mixed = levelSeed ^ WALL_SET_SEED_SALT
+     *     mixed = mixed * 0x9E3779B97F4A7C15 + 1
+     *   It seeds a splitMix64-finalised cursor (tileset PaletteRng), the same shape the allocator uses.
+     * Edge cases:
+     *   levelSeed = 0 still mixes in the salt, so the stream is not degenerate; long overflow wraps,
+     *   which is what a hash mixer wants. A different salt from PALETTE_SEED_SALT keeps the two streams
+     *   uncorrelated for the same floor.
+     */
+    public static long wallSetSeed(long levelSeed) {
+        long mixed = levelSeed ^ TilesetConstants.WALL_SET_SEED_SALT;
+        mixed = mixed * 0x9E3779B97F4A7C15L + 1L;
+        return mixed;
+    }
+
+    /*
+     * Formula: wallVariantIndex
+     * Derivation / explanation:
+     *   A BASE wall slot carries several variants; the renderer picks one per tile FACE as a pure hash,
+     *   so the choice never pops while turning and replays identically for a seed (rule R6):
+     *     key   = seed * 0x9E3779B97F4A7C15 + column
+     *     key   = key  * 0x9E3779B97F4A7C15 + row
+     *     key   = key  * 0x9E3779B97F4A7C15 + side
+     *     index = (splitMix64(key) >>> 1) mod variantCount
+     *   side distinguishes the four faces of one wall tile (0 = west, 1 = east, 2 = south, 3 = north),
+     *   so a corner tile seen from two halls may show two different variants, as two real panels would.
+     * Edge cases:
+     *   variantCount <= 1 returns 0 (no division). The >>> 1 drops the sign bit so the modulo is
+     *   non-negative. Negative columns/rows (never produced by the grid) still hash deterministically.
+     */
+    public static int wallVariantIndex(int tileColumn, int tileRow, int side, long seed, int variantCount) {
+        if (variantCount <= 1) return 0;
+        long key = seed * 0x9E3779B97F4A7C15L + tileColumn;
+        key = key * 0x9E3779B97F4A7C15L + tileRow;
+        key = key * 0x9E3779B97F4A7C15L + side;
+        return (int) ((splitMix64(key) >>> 1) % variantCount);
+    }
+
+    /*
+     * Formula: wallMipLevel
+     * Derivation / explanation:
+     *   A wall face is faceSize texels tall and is drawn as a stripe lineHeight units tall, so one screen
+     *   unit covers texelsPerPixel = faceSize / lineHeight texels. Nearest sampling of more than one texel
+     *   per unit aliases (shimmer while turning, lesson 15.12), so each halving of the source (mip m has
+     *   faceSize >> m texels) is chosen once texelsPerPixel x bias reaches 2^m:
+     *     mip = clamp(floor(log2(max(1, texelsPerPixel x bias))), 0, maxMip)
+     *   floor(log2(x)) is the number of exact halvings that keep x >= 2, counted up to maxMip (no
+     *   Math.log per screen column; halving by 0.5 is exact in float, so powers of two land exactly).
+     * Edge cases:
+     *   lineHeight <= 0 (a degenerate stripe) returns maxMip; a near wall (texelsPerPixel < 2, including
+     *   < 1) is mip 0; maxMip < 0 is treated as 0.
+     */
+    public static int wallMipLevel(float lineHeight, int faceSize, float mipBias, int maxMip) {
+        int ceiling = Math.max(0, maxMip);
+        if (lineHeight <= 0f) return ceiling;
+        float texelsPerPixel = faceSize / lineHeight * mipBias;
+        int mip = 0;
+        while (mip < ceiling && texelsPerPixel >= 2f) {
+            texelsPerPixel *= 0.5f;
+            mip++;
+        }
+        return mip;
+    }
+
+    /*
+     * Formula: wallGlowDistanceAlpha
+     * Derivation / explanation:
+     *   Wall emissives are exempt from the depth fog (they are light), but a far lamp should not punch
+     *   through the darkness at full strength. Alpha stays 1 up to fadeStart tiles, then falls linearly
+     *   to minAlpha at fadeEnd and holds:
+     *     t     = clamp((distance - fadeStart) / (fadeEnd - fadeStart), 0, 1)
+     *     alpha = 1 + (minAlpha - 1) * t
+     * Edge cases:
+     *   fadeEnd <= fadeStart degenerates to a step at fadeStart (no division by zero).
+     */
+    public static float wallGlowDistanceAlpha(float distanceTiles, float fadeStartTiles, float fadeEndTiles,
+                                              float minAlpha) {
+        if (distanceTiles <= fadeStartTiles) return 1f;
+        if (fadeEndTiles <= fadeStartTiles) return minAlpha;
+        float interpolationFactor = Math.min(1f, (distanceTiles - fadeStartTiles) / (fadeEndTiles - fadeStartTiles));
+        return 1f + (minAlpha - 1f) * interpolationFactor;
+    }
+
+    /*
+     * Formula: wallGlowFrameIndex
+     * Derivation / explanation:
+     *   An animated glow cycles frames 0..n-1, frame k shown for durations[k] seconds; the cycle length
+     *   is T = sum(durations). With the world clock time and a per-face phase offset (seconds):
+     *     local = (time + phase) mod T          (taken into [0, T))
+     *     frame = the first k with local < durations[0] + ... + durations[k]
+     * Edge cases:
+     *   frameCount <= 1 or T <= 0 returns 0; a negative (time + phase) wraps into [0, T); float drift at
+     *   the very end of the cycle falls back to the last frame.
+     */
+    public static int wallGlowFrameIndex(float timeSeconds, float phaseSeconds, float[] durationsSeconds,
+                                         int frameCount) {
+        if (frameCount <= 1) return 0;
+        float cycleSeconds = 0f;
+        for (int frameIndex = 0; frameIndex < frameCount; frameIndex++) cycleSeconds += durationsSeconds[frameIndex];
+        if (cycleSeconds <= 0f) return 0;
+        float local = (timeSeconds + phaseSeconds) % cycleSeconds;
+        if (local < 0f) local += cycleSeconds;
+        float accumulated = 0f;
+        for (int frameIndex = 0; frameIndex < frameCount; frameIndex++) {
+            accumulated += durationsSeconds[frameIndex];
+            if (local < accumulated) return frameIndex;
+        }
+        return frameCount - 1;
+    }
+
+    // =========================================================================
     // FLICKER MULTIPLIER — deterministic per-tile brightness oscillator
     // =========================================================================
     /*

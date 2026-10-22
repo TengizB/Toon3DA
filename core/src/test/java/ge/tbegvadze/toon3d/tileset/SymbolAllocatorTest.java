@@ -26,17 +26,21 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * the production registry + {@link SymbolBudget#standard()}. Coherence and anti-repetition need a pool
  * LARGER than the slot count and sprites carrying coherence tags, so they build a purpose-made themed
  * registry (a fresh {@link EnvironmentSpriteRegistry}) while still using the standard budget's symbols.
+ *
+ * <p>generated-wall-art order 2: the allocator no longer binds walls or the column (the LevelFinisher dresses
+ * them from the floor's region wall set), so the rules are exercised on the SOLID_PROP slots, which carry the
+ * same reservation, containment, anti-repetition and coherence behaviour.
  */
 class SymbolAllocatorTest {
 
-    // Coherence-tag vocabulary for the themed registry. WALL sprites carry exactly one of these; every
+    // Coherence-tag vocabulary for the themed registry. SOLID_PROP sprites carry exactly one of these; every
     // other category's sprites stay untagged so the level theme is drawn only from these three.
     private static final String TAG_CLINICAL = "clinical";
     private static final String TAG_INDUSTRIAL = "industrial";
     private static final String TAG_DERELICT = "derelict";
-    // 20 walls per theme (60 accent walls total). Each theme group is >= the 20 accent slots, so a
-    // coherent level can fill the MAJORITY of its accent walls from a single theme — what R1 promises.
-    private static final int WALLS_PER_THEME = 20;
+    // 20 props per theme (60 themed props total). Each theme group is >= the 16 flexible prop slots, so a
+    // coherent level can fill the MAJORITY of its props from a single theme — what R1 promises.
+    private static final int PROPS_PER_THEME = 20;
 
     // ── Determinism ──────────────────────────────────────────────────────────────────────────────
 
@@ -48,7 +52,7 @@ class SymbolAllocatorTest {
 
         SymbolAllocationRequest request = SymbolAllocationRequest.builder(seed, budget, registry)
                 .depth(4)
-                .placedRoom(RoomSymbolDemand.of(Collections.singletonMap('Z', "wall_cryo")))
+                .placedRoom(RoomSymbolDemand.of(Collections.singletonMap('L', "prop_locker")))
                 .build();
 
         LevelPalette first = SymbolAllocator.allocate(request);
@@ -75,55 +79,45 @@ class SymbolAllocatorTest {
     void fixedSymbolsAreNeverRolled() {
         EnvironmentSpriteRegistry registry = productionRegistry();
         SymbolBudget budget = SymbolBudget.standard();
-        Set<String> baseWalls = new HashSet<>(budget.baseWallSpriteIds());
-        // '@' -> prop_vendor is a true fixed sprite for EVERY seed. The bulk wall symbol 'x' is a BASE
-        // WALL that varies per level (Step 1b), so it must always resolve to one of the registered base
-        // walls in the WALL category — never an accent sprite — but not necessarily the same one.
+        // '@' -> prop_vendor is a true fixed sprite for EVERY seed.
         for (long seed = 0; seed < 200; seed++) {
             LevelPalette palette = SymbolAllocator.allocate(
                     SymbolAllocationRequest.builder(seed, budget, registry).build());
             assertEquals("prop_vendor", palette.spriteIdOf('@'), "@ rolled at seed " + seed);
             assertEquals(TileCategory.SOLID_PROP, palette.categoryOf('@'));
-            assertTrue(baseWalls.contains(palette.spriteIdOf('x')),
-                    "x resolved to a non-base wall at seed " + seed + ": " + palette.spriteIdOf('x'));
-            assertEquals(TileCategory.WALL, palette.categoryOf('x'));
         }
     }
 
     @Test
-    void baseWallVariesAcrossSeedsButIsDeterministic() {
+    void allocatorNeverBindsAWallOrTheColumn() {
+        // Walls and 'P' belong to the floor's region wall set (RegionPaletteBuilder), never to the allocator:
+        // across many seeds no wall symbol and no column gets an allocator binding.
         EnvironmentSpriteRegistry registry = productionRegistry();
         SymbolBudget budget = SymbolBudget.standard();
-        // Deterministic: the same seed always yields the same base wall.
-        assertEquals(
-                SymbolAllocator.allocate(SymbolAllocationRequest.builder(7L, budget, registry).build())
-                        .spriteIdOf('x'),
-                SymbolAllocator.allocate(SymbolAllocationRequest.builder(7L, budget, registry).build())
-                        .spriteIdOf('x'));
-        // Varied: across many seeds the base wall is not always the default — the alternates DO get used.
-        Set<String> observed = new HashSet<>();
         for (long seed = 0; seed < 200; seed++) {
-            observed.add(SymbolAllocator.allocate(
-                    SymbolAllocationRequest.builder(seed, budget, registry).build()).spriteIdOf('x'));
+            LevelPalette palette = SymbolAllocator.allocate(
+                    SymbolAllocationRequest.builder(seed, budget, registry).build());
+            for (char symbol : WallSlotTable.symbols().toCharArray()) {
+                assertEquals(null, palette.spriteIdOf(symbol), "allocator bound wall '" + symbol + "'");
+            }
+            assertEquals(null, palette.spriteIdOf('P'), "allocator bound the column");
         }
-        assertTrue(observed.size() > 1,
-                "base wall never varied across 200 seeds; only saw " + observed);
-        assertTrue(new HashSet<>(budget.baseWallSpriteIds()).containsAll(observed),
-                "an unexpected base wall was chosen: " + observed);
     }
 
     @Test
-    void minimalRegistryWithoutAlternatesKeepsDefaultBaseWall() {
-        // A budget whose alternate base walls are NOT registered (e.g. the themed test registry) must
-        // safely fall back to the single available base wall — the allocator filters candidates to the
-        // request's registry, so no registry.get() on a missing id and no crash.
+    void registryWithoutAnyWallOrColumnSpriteAllocates() {
+        // The catalog no longer holds walls or columns; a registry with none must allocate every flexible
+        // prop and decal slot without touching a missing id.
         EnvironmentSpriteRegistry registry = themedRegistry();
         SymbolBudget budget = SymbolBudget.standard();
+        assertTrue(registry.allInCategory(TileCategory.WALL).isEmpty());
+        assertTrue(registry.allInCategory(TileCategory.COLUMN).isEmpty());
         for (long seed = 0; seed < 50; seed++) {
             LevelPalette palette = SymbolAllocator.allocate(
                     SymbolAllocationRequest.builder(seed, budget, registry).build());
-            assertEquals("wall_plain", palette.spriteIdOf('x'),
-                    "base wall should stay the only registered candidate at seed " + seed);
+            for (char propSymbol : budget.flexibleSlots().get(TileCategory.SOLID_PROP)) {
+                assertNotNull(palette.spriteIdOf(propSymbol), "prop '" + propSymbol + "' unbound at seed " + seed);
+            }
         }
     }
 
@@ -134,50 +128,51 @@ class SymbolAllocatorTest {
         EnvironmentSpriteRegistry registry = productionRegistry();
         SymbolBudget budget = SymbolBudget.standard();
         SymbolAllocationRequest request = SymbolAllocationRequest.builder(42L, budget, registry)
-                .placedRoom(RoomSymbolDemand.of(Collections.singletonMap('Z', "wall_cryo")))
+                .placedRoom(RoomSymbolDemand.of(Collections.singletonMap('T', "prop_terminal")))
                 .build();
         LevelPalette palette = SymbolAllocator.allocate(request);
-        assertEquals("wall_cryo", palette.spriteIdOf('Z'));
-        assertEquals(TileCategory.WALL, palette.categoryOf('Z'));
+        assertEquals("prop_terminal", palette.spriteIdOf('T'));
+        assertEquals(TileCategory.SOLID_PROP, palette.categoryOf('T'));
     }
 
     @Test
     void absentRoomFreesSymbolForVariety() {
-        // The core freed-symbol test: with a room reserving 'Z' it renders that room's sprite; WITHOUT
-        // the room, 'Z' is free and gets a generic variety WALL sprite instead. Reservation must also be
-        // able to override what variety would otherwise pick — proven by demanding a DIFFERENT sprite.
-        EnvironmentSpriteRegistry registry = productionRegistry();
+        // The core freed-symbol test: with a room reserving 'T' it renders that room's sprite; WITHOUT
+        // the room, 'T' is free and gets a generic variety SOLID_PROP sprite instead. Reservation must also be
+        // able to override what variety would otherwise pick — proven by demanding a DIFFERENT sprite. The
+        // themed registry's prop pool exceeds the slots, so a consumed sprite can never be repeated.
+        EnvironmentSpriteRegistry registry = themedRegistry();
         SymbolBudget budget = SymbolBudget.standard();
         long seed = 12345L;
 
         LevelPalette free = SymbolAllocator.allocate(
                 SymbolAllocationRequest.builder(seed, budget, registry).build());
-        String freeSprite = free.spriteIdOf('Z');
-        assertNotNull(freeSprite, "freed 'Z' should still get a variety sprite");
-        assertEquals(TileCategory.WALL, free.categoryOf('Z'));
-        assertEquals(TileCategory.WALL, registry.get(freeSprite).category());
+        String freeSprite = free.spriteIdOf('T');
+        assertNotNull(freeSprite, "freed 'T' should still get a variety sprite");
+        assertEquals(TileCategory.SOLID_PROP, free.categoryOf('T'));
+        assertEquals(TileCategory.SOLID_PROP, registry.get(freeSprite).category());
 
         LevelPalette reserved = SymbolAllocator.allocate(
                 SymbolAllocationRequest.builder(seed, budget, registry)
-                        .placedRoom(RoomSymbolDemand.of(Collections.singletonMap('Z', "wall_medical")))
+                        .placedRoom(RoomSymbolDemand.of(Collections.singletonMap('T', "prop_generic_1")))
                         .build());
-        assertEquals("wall_medical", reserved.spriteIdOf('Z'));
+        assertEquals("prop_generic_1", reserved.spriteIdOf('T'));
 
-        // A reserved sprite is consumed: it must not ALSO appear as a variety fill on another WALL symbol.
-        int medicalCount = 0;
-        for (char wallSymbol : budget.flexibleSlots().get(TileCategory.WALL)) {
-            if ("wall_medical".equals(reserved.spriteIdOf(wallSymbol))) {
-                medicalCount++;
+        // A reserved sprite is consumed: it must not ALSO appear as a variety fill on another prop symbol.
+        int lockerCount = 0;
+        for (char propSymbol : budget.flexibleSlots().get(TileCategory.SOLID_PROP)) {
+            if ("prop_generic_1".equals(reserved.spriteIdOf(propSymbol))) {
+                lockerCount++;
             }
         }
-        assertEquals(1, medicalCount, "reserved wall_medical leaked to a second symbol");
+        assertEquals(1, lockerCount, "reserved prop_generic_1 leaked to a second symbol");
     }
 
     // ── Containment (R2) ─────────────────────────────────────────────────────────────────────────
 
     @Test
     void observatoryArtNeverAppearsInAGenericSlot() {
-        // With no observatory room placed, no generic WALL/SOLID_PROP/FLOOR_DECAL slot may bind an
+        // With no observatory room placed, no generic SOLID_PROP/FLOOR_DECAL slot may bind an
         // observatory-tagged sprite. Checked across many seeds against the production catalog.
         EnvironmentSpriteRegistry registry = productionRegistry();
         SymbolBudget budget = SymbolBudget.standard();
@@ -199,23 +194,23 @@ class SymbolAllocatorTest {
     // ── Anti-repetition (R3) ─────────────────────────────────────────────────────────────────────
 
     @Test
-    void accentWallsAreDistinctWhenPoolExceedsSlots() {
+    void propsAreDistinctWhenPoolExceedsSlots() {
         EnvironmentSpriteRegistry registry = themedRegistry();
         SymbolBudget budget = SymbolBudget.standard();
-        List<Character> wallSymbols = budget.flexibleSlots().get(TileCategory.WALL);
-        // themedRegistry has 61 eligible walls for 20 accent slots, so every accent wall must be distinct.
-        assertTrue(registry.allInCategory(TileCategory.WALL).size() > wallSymbols.size(),
-                "test precondition: WALL pool must exceed slot count");
+        List<Character> propSymbols = budget.flexibleSlots().get(TileCategory.SOLID_PROP);
+        // themedRegistry has 60+ eligible props for 16 flexible slots, so every prop must be distinct.
+        assertTrue(registry.allInCategory(TileCategory.SOLID_PROP).size() > propSymbols.size(),
+                "test precondition: SOLID_PROP pool must exceed slot count");
 
         for (long seed = 0; seed < 50; seed++) {
             LevelPalette palette = SymbolAllocator.allocate(
                     SymbolAllocationRequest.builder(seed, budget, registry).build());
             Set<String> seen = new HashSet<>();
-            for (char wallSymbol : wallSymbols) {
-                String spriteId = palette.spriteIdOf(wallSymbol);
+            for (char propSymbol : propSymbols) {
+                String spriteId = palette.spriteIdOf(propSymbol);
                 assertNotNull(spriteId);
                 assertTrue(seen.add(spriteId),
-                        "duplicate accent wall " + spriteId + " at seed " + seed);
+                        "duplicate prop " + spriteId + " at seed " + seed);
             }
         }
     }
@@ -226,7 +221,7 @@ class SymbolAllocatorTest {
     void majorityOfVarietyFillsShareTheLevelTheme() {
         EnvironmentSpriteRegistry registry = themedRegistry();
         SymbolBudget budget = SymbolBudget.standard();
-        List<Character> wallSymbols = budget.flexibleSlots().get(TileCategory.WALL);
+        List<Character> propSymbols = budget.flexibleSlots().get(TileCategory.SOLID_PROP);
         List<String> candidateThemeTags = sortedThemeTags(registry, budget);
 
         double totalThemeShare = 0;
@@ -237,16 +232,16 @@ class SymbolAllocatorTest {
                     SymbolAllocationRequest.builder(seed, budget, registry).build());
 
             int matches = 0;
-            for (char wallSymbol : wallSymbols) {
-                String spriteId = palette.spriteIdOf(wallSymbol);
+            for (char propSymbol : propSymbols) {
+                String spriteId = palette.spriteIdOf(propSymbol);
                 if (registry.get(spriteId).hasThemeTag(levelTheme)) {
                     matches++;
                 }
             }
-            totalThemeShare += matches / (double) wallSymbols.size();
+            totalThemeShare += matches / (double) propSymbols.size();
         }
         double averageThemeShare = totalThemeShare / seedCount;
-        // Base rate is 20/60 ≈ 0.33 (one theme's walls as a fraction of the candidate pool). Coherence
+        // Base rate is 20/65 ≈ 0.31 (one theme's props as a fraction of the candidate pool). Coherence
         // (×4) must pull the realised share into a clear majority; 0.50 is a safe margin below the ~0.6+
         // coherence produces and comfortably above the 0.33 base, so it proves the rule bites.
         assertTrue(averageThemeShare > 0.50,
@@ -259,43 +254,43 @@ class SymbolAllocatorTest {
     void everySignatureRoomPlacedAtOnceAllocatesWithoutClash() {
         EnvironmentSpriteRegistry registry = productionRegistry();
         SymbolBudget budget = SymbolBudget.standard();
-        // Many rooms placed together, each reserving a distinct real WALL sprite on a distinct symbol.
+        // Many rooms placed together, each reserving a distinct real SOLID_PROP sprite on a distinct symbol.
         SymbolAllocationRequest.Builder builder = SymbolAllocationRequest.builder(7L, budget, registry);
-        String[] wallSprites = {"wall_cryo", "wall_medical", "wall_radiation", "wall_bio", "wall_hazard",
-                "wall_rust", "wall_gore", "wall_bulkhead", "wall_glass"};
-        char[] symbols = {'Z', 'M', 'U', 'S', 'h', 'j', 'G', 'k', 'N'};
-        for (int index = 0; index < wallSprites.length; index++) {
+        String[] propSprites = {"prop_terminal", "prop_locker", "prop_crate", "prop_camera", "prop_generator",
+                "prop_biopod", "prop_weapon_rack", "prop_specimen_tank", "prop_ai_core"};
+        char[] symbols = {'T', 'L', 'C', '#', '%', '&', '=', 'I', 'J'};
+        for (int index = 0; index < propSprites.length; index++) {
             builder.placedRoom(RoomSymbolDemand.of(
-                    Collections.singletonMap(symbols[index], wallSprites[index])));
+                    Collections.singletonMap(symbols[index], propSprites[index])));
         }
         LevelPalette palette = SymbolAllocator.allocate(builder.build());
-        for (int index = 0; index < wallSprites.length; index++) {
-            assertEquals(wallSprites[index], palette.spriteIdOf(symbols[index]),
+        for (int index = 0; index < propSprites.length; index++) {
+            assertEquals(propSprites[index], palette.spriteIdOf(symbols[index]),
                     "room reservation lost for '" + symbols[index] + "'");
         }
     }
 
     @Test
     void clashOnSameSymbolReroutesToDistinctFreeSymbol() {
-        // Two placed rooms demand the SAME symbol 'Z' for DIFFERENT sprites. The first keeps 'Z'; the
-        // second's sprite must be rehomed onto a distinct free WALL symbol — both must survive, no throw.
+        // Two placed rooms demand the SAME symbol 'T' for DIFFERENT sprites. The first keeps 'T'; the
+        // second's sprite must be rehomed onto a distinct free prop symbol — both must survive, no throw.
         EnvironmentSpriteRegistry registry = productionRegistry();
         SymbolBudget budget = SymbolBudget.standard();
         SymbolAllocationRequest request = SymbolAllocationRequest.builder(99L, budget, registry)
-                .placedRoom(RoomSymbolDemand.of(Collections.singletonMap('Z', "wall_cryo")))
-                .placedRoom(RoomSymbolDemand.of(Collections.singletonMap('Z', "wall_medical")))
+                .placedRoom(RoomSymbolDemand.of(Collections.singletonMap('T', "prop_terminal")))
+                .placedRoom(RoomSymbolDemand.of(Collections.singletonMap('T', "prop_locker")))
                 .build();
         LevelPalette palette = SymbolAllocator.allocate(request);
 
-        assertEquals("wall_cryo", palette.spriteIdOf('Z'), "first room should keep the clashed symbol");
-        boolean medicalRehomed = false;
-        for (char wallSymbol : budget.flexibleSlots().get(TileCategory.WALL)) {
-            if ("wall_medical".equals(palette.spriteIdOf(wallSymbol))) {
-                medicalRehomed = true;
+        assertEquals("prop_terminal", palette.spriteIdOf('T'), "first room should keep the clashed symbol");
+        boolean lockerRehomed = false;
+        for (char propSymbol : budget.flexibleSlots().get(TileCategory.SOLID_PROP)) {
+            if ("prop_locker".equals(palette.spriteIdOf(propSymbol))) {
+                lockerRehomed = true;
                 break;
             }
         }
-        assertTrue(medicalRehomed, "clashed second sprite wall_medical was dropped, not rehomed");
+        assertTrue(lockerRehomed, "clashed second sprite prop_locker was dropped, not rehomed");
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────────────────────────
@@ -306,24 +301,20 @@ class SymbolAllocatorTest {
         return TilesetRegistries.sprites();
     }
 
-    // A fresh catalog whose WALL pool (61 eligible) far exceeds the 20 accent slots, with 60 accent walls
-    // split evenly across three coherence themes plus an untagged plain wall and one observatory wall.
-    // Other categories carry the minimum the standard budget needs (a column, the vendor + generic props,
-    // and generic decals), all untagged so the level theme is drawn only from the WALL themes.
+    // A fresh catalog whose SOLID_PROP pool (60 themed + the vendor + generic + one observatory prop) far
+    // exceeds the 16 flexible prop slots, split evenly across three coherence themes. Decals carry the
+    // minimum the standard budget needs, untagged, so the level theme is drawn only from the prop themes.
+    // It holds NO wall and NO column sprite — exactly like the production catalog since wall-art order 2.
     private static EnvironmentSpriteRegistry themedRegistry() {
         EnvironmentSpriteRegistry registry = new EnvironmentSpriteRegistry();
 
-        registry.register(EnvironmentSpriteDefinition.builder("wall_plain", TileCategory.WALL, "Plain").build());
-        registerThemedWalls(registry, TAG_CLINICAL);
-        registerThemedWalls(registry, TAG_INDUSTRIAL);
-        registerThemedWalls(registry, TAG_DERELICT);
-        // One observatory-tagged wall to confirm coherence/anti-repetition never pull contained art.
-        registry.register(EnvironmentSpriteDefinition.builder("wall_obs", TileCategory.WALL, "Obs")
-                .themeTag(TilesetRegistries.THEME_TAG_OBSERVATORY).build());
-
-        registry.register(EnvironmentSpriteDefinition.builder("column_round", TileCategory.COLUMN, "Column").build());
-
         registry.register(EnvironmentSpriteDefinition.builder("prop_vendor", TileCategory.SOLID_PROP, "Vendor").build());
+        registerThemedProps(registry, TAG_CLINICAL);
+        registerThemedProps(registry, TAG_INDUSTRIAL);
+        registerThemedProps(registry, TAG_DERELICT);
+        // One observatory-tagged prop to confirm coherence/anti-repetition never pull contained art.
+        registry.register(EnvironmentSpriteDefinition.builder("prop_obs", TileCategory.SOLID_PROP, "Obs")
+                .themeTag(TilesetRegistries.THEME_TAG_OBSERVATORY).build());
         for (int index = 0; index < 4; index++) {
             registry.register(EnvironmentSpriteDefinition
                     .builder("prop_generic_" + index, TileCategory.SOLID_PROP, "Prop " + index).build());
@@ -336,10 +327,10 @@ class SymbolAllocatorTest {
         return registry;
     }
 
-    private static void registerThemedWalls(EnvironmentSpriteRegistry registry, String themeTag) {
-        for (int index = 0; index < WALLS_PER_THEME; index++) {
+    private static void registerThemedProps(EnvironmentSpriteRegistry registry, String themeTag) {
+        for (int index = 0; index < PROPS_PER_THEME; index++) {
             registry.register(EnvironmentSpriteDefinition
-                    .builder("wall_" + themeTag + "_" + index, TileCategory.WALL, themeTag + " " + index)
+                    .builder("prop_" + themeTag + "_" + index, TileCategory.SOLID_PROP, themeTag + " " + index)
                     .themeTag(themeTag).build());
         }
     }

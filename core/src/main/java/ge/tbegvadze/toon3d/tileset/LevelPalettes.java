@@ -12,7 +12,12 @@ import java.util.List;
  * because the default IS legacy, nothing changes until order-4/8 start producing varied palettes for
  * generated levels. Hand-crafted {@code assets/levels/*.txt} keep the legacy palette forever.
  *
- * <p>This is the ONLY place that still encodes the historic 1:1 symbol → sprite table. It does so
+ * <p>WALLS AND THE COLUMN (generated-wall-art order 2): the legacy palette no longer binds a wall picture. It
+ * dresses every wall symbol and 'P' from region set A through the same {@link RegionPaletteBuilder} every
+ * generated floor uses, so a hand-made level reads its walls through the slot table (rooms not detected,
+ * walls as written). Only its props and decals keep the historic mapping below.
+ *
+ * <p>This is the ONLY place that still encodes the historic 1:1 symbol → sprite table for props and decals. It does so
  * mechanically: for each category it zips a registration-ordered symbol string against the matching pool
  * in the {@link EnvironmentSpriteRegistry} (order-1), which registered every existing sprite. The symbol
  * strings below therefore mirror {@code TilesetRegistries}'s registration order per category, and a
@@ -24,10 +29,6 @@ public final class LevelPalettes {
     // Registration-ordered environment symbols per category — index-aligned with the matching
     // EnvironmentSpriteRegistry pool (allInCategory), so char[i] renders pool[i]. These strings are the
     // historic 1:1 table; keep them in lockstep with TilesetRegistries' registration order.
-    // WALL: x c v t w h j G k N Q S M Z U X D F  + observatory "  '  `
-    private static final String LEGACY_WALL_SYMBOLS       = "xcvtwhjGkNQSMZUXDF\"'`";
-    // COLUMN: P (round column — the only column today).
-    private static final String LEGACY_COLUMN_SYMBOLS     = "P";
     // SOLID_PROP: g E T L C # % & = @ I J W  + observatory ;  \  |  <  (@ vendor sits in registration
     // order between = and I; it is a FIXED-sprite symbol but still an environment sprite bound here).
     private static final String LEGACY_SOLID_PROP_SYMBOLS = "gETLC#%&=@IJW;\\|<";
@@ -41,9 +42,10 @@ public final class LevelPalettes {
     private LevelPalettes() {}
 
     /**
-     * The shared, immutable palette reproducing today's exact global symbol → sprite mapping (e.g. 'Z' →
-     * "wall_cryo", 'P' → "column_round", '@' → "prop_vendor"). Memoised: one instance for the whole run.
-     * Ensures the sprite registry is bootstrapped before reading it.
+     * The shared, immutable palette of hand-made levels and the default of {@code Level}: the historic prop and
+     * decal mapping (e.g. '@' -&gt; "prop_vendor") plus every wall symbol and 'P' dressed from region set A
+     * (generated-wall-art order 2). Memoised: one instance for the whole run. Ensures the sprite registry is
+     * bootstrapped before reading it.
      */
     public static LevelPalette legacy() {
         LevelPalette cached = legacyInstance;
@@ -59,41 +61,12 @@ public final class LevelPalettes {
         return cached;
     }
 
-    /**
-     * A per-level palette identical to {@link #legacy()} EXCEPT the bulk wall symbol 'x' is a base wall
-     * chosen from the floor seed. This is how EVERY procedural generator (caverns, corridors, boss arenas,
-     * special rooms, …) — not just the main dungeon {@code LevelGenerator} — gets BASE-WALL VARIETY without
-     * disturbing its other art: the generator passes its own seed here and hands the result to
-     * {@code new Level(grid, spawns, weapons, palette)}. Hand-crafted levels loaded by {@code LevelLoader}
-     * keep {@link #legacy()} and never vary. Deterministic (same seed ⇒ same palette); the base-wall pick
-     * is {@link SymbolAllocator#chooseBaseWall} — the same single source of truth the full allocator uses,
-     * on an RNG stream independent of the generator's own {@code Random}, so the generated grid is
-     * unchanged. NOT memoised (the seed varies per level); building it is cheap.
-     */
-    public static LevelPalette generatedWithBaseWall(long levelSeed) {
-        SymbolBudget budget = SymbolBudget.standard();
-        EnvironmentSpriteRegistry registry = bootstrappedRegistry();
-        LevelPalette.Builder builder = legacyBuilder(registry);
-        String baseWall = SymbolAllocator.chooseBaseWall(levelSeed, budget, registry);
-        if (baseWall != null) {
-            builder.bind(budget.baseWallSymbol(), TileCategory.WALL, baseWall);
-        }
-        return builder.build();
-    }
-
     private static LevelPalette buildLegacy() {
-        return legacyBuilder(bootstrappedRegistry()).build();
-    }
-
-    // Fills a builder with the historic 1:1 legacy bindings for every category. Shared by buildLegacy()
-    // and generatedWithBaseWall() so both encode the legacy table exactly once.
-    private static LevelPalette.Builder legacyBuilder(EnvironmentSpriteRegistry registry) {
+        EnvironmentSpriteRegistry registry = bootstrappedRegistry();
         LevelPalette.Builder builder = LevelPalette.builder();
-        bindCategory(builder, registry, TileCategory.WALL,        LEGACY_WALL_SYMBOLS);
-        bindCategory(builder, registry, TileCategory.COLUMN,      LEGACY_COLUMN_SYMBOLS);
         bindCategory(builder, registry, TileCategory.SOLID_PROP,  LEGACY_SOLID_PROP_SYMBOLS);
         bindCategory(builder, registry, TileCategory.FLOOR_DECAL, LEGACY_DECAL_SYMBOLS);
-        return builder;
+        return RegionPaletteBuilder.build(RegionWallSets.resolveOrDefault(null), builder.build());
     }
 
     // Idempotent; guarantees the shared registry holds the full v1 inventory before it is read.
@@ -106,8 +79,7 @@ public final class LevelPalettes {
     // pool[i].id(). The historic environment sprites are registered FIRST in each category, so binding
     // the legacy symbols to pool[0..symbols.length()-1] reproduces today's exact art. Since order-8 the
     // catalog may carry MORE sprites than the legacy table has symbols (variety-only art that no
-    // legacy symbol maps to, e.g. "column_square" in the COLUMN category — REQUIREMENT PROOF 2): those
-    // extras are simply never bound by the legacy palette, which is correct — a level only ever uses as
+    // legacy symbol maps to): those extras are simply never bound by the legacy palette, which is correct — a level only ever uses as
     // many distinct sprites as it has symbols. FEWER registered sprites than symbols still means the
     // table and registry drifted apart, so that direction still fails loudly.
     private static void bindCategory(LevelPalette.Builder builder, EnvironmentSpriteRegistry registry,

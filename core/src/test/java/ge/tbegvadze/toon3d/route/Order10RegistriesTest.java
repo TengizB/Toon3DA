@@ -121,7 +121,8 @@ class Order10RegistriesTest {
             assertNotNull(ambience.displayName());
             assertNotNull(ambience.crestPainterId());
             assertNotNull(ambience.overlayThemeId());
-            assertFalse(ambience.wallPalette().isEmpty(), theme + " has an empty wall palette");
+            assertTrue(ge.tbegvadze.toon3d.tileset.RegionWallSets.registry().contains(ambience.wallSetId()),
+                    theme + " names an unregistered wall set");
             assertNotNull(ambience.enemyFactionId());
             assertNotNull(ambience.lightingMoodId());
             assertNotNull(ambience.musicId());

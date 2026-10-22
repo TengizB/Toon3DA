@@ -4,15 +4,15 @@ import ge.tbegvadze.toon3d.util.RenderConstants;
 
 /**
  * The one place the tileset registries are populated — the twin of {@code route/RouteRegistries}.
- * {@link #bootstrap()} registers EVERY existing wall, column, solid prop, and floor decal as an
- * {@link EnvironmentSpriteDefinition}, giving the game a complete, enumerable inventory of today's
- * environment art. Nothing reads the registry yet (order-1 is pure data + registration); it exists so
+ * {@link #bootstrap()} registers every solid prop and floor decal as an {@link EnvironmentSpriteDefinition},
+ * giving the game a complete, enumerable inventory of its environment art. Walls, doors and columns are NOT
+ * in this catalog any more: every floor builds them from its region wall set (generated-wall-art order 2,
+ * {@link RegionWallSets}; docs/environment-tileset-system.txt section 15). Nothing reads the registry yet (order-1 is pure data + registration); it exists so
  * later orders — the per-level allocator and the renderers — have a stable catalog to select from
  * instead of the scattered {@code WallRenderer} table + {@code PropRenderer} switch.
  *
  * <p>{@link #bootstrap()} is idempotent — the second call is a no-op — so a repeated
- * {@code World.create()} (e.g. after a death-screen restart) is safe. Adding a new wall/prop/column/
- * decal sprite is ONE {@link EnvironmentSpriteDefinition} + one {@code register()} line in the matching
+ * {@code World.create()} (e.g. after a death-screen restart) is safe. Adding a new prop / decal sprite is ONE {@link EnvironmentSpriteDefinition} + one {@code register()} line in the matching
  * helper below; nothing else in this order references a specific char.
  *
  * <p>The {@code "observatory"} theme tag marks room-contained STELLAR_OBSERVATORY art. Today those
@@ -22,47 +22,15 @@ import ge.tbegvadze.toon3d.util.RenderConstants;
  */
 public final class TilesetRegistries {
 
-    /** Theme tag on the room-contained STELLAR_OBSERVATORY art (walls, props, decals). */
+    /** Theme tag on the room-contained STELLAR_OBSERVATORY art (props, decals). */
     public static final String THEME_TAG_OBSERVATORY = "observatory";
 
-    /** Stable sprite id of the round column (the historic 1:1 COLUMN art the legacy palette binds 'P' to). */
-    public static final String SPRITE_ID_COLUMN_ROUND  = "column_round";
-    /** Stable sprite id of the order-8 square column (REQUIREMENT PROOF 2; variety-only, see below). */
-    public static final String SPRITE_ID_COLUMN_SQUARE = "column_square";
     /**
-     * Stable sprite id of the order-9 hex-plate accent wall — the acceptance-test wall sprite added by
-     * RECIPE A alone (see docs/environment-tileset-system.txt §9). No legacy symbol maps to it, so it is
-     * variety-only, reached only through the allocator's per-level wall variety.
+     * Sprite ids registered here that no LEGACY symbol maps to (reached only through the allocator's per-level
+     * variety). Empty since generated-wall-art order 2 moved every wall and column out of this catalog — they
+     * come from the floor's region wall set — and kept so the catalog-size invariants stay explicit.
      */
-    public static final String SPRITE_ID_WALL_HEX_PLATE = "wall_hex_plate";
-    /**
-     * Stable sprite ids of the ALTERNATE BASE WALLS. The bulk wall symbol 'x' resolves per GENERATED
-     * level to "wall_plain" OR one of these, seeded from the floor seed, so levels no longer share one
-     * base wall. Each gives the floor its own FACILITY IDENTITY and is LIGHT, not gray: a warm
-     * sandstone-block facility, a bright clinical-lab facility, and a sage/teal glazed ceramic-tile
-     * facility. They carry no legacy symbol, so they are variety-only (see {@link #VARIETY_ONLY_SPRITE_IDS}).
-     */
-    public static final String SPRITE_ID_WALL_PLAIN_SANDSTONE = "wall_plain_sandstone";
-    public static final String SPRITE_ID_WALL_PLAIN_CLEAN     = "wall_plain_clean";
-    public static final String SPRITE_ID_WALL_PLAIN_TILED     = "wall_plain_tiled";
-
-    /**
-     * Sprite ids that exist in the catalog as PER-LEVEL VARIETY ALTERNATIVES which the historic 1:1
-     * legacy palette never maps a symbol to. A sprite lands here whenever it is NEW art in an EXISTING
-     * category with no free legacy symbol to bind it (the common case for content added via RECIPE A):
-     * {@link #SPRITE_ID_COLUMN_SQUARE} (order-8, the second COLUMN sprite the flexible 'P' slot resolves
-     * to), {@link #SPRITE_ID_WALL_HEX_PLATE} (order-9, an extra WALL accent), and the alternate base
-     * walls {@link #SPRITE_ID_WALL_PLAIN_SANDSTONE} / {@link #SPRITE_ID_WALL_PLAIN_CLEAN} /
-     * {@link #SPRITE_ID_WALL_PLAIN_TILED} (which the allocator picks for the plain 'x' slot per level).
-     * They are fully registered (with texture generators) but only ever reached through the allocator, so
-     * the legacy palette references the whole catalog MINUS this set. Unmodifiable.
-     */
-    public static final java.util.Set<String> VARIETY_ONLY_SPRITE_IDS =
-            java.util.Collections.unmodifiableSet(
-                    new java.util.LinkedHashSet<>(java.util.Arrays.asList(
-                            SPRITE_ID_COLUMN_SQUARE, SPRITE_ID_WALL_HEX_PLATE,
-                            SPRITE_ID_WALL_PLAIN_SANDSTONE, SPRITE_ID_WALL_PLAIN_CLEAN,
-                            SPRITE_ID_WALL_PLAIN_TILED)));
+    public static final java.util.Set<String> VARIETY_ONLY_SPRITE_IDS = java.util.Collections.emptySet();
 
     private static final EnvironmentSpriteRegistry SPRITES = new EnvironmentSpriteRegistry();
     private static boolean bootstrapped = false;
@@ -97,77 +65,8 @@ public final class TilesetRegistries {
      * populate a fresh registry without touching the shared singleton.
      */
     static void registerAll(EnvironmentSpriteRegistry registry) {
-        registerWalls(registry);
-        registerColumns(registry);
         registerSolidProps(registry);
         registerDecals(registry);
-    }
-
-    /**
-     * Every wall sprite ({@code Level.isWall}). WALL sprites are full-height stripes (heightMultiplier
-     * 1.0, occluder true — both the builder defaults). The last three are the STELLAR_OBSERVATORY
-     * room's walls, tagged {@link #THEME_TAG_OBSERVATORY}.
-     */
-    static void registerWalls(EnvironmentSpriteRegistry registry) {
-        registry.register(EnvironmentSpriteDefinition.builder("wall_plain",       TileCategory.WALL, "Plain Wall").build());
-        registry.register(EnvironmentSpriteDefinition.builder("wall_conduit",     TileCategory.WALL, "Conduit Wall").build());
-        registry.register(EnvironmentSpriteDefinition.builder("wall_vent",        TileCategory.WALL, "Vent Wall").build());
-        registry.register(EnvironmentSpriteDefinition.builder("wall_terminal",    TileCategory.WALL, "Terminal Wall").build());
-        registry.register(EnvironmentSpriteDefinition.builder("wall_wires",       TileCategory.WALL, "Wires Wall").build());
-        registry.register(EnvironmentSpriteDefinition.builder("wall_hazard",      TileCategory.WALL, "Hazard Wall").build());
-        registry.register(EnvironmentSpriteDefinition.builder("wall_rust",        TileCategory.WALL, "Rust Wall").build());
-        registry.register(EnvironmentSpriteDefinition.builder("wall_gore",        TileCategory.WALL, "Gore Wall").build());
-        registry.register(EnvironmentSpriteDefinition.builder("wall_bulkhead",    TileCategory.WALL, "Bulkhead Wall").build());
-        registry.register(EnvironmentSpriteDefinition.builder("wall_glass",       TileCategory.WALL, "Glass Wall").build());
-        registry.register(EnvironmentSpriteDefinition.builder("wall_bio",         TileCategory.WALL, "Bio/Quarantine Wall").build());
-        registry.register(EnvironmentSpriteDefinition.builder("wall_emergency",   TileCategory.WALL, "Emergency Strip Wall").build());
-        registry.register(EnvironmentSpriteDefinition.builder("wall_medical",     TileCategory.WALL, "Medical Wall").build());
-        registry.register(EnvironmentSpriteDefinition.builder("wall_cryo",        TileCategory.WALL, "Cryo Wall").build());
-        registry.register(EnvironmentSpriteDefinition.builder("wall_radiation",   TileCategory.WALL, "Radiation Wall").build());
-        registry.register(EnvironmentSpriteDefinition.builder("wall_blast",       TileCategory.WALL, "Blast Wall").build());
-        registry.register(EnvironmentSpriteDefinition.builder("wall_holo_data",   TileCategory.WALL, "Holo-data Wall").build());
-        registry.register(EnvironmentSpriteDefinition.builder("wall_force_field", TileCategory.WALL, "Force-field Wall").build());
-
-        registry.register(EnvironmentSpriteDefinition.builder("wall_stellar_viewport",   TileCategory.WALL, "Viewport Dome Wall")
-                .themeTag(THEME_TAG_OBSERVATORY).build());
-        registry.register(EnvironmentSpriteDefinition.builder("wall_stellar_magrail",    TileCategory.WALL, "Magrail Conduit Wall")
-                .themeTag(THEME_TAG_OBSERVATORY).build());
-        registry.register(EnvironmentSpriteDefinition.builder("wall_stellar_hull_plate", TileCategory.WALL, "Hull Plate Wall")
-                .themeTag(THEME_TAG_OBSERVATORY).build());
-
-        // order-9 RECIPE A acceptance sprite — a hexagonal-plate accent wall. NEW art in the EXISTING
-        // WALL category: no legacy symbol maps to it (VARIETY_ONLY_SPRITE_IDS), so it is registered LAST
-        // — after the historic 1:1 walls the legacy palette zips against — and only ever reached through
-        // the allocator's per-level wall variety. Added by REGISTRATION ALONE: this line + its texture
-        // generator in WallRenderer.registerTextureGenerators, with ZERO edits to LevelGenerator,
-        // WallRenderer draw logic, or Level. See docs/environment-tileset-system.txt §9 (RECIPE A).
-        registry.register(EnvironmentSpriteDefinition.builder(SPRITE_ID_WALL_HEX_PLATE, TileCategory.WALL, "Hex Plate Wall").build());
-
-        // Alternate BASE WALLS — extra plain "bulk wall" sprites the allocator can pick for the default
-        // wall symbol 'x' per GENERATED level (the fix for "every level looks the same"). NEW art in the
-        // EXISTING WALL category with no legacy symbol, so — like the hex-plate above — they are registered
-        // LAST (after the historic 1:1 walls the legacy palette zips against) and only ever reached through
-        // the allocator's base-wall roll. Each is one register() line here + its texture generator in
-        // WallRenderer.registerTextureGenerators (startup id-set assertion enforces the pair). See
-        // docs/environment-tileset-system.txt (BASE-WALL VARIETY).
-        registry.register(EnvironmentSpriteDefinition.builder(SPRITE_ID_WALL_PLAIN_SANDSTONE, TileCategory.WALL, "Sandstone Block Wall").build());
-        registry.register(EnvironmentSpriteDefinition.builder(SPRITE_ID_WALL_PLAIN_CLEAN,     TileCategory.WALL, "Clean Lab Panel Wall").build());
-        registry.register(EnvironmentSpriteDefinition.builder(SPRITE_ID_WALL_PLAIN_TILED,     TileCategory.WALL, "Ceramic Tile Wall").build());
-    }
-
-    /**
-     * Every column sprite ({@code Level.isColumn}). Today there is only the round column ('P'); the
-     * square column arrives later as the extensibility proof.
-     */
-    static void registerColumns(EnvironmentSpriteRegistry registry) {
-        registry.register(EnvironmentSpriteDefinition.builder(SPRITE_ID_COLUMN_ROUND, TileCategory.COLUMN, "Round Column").build());
-        // order-8 REQUIREMENT PROOF 2 — the square column: a SECOND sprite in the EXISTING COLUMN
-        // category (new ART, not a new symbol). The FIXED-meaning symbol 'P' now resolves per level to
-        // EITHER "column_round" or "column_square" through the allocator (COLUMN is a flexible-sprite
-        // slot; its MEANING stays "column"). Adding it here is the whole recipe on the catalog side —
-        // its texture generator is registered in WallRenderer.registerTextureGenerators and the startup
-        // id-set assertion enforces the pair.
-        registry.register(EnvironmentSpriteDefinition.builder(SPRITE_ID_COLUMN_SQUARE, TileCategory.COLUMN, "Square Column").build());
     }
 
     /**

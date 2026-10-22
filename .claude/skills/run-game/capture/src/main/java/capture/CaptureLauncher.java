@@ -187,6 +187,10 @@ public class CaptureLauncher extends ApplicationAdapter {
                 case "seed":
                     setRunSeed(Long.parseLong(step[2]));
                     break;
+                case "lookat":
+                    lookAt(step[2].charAt(0), Integer.parseInt(step[3]), Integer.parseInt(step[4]),
+                           step.length > 5 ? step[5] : "");
+                    break;
                 case "ending":
                     presentEndingCard(step[2]);
                     break;
@@ -222,6 +226,10 @@ public class CaptureLauncher extends ApplicationAdapter {
                     break;
                 case "fx":
                     printEffectCount();
+                    break;
+                case "textures":
+                    System.out.println("[capture] managed textures=" + com.badlogic.gdx.graphics.Texture.getNumManagedTextures()
+                            + " at " + clockSeconds + "s");
                     break;
                 case "logmoments":
                     logVisualMoments();
@@ -285,6 +293,62 @@ public class CaptureLauncher extends ApplicationAdapter {
         InputProcessor processor = realInput.getInputProcessor();
         if (processor != null) processor.touchDown(touchScreenX, touchScreenY, 0, Input.Buttons.LEFT);
         System.out.println("[capture] tap world(" + worldX + "," + worldY + ") at " + clockSeconds + "s");
+    }
+
+    /**
+     * {@code lookat:SYMBOL:INDEX:BACK} — stands the player up to BACK walkable tiles in front of the INDEX-th exposed
+     * tile of SYMBOL (scanned bottom-to-top, left-to-right, its first open neighbour), facing it. Repeatable
+     * captures of a given wall / door kind (generated-wall-art order 2). Optional SIDE (N S E W) only counts faces
+     * open on that side. A dev hook, never game logic.
+     */
+    private void lookAt(char symbol, int wantedIndex, int back, String side) {
+        try {
+            Field worldField = Main.class.getDeclaredField("world");
+            worldField.setAccessible(true);
+            Object world = worldField.get(main);
+            ge.tbegvadze.toon3d.level.Level level = (ge.tbegvadze.toon3d.level.Level) readField(world, "level");
+            ge.tbegvadze.toon3d.entity.Player player = (ge.tbegvadze.toon3d.entity.Player) readField(world, "player");
+            int[][] directions = { {0, 1}, {0, -1}, {1, 0}, {-1, 0} };
+            String sideNames = "NSEW";
+            int found = 0;
+            for (int row = 0; row < level.getHeight(); row++) {
+                for (int column = 0; column < level.getWidth(); column++) {
+                    if (level.getCell(column, row) != symbol) continue;
+                    for (int directionIndex = 0; directionIndex < directions.length; directionIndex++) {
+                        int[] direction = directions[directionIndex];
+                        if (!side.isEmpty() && side.charAt(0) != sideNames.charAt(directionIndex)) continue;
+                        if (!isStandable(level, column + direction[0], row + direction[1])) continue;
+                        if (found++ < wantedIndex) break;
+                        int steps = 1;
+                        while (steps < back && isStandable(level, column + direction[0] * (steps + 1),
+                                                                   row + direction[1] * (steps + 1))) steps++;
+                        float cell = ge.tbegvadze.toon3d.util.Constants.CELL_SIZE;
+                        player.positionX  = (column + direction[0] * steps) * cell + cell / 2f;
+                        player.positionY  = (row + direction[1] * steps) * cell + cell / 2f;
+                        player.directionX = -direction[0];
+                        player.directionY = -direction[1];
+                        System.out.println("[capture] lookat '" + symbol + "' #" + wantedIndex + " tile " + column + ","
+                                + row + " from " + steps + " tiles");
+                        return;
+                    }
+                }
+            }
+            System.out.println("[capture] lookat '" + symbol + "': only " + found + " exposed tiles");
+        } catch (ReflectiveOperationException exception) {
+            exception.printStackTrace();
+        }
+    }
+
+    private static boolean isStandable(ge.tbegvadze.toon3d.level.Level level, int column, int row) {
+        char cell = level.getCell(column, row);
+        return cell != '\0' && !ge.tbegvadze.toon3d.level.Level.isWall(cell) && !ge.tbegvadze.toon3d.level.Level.isDoor(cell)
+                && !ge.tbegvadze.toon3d.level.Level.isPropSolid(cell) && !ge.tbegvadze.toon3d.level.Level.isColumn(cell);
+    }
+
+    private static Object readField(Object owner, String name) throws ReflectiveOperationException {
+        Field field = owner.getClass().getDeclaredField(name);
+        field.setAccessible(true);
+        return field.get(owner);
     }
 
     @SuppressWarnings({"unchecked", "rawtypes"})

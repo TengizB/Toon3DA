@@ -169,4 +169,17 @@ public final class LevelGenConfig {
      * build at natural size (no target).
      */
     public int targetWalkableTiles = 0;
+
+    // -------------------------------------------------------------------------
+    // Region wall set (generated-wall-art order 2)
+    // -------------------------------------------------------------------------
+
+    /**
+     * The floor's region wall set id (tileset/RegionWallSets), set by World with its other per-floor
+     * fields; the LevelFinisher dresses every wall from it. Null = the default set (outer_facility).
+     */
+    public String wallSetId = null;
+
+    /** P7: how many floors into its region this floor is (0 = the region's first floor; RegionPlan). */
+    public int floorIndexInRegion = 0;
 }

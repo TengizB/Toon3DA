@@ -7,6 +7,7 @@ import ge.tbegvadze.toon3d.level.GateAirlockGenerator;
 import ge.tbegvadze.toon3d.level.LevelGenerator;
 import ge.tbegvadze.toon3d.level.LinearCorridorGenerator;
 import ge.tbegvadze.toon3d.level.MedBayGenerator;
+import ge.tbegvadze.toon3d.tileset.RegionWallSets;
 import ge.tbegvadze.toon3d.util.BalanceConfig;
 import ge.tbegvadze.toon3d.util.RenderConstants;
 import ge.tbegvadze.toon3d.util.RouteMapConstants;
@@ -315,11 +316,19 @@ public final class RouteRegistries {
      * the list — a new region is one row. Exposed (package-private) so tests can populate a fresh
      * registry without touching the shared singleton.
      */
+    /** Startup fails loud when a region names a wall set nobody registered (generated-wall-art order 2). */
+    private static void requireRegisteredWallSet(RegionAmbience ambience) {
+        if (!RegionWallSets.registry().contains(ambience.wallSetId())) {
+            throw new IllegalStateException("Region " + ambience.themeId() + " names an unregistered wall set: "
+                    + ambience.wallSetId());
+        }
+    }
+
     static void registerRegionAmbience(RegionAmbienceRegistry registry) {
         RegionAmbience outerFacility = RegionAmbience.builder(RouteMapConstants.REGION_A_THEME)
                 .displayName(RouteMapConstants.REGION_A_NAME)
                 .crestPainterId("crest_outer_facility")
-                .wallPalette(RouteMapConstants.REGION_A_WALL_PALETTE)
+                .wallSetId(RouteMapConstants.REGION_A_WALL_SET)
                 .enemyFactionId(RouteMapConstants.REGION_A_FACTION)
                 .lightingMoodId(RouteMapConstants.REGION_A_LIGHTING)
                 .musicId(RouteMapConstants.REGION_A_MUSIC)
@@ -331,7 +340,7 @@ public final class RouteRegistries {
         RegionAmbience researchWing = RegionAmbience.builder(RouteMapConstants.REGION_B_THEME)
                 .displayName(RouteMapConstants.REGION_B_NAME)
                 .crestPainterId("crest_research_wing")
-                .wallPalette(RouteMapConstants.REGION_B_WALL_PALETTE)
+                .wallSetId(RouteMapConstants.REGION_B_WALL_SET)
                 .enemyFactionId(RouteMapConstants.REGION_B_FACTION)
                 .lightingMoodId(RouteMapConstants.REGION_B_LIGHTING)
                 .musicId(RouteMapConstants.REGION_B_MUSIC)
@@ -343,7 +352,7 @@ public final class RouteRegistries {
         RegionAmbience reactorDepths = RegionAmbience.builder(RouteMapConstants.REGION_C_THEME)
                 .displayName(RouteMapConstants.REGION_C_NAME)
                 .crestPainterId("crest_reactor_depths")
-                .wallPalette(RouteMapConstants.REGION_C_WALL_PALETTE)
+                .wallSetId(RouteMapConstants.REGION_C_WALL_SET)
                 .enemyFactionId(RouteMapConstants.REGION_C_FACTION)
                 .lightingMoodId(RouteMapConstants.REGION_C_LIGHTING)
                 .musicId(RouteMapConstants.REGION_C_MUSIC)
@@ -355,7 +364,7 @@ public final class RouteRegistries {
         RegionAmbience theBreach = RegionAmbience.builder(RouteMapConstants.REGION_D_THEME)
                 .displayName(RouteMapConstants.REGION_D_NAME)
                 .crestPainterId("crest_the_breach")
-                .wallPalette(RouteMapConstants.REGION_D_WALL_PALETTE)
+                .wallSetId(RouteMapConstants.REGION_D_WALL_SET)
                 .enemyFactionId(RouteMapConstants.REGION_D_FACTION)
                 .lightingMoodId(RouteMapConstants.REGION_D_LIGHTING)
                 .musicId(RouteMapConstants.REGION_D_MUSIC)
@@ -367,7 +376,7 @@ public final class RouteRegistries {
         RegionAmbience theCore = RegionAmbience.builder(RouteMapConstants.REGION_E_THEME)
                 .displayName(RouteMapConstants.REGION_E_NAME)
                 .crestPainterId("crest_the_core")
-                .wallPalette(RouteMapConstants.REGION_E_WALL_PALETTE)
+                .wallSetId(RouteMapConstants.REGION_E_WALL_SET)
                 .enemyFactionId(RouteMapConstants.REGION_E_FACTION)
                 .lightingMoodId(RouteMapConstants.REGION_E_LIGHTING)
                 .musicId(RouteMapConstants.REGION_E_MUSIC)
@@ -376,6 +385,10 @@ public final class RouteRegistries {
                 .gateFlavour(RouteMapConstants.REGION_E_GATE_FLAVOUR)
                 .build();
 
+        for (RegionAmbience ambience : new RegionAmbience[]{
+                outerFacility, researchWing, reactorDepths, theBreach, theCore}) {
+            requireRegisteredWallSet(ambience);
+        }
         registry.register(outerFacility);
         registry.register(researchWing);
         registry.register(reactorDepths);

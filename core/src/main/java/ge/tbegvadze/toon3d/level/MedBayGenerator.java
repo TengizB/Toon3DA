@@ -22,8 +22,8 @@ import java.util.Random;
  *
  * <p>The layout is fixed-ish and DETERMINISTIC from the floor seed: only the alcove side and whether a
  * second (bottom) alcove appears vary, so the clinic feels hand-made yet never identical. Every tile
- * is from {@code docs/tile-symbols.txt} — 'M' medical walls dominate, 'N' reinforced glass for the
- * ward viewing window, 'Z' cryo walls frame the pod alcoves, 'S' emergency strips line the approach;
+ * is from {@code docs/tile-symbols.txt}. Its walls are plain 'x' mass; the LevelFinisher dresses the whole
+ * floor in its region set's MEDICAL family (generated-wall-art order 2, rule P3);
  * '&amp;' bio-pods, 'I' specimen tanks, 'T' terminals and a '%' generator dress the ward; the auto-doc
  * reuses the holo-workstation 'W' (no new symbol — the heal interactivity is layered on by World).
  *
@@ -32,8 +32,8 @@ import java.util.Random;
 public class MedBayGenerator implements ILevelGenerator {
 
     private final Random random;
-    // Raw floor seed, kept for deterministic per-level BASE-WALL selection (independent of `random`,
-    // so it never perturbs the generated grid). See LevelPalettes.generatedWithBaseWall.
+    // Raw floor seed: the LevelFinisher's own wall-dressing stream derives from it (independent of
+    // `random`, so it never perturbs the generated grid). See LevelFinisher.
     private final long   seed;
 
     // The floor's config (balance-overhaul order 2): the node's supply spec, the carried ammo types and
@@ -60,11 +60,11 @@ public class MedBayGenerator implements ILevelGenerator {
         int gridWidth  = LevelGenConstants.LEVEL_GEN_GRID_WIDTH;
         int gridHeight = LevelGenConstants.LEVEL_GEN_GRID_HEIGHT;
 
-        // Everything starts as medical wall 'M'; the clinic is carved out of that mass.
+        // Everything starts as wall 'x'; the clinic is carved out of that mass.
         char[][] grid = new char[gridHeight][gridWidth];
         for (int tileRow = 0; tileRow < gridHeight; tileRow++) {
             for (int tileColumn = 0; tileColumn < gridWidth; tileColumn++) {
-                grid[tileRow][tileColumn] = 'M';
+                grid[tileRow][tileColumn] = 'x';
             }
         }
 
@@ -83,11 +83,8 @@ public class MedBayGenerator implements ILevelGenerator {
         int approachRight  = wardLeft - 1;
         int approachLeft   = approachRight - LevelGenConstants.MED_BAY_APPROACH_LENGTH + 1;
         carveFloor(grid, approachLeft, centerRow - approachHalf, approachRight, centerRow + approachHalf);
-        // Emergency strip walls 'S' flanking the approach — a clinical corridor accent.
-        paintWallRun(grid, approachLeft, approachRight, centerRow - approachHalf - 1, 'S');
-        paintWallRun(grid, approachLeft, approachRight, centerRow + approachHalf + 1, 'S');
 
-        // --- Cryo-pod alcove(s) carved off the ward, framed in cryo walls 'Z' ---
+        // --- Cryo-pod alcove(s) carved off the ward ---
         int alcoveSize = LevelGenConstants.MED_BAY_ALCOVE_SIZE;
         boolean alcoveOnLeft = random.nextBoolean();
         int alcoveLeft = alcoveOnLeft ? centerColumn - alcoveSize - 1 : centerColumn + 2;
@@ -108,12 +105,6 @@ public class MedBayGenerator implements ILevelGenerator {
             int bottomAlcoveBottom = bottomAlcoveTop - alcoveSize + 1;
             carveAlcove(grid, alcoveLeft, bottomAlcoveBottom, alcoveRight, bottomAlcoveTop, wardBottom - 1);
             lineAlcovePods(grid, alcoveLeft, alcoveRight, bottomAlcoveBottom);
-        }
-
-        // --- Ward viewing window: a band of reinforced glass 'N' on the ward's top wall ---
-        int windowLeft = wardLeft + 2;
-        for (int tileColumn = windowLeft; tileColumn < windowLeft + LevelGenConstants.MED_BAY_WINDOW_WIDTH; tileColumn++) {
-            setIfWall(grid, tileColumn, wardTop + 1, 'N');
         }
 
         // --- The auto-doc heal station at the ward centre (solid; player heals when adjacent) ---
@@ -153,7 +144,9 @@ public class MedBayGenerator implements ILevelGenerator {
                 enemySpawnPoints, new FloorPopulator.EncounterFacts(-1, 0f, 0f, 0, 0), config,
                 FloorPopulator.specOf(config, ge.tbegvadze.toon3d.route.RouteNodeType.REST), dungeonDepth, seed);
         Level level = populated.attachTo(new Level(grid, populated.spawnPoints, populated.weaponSpawnPoints,
-                                LevelPalettes.generatedWithBaseWall(seed)));
+                                LevelFinisher.request(grid, seed).config(config)
+                                        .floorGroup(ge.tbegvadze.toon3d.tileset.WallGroup.MEDICAL)
+                                        .basePalette(LevelPalettes.legacy()).finish()));
         level.markHealStation(stationColumn, stationRow);
         return level;
     }
@@ -174,20 +167,11 @@ public class MedBayGenerator implements ILevelGenerator {
     }
 
     /**
-     * Carves an alcove rectangle, frames it in cryo walls 'Z', then punches a 2-tile doorway through
+     * Carves an alcove rectangle, then punches a 2-tile doorway through
      * the {@code doorRow} wall that separates it from the ward so it stays connected.
      */
     private void carveAlcove(char[][] grid, int left, int bottom, int right, int top, int doorRow) {
         carveFloor(grid, left, bottom, right, top);
-        // Frame the ring just outside the alcove with cryo walls (only where it is still 'M' mass).
-        for (int tileColumn = left - 1; tileColumn <= right + 1; tileColumn++) {
-            setIfWall(grid, tileColumn, bottom - 1, 'Z');
-            setIfWall(grid, tileColumn, top + 1, 'Z');
-        }
-        for (int tileRow = bottom - 1; tileRow <= top + 1; tileRow++) {
-            setIfWall(grid, left - 1, tileRow, 'Z');
-            setIfWall(grid, right + 1, tileRow, 'Z');
-        }
         // Doorway through the separating wall row (2 tiles wide, centred).
         int doorColumn = left + 1;
         carveFloor(grid, doorColumn, doorRow, doorColumn + 1, doorRow);
@@ -198,20 +182,6 @@ public class MedBayGenerator implements ILevelGenerator {
         for (int tileColumn = left; tileColumn <= right; tileColumn++) {
             char prop = ((tileColumn - left) % 2 == 0) ? '&' : 'I';
             placeProp(grid, tileColumn, wallRow, prop);
-        }
-    }
-
-    /** Paints a horizontal run of a wall accent char, only over existing wall mass 'M'. */
-    private void paintWallRun(char[][] grid, int left, int right, int row, char wall) {
-        for (int tileColumn = left; tileColumn <= right; tileColumn++) {
-            setIfWall(grid, tileColumn, row, wall);
-        }
-    }
-
-    /** Sets a tile to a wall accent only if it is currently plain medical wall 'M'. */
-    private void setIfWall(char[][] grid, int tileColumn, int tileRow, char wall) {
-        if (inBounds(grid, tileColumn, tileRow) && grid[tileRow][tileColumn] == 'M') {
-            grid[tileRow][tileColumn] = wall;
         }
     }
 

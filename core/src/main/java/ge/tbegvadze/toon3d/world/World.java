@@ -48,6 +48,8 @@ import ge.tbegvadze.toon3d.level.BossArenaLayout;
 import ge.tbegvadze.toon3d.level.CavernGenerator;
 import ge.tbegvadze.toon3d.level.ILevelGenerator;
 import ge.tbegvadze.toon3d.level.LevelGenConfig;
+import ge.tbegvadze.toon3d.util.TilesetConstants;
+import ge.tbegvadze.toon3d.tileset.RegionWallSets;
 import ge.tbegvadze.toon3d.level.Level;
 import ge.tbegvadze.toon3d.level.LevelGenerator;
 import ge.tbegvadze.toon3d.level.LinearCorridorGenerator;
@@ -100,6 +102,7 @@ import ge.tbegvadze.toon3d.render.*;
 import ge.tbegvadze.toon3d.render.enemyvisual.EnemyVisualLayer;
 import ge.tbegvadze.toon3d.render.WeaponInspectOverlayRenderer;
 import ge.tbegvadze.toon3d.render.tilesetgfx.EnvironmentTextureSet;
+import ge.tbegvadze.toon3d.render.tilesetgfx.RegionWallAtlas;
 import ge.tbegvadze.toon3d.render.tilesetgfx.TilesetGfxBootstrap;
 import ge.tbegvadze.toon3d.route.AmmoCacheRequest;
 import ge.tbegvadze.toon3d.route.BossTable;
@@ -260,6 +263,9 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
     // TILESET SYSTEM (order-6): per-level texture supply realized from the level's palette; owned here,
     // set on the wall/prop renderers each level, disposed on level teardown (leak-free across transitions).
     private EnvironmentTextureSet  environmentTextureSet;
+    // REGION WALL ATLAS (generated-wall-art order 2): the floor's wall / door / column faces + glow, loaded for
+    // the floor's region set and disposed with the floor (only one region is ever resident).
+    private RegionWallAtlas        regionWallAtlas;
     private EnemyRenderer          enemyRenderer;
     // generated-enemy-art order 2: the animated enemy layer of the current floor (atlases, animators,
     // dying instances). Built and disposed with the floor beside enemyRenderer; listens to enemyManager.
@@ -1202,7 +1208,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         // in on top and then consumed, so it applies to exactly this floor and never compounds.
         EnemyBudgetOverride budget = applyNextFloorBudgetBonus(plan.enemyBudget());
         pendingNextFloorBudgetBonus = 0f;
-        LevelGenConfig config = applyFloorSupplyInputs(applyEnemyBudget(plan.config(), budget));
+        LevelGenConfig config = applyFloorWallSet(applyFloorSupplyInputs(applyEnemyBudget(plan.config(), budget)));
         ILevelGenerator    generator  = RouteRegistries.generators().create(plan.generatorId(), seed, config);
         Level built = generator.generate(depth);
         captureBossArenaLayout(generator);
@@ -1406,6 +1412,36 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
     }
 
     /**
+     * REGION WALL SETS (generated-wall-art order 2, rule P1): the floor's region names its wall set, resolved
+     * exactly like the lighting mood (the route plan's region for the current depth), plus how many floors
+     * into the region this floor is (P7's breach growth; RegionPlan, never a modulo). A region the plan does
+     * not cover, or a set nobody registered, falls back to outer_facility with one log line.
+     */
+    private LevelGenConfig applyFloorWallSet(LevelGenConfig config) {
+        String setId = null;
+        int floorIndexInRegion = 0;
+        if (routePlan != null) {
+            try {
+                RegionSpec region = routePlan.regionForDepth(currentDepth);
+                RegionAmbience ambience = region == null ? null
+                        : RouteRegistries.regionAmbience().get(region.themeId());
+                setId = ambience == null ? null : ambience.wallSetId();
+                floorIndexInRegion = region == null ? 0 : Math.max(0, currentDepth - region.firstDepth());
+            } catch (IllegalArgumentException depthOutsidePlan) {
+                setId = null;
+            }
+        }
+        if (!RegionWallSets.registry().contains(setId)) {
+            Gdx.app.log("WallSet", "no region wall set for depth=" + currentDepth + " - using fallback "
+                    + TilesetConstants.WALL_SET_DEFAULT);
+            setId = TilesetConstants.WALL_SET_DEFAULT;
+        }
+        config.wallSetId          = setId;
+        config.floorIndexInRegion = floorIndexInRegion;
+        return config;
+    }
+
+    /**
      * Returns the generator config to use, with the node's {@link EnemyBudgetOverride} folded in.
      * A null override leaves the config untouched; a null config with an override gets a fresh
      * default config carrying the scale (generators that ignore config still ignore it).
@@ -1437,6 +1473,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         // TILESET SYSTEM (order-6): free this floor's realized textures before the next floor rebuilds
         // its own subset — keeps GPU footprint at one level's palette, not an accumulation across floors.
         if (environmentTextureSet != null) { environmentTextureSet.dispose(); environmentTextureSet = null; }
+        if (regionWallAtlas != null) { regionWallAtlas.dispose(); regionWallAtlas = null; }
         if (shopMachineRenderer != null) shopMachineRenderer.dispose();
         enemyRenderer.dispose();
         impactEffectSystem.setBodyEffectsOwner(null);
@@ -1562,7 +1599,8 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         // the GL thread here (level load); disposed in rebuildForLevel/dispose so transitions stay leak-free.
         environmentTextureSet  = EnvironmentTextureSet.realize(targetLevel.getPalette(),
                                                                TilesetGfxBootstrap.generators());
-        wallRenderer.setEnvironmentTextureSet(environmentTextureSet);
+        regionWallAtlas        = RegionWallAtlas.loadForFloor(targetLevel.getPalette().wallSetId());
+        wallRenderer.setRegionWallAtlas(regionWallAtlas, GameMath.floorSeed(runSeed, currentDepth));
         propRenderer.setEnvironmentTextureSet(environmentTextureSet);
         propRenderer.setWeaponTierMap(buildWeaponTierMap());
         shopMachineRenderer    = new ShopMachineRenderer(targetLevel, wallRenderer);
@@ -3154,6 +3192,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         propRenderer.dispose();
         // TILESET SYSTEM (order-6): free the current floor's realized textures at world shutdown.
         if (environmentTextureSet != null) { environmentTextureSet.dispose(); environmentTextureSet = null; }
+        if (regionWallAtlas != null) { regionWallAtlas.dispose(); regionWallAtlas = null; }
         if (shopMachineRenderer != null) shopMachineRenderer.dispose();
         enemyRenderer.dispose();
         impactEffectSystem.setBodyEffectsOwner(null);

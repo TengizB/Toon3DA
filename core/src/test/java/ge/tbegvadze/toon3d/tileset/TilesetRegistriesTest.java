@@ -55,30 +55,28 @@ class TilesetRegistriesTest {
     }
 
     @Test
-    void wallCategoryHoldsEveryWallSymbolPlusVarietyArt() {
-        // Like the COLUMN category (order-8), the WALL category carries per-level VARIETY art beyond the
-        // historic 1:1 table since order-9: "wall_hex_plate" (RECIPE A acceptance sprite) is an extra
-        // accent no legacy symbol maps to. So the pool is AT LEAST the wall-symbol count and contains the
-        // variety sprite; the exact 1:1 count no longer holds by design.
+    void everyWallSymbolAndTheColumnResolveInEveryRegionWallSet() {
+        // generated-wall-art order 2: walls and the column left the sprite catalog. Every Level.isWall char is
+        // a slot of the WALL_SLOT_TABLE and resolves (with the R3 fallback) to a sprite id of every registered
+        // region set — an alias through the set it borrows; 'P' is the COLUMN and every set ships columns.
         EnvironmentSpriteRegistry registry = freshRegistry();
+        assertTrue(registry.allInCategory(TileCategory.WALL).isEmpty(), "walls are not catalog sprites any more");
+        assertTrue(registry.allInCategory(TileCategory.COLUMN).isEmpty(), "columns are not catalog sprites any more");
         int wallSymbolCount = countLevelChars(candidate -> Level.isWall((char) candidate));
-        assertTrue(registry.allInCategory(TileCategory.WALL).size() >= wallSymbolCount);
-        assertTrue(registry.contains("wall_plain"));
-        assertTrue(registry.contains(TilesetRegistries.SPRITE_ID_WALL_HEX_PLATE));
-    }
-
-    @Test
-    void columnCategoryHoldsRoundAndSquareColumnVariety() {
-        // order-8 REQUIREMENT PROOF 2: the COLUMN category is the first flexible-sprite slot to carry
-        // MORE art than it has symbols — the single symbol 'P' (Level.isColumn) resolves per level to
-        // "column_round" OR "column_square". So the 1:1 symbol==sprite count invariant no longer holds
-        // for COLUMN by design; it must hold that the pool is at least the symbol count and contains
-        // both variety sprites.
-        EnvironmentSpriteRegistry registry = freshRegistry();
-        int columnSymbolCount = countLevelChars(candidate -> Level.isColumn((char) candidate));
-        assertTrue(registry.allInCategory(TileCategory.COLUMN).size() >= columnSymbolCount);
-        assertTrue(registry.contains("column_round"));
-        assertTrue(registry.contains("column_square"));
+        assertEquals(WallSlotTable.symbols().length(), wallSymbolCount);
+        RegionWallSetRegistry sets = RegionWallSets.registry();
+        for (String setId : sets.ids()) {
+            RegionWallSet set = sets.resolve(setId);
+            for (char symbol : WallSlotTable.symbols().toCharArray()) {
+                assertTrue(Level.isWall(symbol), symbol + " must stay a wall");
+                List<String> ids = set.resolve(WallSlotTable.groupOf(symbol), WallSlotTable.slotOf(symbol));
+                assertFalse(ids.isEmpty(), setId + " leaves " + symbol + " without a picture");
+                assertTrue(set.allWallIds().containsAll(ids), setId + " resolves " + symbol + " outside its set");
+            }
+            assertTrue(Level.isColumn(ge.tbegvadze.toon3d.util.TilesetConstants.WALL_SET_COLUMN_SYMBOL));
+            assertEquals(2, set.columnIds().size());
+            assertEquals(4, set.doorIds().size());
+        }
     }
 
     @Test
@@ -109,10 +107,10 @@ class TilesetRegistriesTest {
     @Test
     void heightAndOccluderMetadataMatchesLegacyValues() {
         EnvironmentSpriteRegistry registry = freshRegistry();
-        // Walls are full-height stripes that occlude.
-        EnvironmentSpriteDefinition plainWall = registry.get("wall_plain");
-        assertEquals(1f, plainWall.heightMultiplier(), 0f);
-        assertTrue(plainWall.occluder());
+        // A crate keeps its legacy height and occludes (walls are region-set faces now, not catalog sprites).
+        assertEquals(ge.tbegvadze.toon3d.util.RenderConstants.PROP_HEIGHT_CRATE,
+                registry.get("prop_crate").heightMultiplier(), 0f);
+        assertTrue(registry.get("prop_crate").occluder());
         // A solid prop keeps its legacy height and occludes.
         assertEquals(0.90f, registry.get("prop_locker").heightMultiplier(), 0f);
         assertTrue(registry.get("prop_locker").occluder());
@@ -124,11 +122,10 @@ class TilesetRegistriesTest {
     @Test
     void observatoryArtIsTaggedForContainment() {
         EnvironmentSpriteRegistry registry = freshRegistry();
-        assertTrue(registry.get("wall_stellar_viewport").hasThemeTag(TilesetRegistries.THEME_TAG_OBSERVATORY));
         assertTrue(registry.get("prop_gravity_well_core").hasThemeTag(TilesetRegistries.THEME_TAG_OBSERVATORY));
         assertTrue(registry.get("decal_starlight_seam").hasThemeTag(TilesetRegistries.THEME_TAG_OBSERVATORY));
         // Non-observatory art carries no theme tag.
-        assertTrue(registry.get("wall_plain").themeTags().isEmpty());
+        assertTrue(registry.get("prop_locker").themeTags().isEmpty());
     }
 
     @Test
@@ -145,13 +142,13 @@ class TilesetRegistriesTest {
     void registeringSameIdTwiceThrows() {
         EnvironmentSpriteRegistry registry = freshRegistry();
         assertThrows(IllegalStateException.class, () ->
-                registry.register(EnvironmentSpriteDefinition.builder("wall_plain", TileCategory.WALL, "dup").build()));
+                registry.register(EnvironmentSpriteDefinition.builder("prop_locker", TileCategory.SOLID_PROP, "dup").build()));
     }
 
     @Test
     void gettingUnregisteredIdThrows() {
         EnvironmentSpriteRegistry empty = new EnvironmentSpriteRegistry();
-        assertThrows(IllegalArgumentException.class, () -> empty.get("wall_plain"));
+        assertThrows(IllegalArgumentException.class, () -> empty.get("prop_locker"));
     }
 
     @Test
@@ -167,7 +164,7 @@ class TilesetRegistriesTest {
         TilesetRegistries.bootstrap();
         TilesetRegistries.bootstrap(); // second call must be a no-op, not a double-registration throw
         assertTrue(TilesetRegistries.isBootstrapped());
-        assertNotNull(TilesetRegistries.sprites().get("wall_plain"));
+        assertNotNull(TilesetRegistries.sprites().get("prop_locker"));
         // The shared singleton holds the same complete inventory as a freshly-populated registry.
         assertEquals(freshRegistry().size(), TilesetRegistries.sprites().size());
     }

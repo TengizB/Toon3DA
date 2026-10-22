@@ -1,7 +1,6 @@
 package ge.tbegvadze.toon3d.render.tilesetgfx;
 
 import ge.tbegvadze.toon3d.render.PropRenderer;
-import ge.tbegvadze.toon3d.render.WallRenderer;
 import ge.tbegvadze.toon3d.tileset.TilesetRegistries;
 
 import java.util.Set;
@@ -11,9 +10,9 @@ import java.util.TreeSet;
  * The one place the render-side {@link TextureGeneratorRegistry} is populated (symbol/sprite-reuse
  * order-6) — the render-layer twin of {@code TilesetRegistries.bootstrap()} and the sibling of
  * {@code RouteIconBootstrap}. It maps EVERY v1 sprite id from the art catalog to the procedural code that
- * draws it: the wall + column generators live with the pixel code in {@code WallRenderer}, the solid-prop
- * + floor-decal generators in {@code PropRenderer}, and each renderer contributes its own generators via
- * {@code registerTextureGenerators(registry)} so the mapping sits next to the routine it names.
+ * draws it: the solid-prop + floor-decal generators in {@code PropRenderer}, contributed via
+ * {@code registerTextureGenerators(registry)} so the mapping sits next to the routine it names. Walls, doors
+ * and columns are not in the catalog: the region wall atlas draws them (generated-wall-art order 2).
  *
  * <p>Holds the process-wide generator singleton (mirroring how {@code TilesetRegistries} holds the sprite
  * registry). {@link #bootstrap()} is idempotent — safe across a death→new-run rebuild — and asserts the
@@ -61,11 +60,10 @@ public final class TilesetGfxBootstrap {
 
     /**
      * Registers the full v1 generator set into the given registry. Exposed (package-private) so tests can
-     * populate a fresh registry without touching the shared singleton. WallRenderer contributes the walls
-     * + round column; PropRenderer contributes the solid props + floor decals.
+     * populate a fresh registry without touching the shared singleton. PropRenderer contributes the solid
+     * props + floor decals.
      */
     static void register(TextureGeneratorRegistry registry) {
-        WallRenderer.registerTextureGenerators(registry);
         PropRenderer.registerTextureGenerators(registry);
     }
 

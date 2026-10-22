@@ -1,6 +1,7 @@
 package ge.tbegvadze.toon3d.level;
 
 import ge.tbegvadze.toon3d.tileset.LevelPalettes;
+import ge.tbegvadze.toon3d.tileset.WallGroup;
 import ge.tbegvadze.toon3d.util.BalanceConfig;
 import ge.tbegvadze.toon3d.util.LevelGenConstants;
 import ge.tbegvadze.toon3d.util.RenderConstants;
@@ -38,7 +39,15 @@ import java.util.Random;
 public class CavernGenerator implements ILevelGenerator, SupplySlotProvider {
 
     private enum ChamberType {
-        ENTRANCE, STANDARD, MEDICAL_BAY, ARMORY, CRYO_CHAMBER, CONTAINMENT_BLOCK
+        ENTRANCE(WallGroup.HALL), STANDARD(WallGroup.HALL), MEDICAL_BAY(WallGroup.MEDICAL),
+        ARMORY(WallGroup.SECURITY), CRYO_CHAMBER(WallGroup.CONTAINMENT), CONTAINMENT_BLOCK(WallGroup.CONTAINMENT);
+
+        /** The chamber's wall family (generated-wall-art order 2, rule P2): the LevelFinisher stamps it. */
+        final WallGroup wallGroup;
+
+        ChamberType(WallGroup wallGroup) {
+            this.wallGroup = wallGroup;
+        }
     }
 
     private static final class Chamber {
@@ -60,8 +69,8 @@ public class CavernGenerator implements ILevelGenerator, SupplySlotProvider {
     }
 
     private       Random random;
-    // The raw floor seed, kept for deterministic per-level BASE-WALL selection (independent of `random`,
-    // so it never perturbs the generated grid). See LevelPalettes.generatedWithBaseWall.
+    // Raw floor seed: the LevelFinisher's own wall-dressing stream derives from it (independent of
+    // `random`, so it never perturbs the generated grid). See LevelFinisher.
     private final long   seed;
     private       int    spawnColumn;
     private       int    spawnRow;
@@ -207,7 +216,21 @@ public class CavernGenerator implements ILevelGenerator, SupplySlotProvider {
                         encounter.floorBudget(), encounter.bodyTarget(), footprintTarget),
                 config, dungeonDepth, seed);
         return populated.attachTo(new Level(grid, populated.spawnPoints, populated.weaponSpawnPoints,
-                         LevelPalettes.generatedWithBaseWall(seed)));
+                         finishWalls(grid, chambers)));
+    }
+
+    /**
+     * Region wall sets (generated-wall-art order 2): the cave goes through the {@link LevelFinisher} as a
+     * HALL floor with BREACH weighted up (P3); each decorated chamber names its family (P2).
+     */
+    private ge.tbegvadze.toon3d.tileset.LevelPalette finishWalls(char[][] grid, List<Chamber> chambers) {
+        LevelFinisher.Request request = LevelFinisher.request(grid, seed).config(config).cavern()
+                .basePalette(LevelPalettes.legacy());
+        for (Chamber chamber : chambers) {
+            request.room(chamber.leftColumn + 1, chamber.bottomRow + 1, chamber.rightColumn - 1, chamber.topRow - 1,
+                         chamber.type.wallGroup);
+        }
+        return request.finish();
     }
 
     // -------------------------------------------------------------------------
@@ -572,27 +595,27 @@ public class CavernGenerator implements ILevelGenerator, SupplySlotProvider {
      */
     private enum CaveBiome {
         // Overgrown bioluminescent spore garden: flesh walls, glowing pools, bio-pods.
-        FUNGAL_HOLLOW (new char[]{'G', 'j'},      new char[]{'O', '.', 's'}, new char[]{'&'},           'I', FloorMood.GLOW),
+        FUNGAL_HOLLOW (2, new char[]{'O', '.', 's'}, new char[]{'&'},           'I', FloorMood.GLOW),
         // Frozen cryo-vault: frost walls, containment glass, dim blue light, cryo pods.
-        FROST_VAULT   (new char[]{'Z', 'N'},      new char[]{'s', 'O'},      new char[]{'&', 'L'},      '&', FloorMood.DIM),
+        FROST_VAULT   (2, new char[]{'s', 'O'},      new char[]{'&', 'L'},      '&', FloorMood.DIM),
         // Radioactive reactor sump: radiation walls, leaking drums, flickering light.
-        REACTOR_SUMP  (new char[]{'U', 'h', 'k'}, new char[]{'e', 'O', '.'}, new char[]{'g', 'E'},      '%', FloorMood.FLICKER),
+        REACTOR_SUMP  (3, new char[]{'e', 'O', '.'}, new char[]{'g', 'E'},      '%', FloorMood.FLICKER),
         // Derelict data wreck: terminal/wire walls, dead consoles, an AI tomb.
-        DERELICT_NEST (new char[]{'t', 'w', 'c'}, new char[]{'.', 'm', 'e'}, new char[]{'T', 'L', 'C'}, 'J', FloorMood.DIM),
+        DERELICT_NEST (3, new char[]{'.', 'm', 'e'}, new char[]{'T', 'L', 'C'}, 'J', FloorMood.DIM),
         // Infested gore warren: flesh walls, corpse drifts, deep darkness, deathtrap drums.
-        GORE_WARREN   (new char[]{'G', 'j'},      new char[]{'m', '.', 's'}, new char[]{'E'},           'E', FloorMood.DARK),
+        GORE_WARREN   (2, new char[]{'m', '.', 's'}, new char[]{'E'},           'E', FloorMood.DARK),
         // Bare mineral grotto: corroded rock, mining rubble, dense stalagmite forests.
-        CRYSTAL_GROTTO(new char[]{'j', 'k', 'x'}, new char[]{'O', '.'},      new char[]{'C'},           'C', FloorMood.ROCKY);
+        CRYSTAL_GROTTO(3, new char[]{'O', '.'},      new char[]{'C'},           'C', FloorMood.ROCKY);
 
-        final char[]    wallChars;     // candidate reskins for walls bordering this biome
+        final int       retiredWallDrawSpan; // R1 draw ledger: size of the retired wall reskin list (one nextInt)
         final char[]    decalChars;    // walkable decals scattered on the floor
         final char[]    scatterProps;  // solid props scattered sparsely through the region
         final char      landmarkProp;  // rare set-piece prop anchoring a feature cluster
         final FloorMood mood;          // floor-lighting personality
 
-        CaveBiome(char[] wallChars, char[] decalChars, char[] scatterProps,
+        CaveBiome(int retiredWallDrawSpan, char[] decalChars, char[] scatterProps,
                   char landmarkProp, FloorMood mood) {
-            this.wallChars    = wallChars;
+            this.retiredWallDrawSpan = retiredWallDrawSpan;
             this.decalChars   = decalChars;
             this.scatterProps = scatterProps;
             this.landmarkProp = landmarkProp;
@@ -742,7 +765,7 @@ public class CavernGenerator implements ILevelGenerator, SupplySlotProvider {
     private void decorateCaveBody(char[][] grid, boolean[][] chamberMask, CaveBiome[] biomes) {
         if (biomes.length == 0) return;
         themeCaveFloor(grid, chamberMask, biomes);
-        themeCaveWalls(grid, chamberMask, biomes);
+        retiredCaveWallRolls(grid, chamberMask, biomes);
         placeCaveDecals(grid, chamberMask, biomes);
         placeStalagmites(grid, chamberMask, biomes);
         placeBiomeProps(grid, chamberMask, biomes);
@@ -783,8 +806,12 @@ public class CavernGenerator implements ILevelGenerator, SupplySlotProvider {
         }
     }
 
-    /** Reskins cave walls that border floor using the palette of the adjacent biome. */
-    private void themeCaveWalls(char[][] grid, boolean[][] chamberMask, CaveBiome[] biomes) {
+    /**
+     * R1 draw ledger (generated-wall-art order 2): this pass used to reskin cave walls bordering a biome.
+     * The pictures now come from the floor's region set through the LevelFinisher; the rolls stay so the
+     * generator's random sequence — and with it every prop, spawn and pickup — is unchanged.
+     */
+    private void retiredCaveWallRolls(char[][] grid, boolean[][] chamberMask, CaveBiome[] biomes) {
         int gridWidth  = LevelGenConstants.LEVEL_GEN_GRID_WIDTH;
         int gridHeight = LevelGenConstants.LEVEL_GEN_GRID_HEIGHT;
         for (int tileRow = 1; tileRow < gridHeight - 1; tileRow++) {
@@ -794,8 +821,8 @@ public class CavernGenerator implements ILevelGenerator, SupplySlotProvider {
                 int biomeId = adjacentBiome(tileColumn, tileRow);
                 if (biomeId < 0) continue;
                 if (random.nextFloat() >= LevelGenConstants.LEVEL_GEN_CAVE_BIOME_WALL_CHANCE) continue;
-                char[] palette = biomes[biomeId].wallChars;
-                grid[tileRow][tileColumn] = palette[random.nextInt(palette.length)];
+                // R1: the retired biome reskin is still drawn; the LevelFinisher dresses cave walls (P3).
+                random.nextInt(biomes[biomeId].retiredWallDrawSpan);
             }
         }
     }
@@ -981,7 +1008,7 @@ public class CavernGenerator implements ILevelGenerator, SupplySlotProvider {
             for (int wallRow : new int[]{ chamber.bottomRow, chamber.topRow }) {
                 if (Level.isWall(grid[wallRow][tileColumn])
                         && random.nextFloat() < LevelGenConstants.LEVEL_GEN_MEDICAL_WALL_CHANCE) {
-                    grid[wallRow][tileColumn] = 'M';
+                    // R1: the retired chamber wall dressing keeps its roll; the LevelFinisher stamps the family.
                 }
             }
         }
@@ -989,7 +1016,7 @@ public class CavernGenerator implements ILevelGenerator, SupplySlotProvider {
             for (int wallColumn : new int[]{ chamber.leftColumn, chamber.rightColumn }) {
                 if (Level.isWall(grid[tileRow][wallColumn])
                         && random.nextFloat() < LevelGenConstants.LEVEL_GEN_MEDICAL_WALL_CHANCE) {
-                    grid[tileRow][wallColumn] = 'M';
+                    // R1: the retired chamber wall dressing keeps its roll; the LevelFinisher stamps the family.
                 }
             }
         }
@@ -1010,7 +1037,7 @@ public class CavernGenerator implements ILevelGenerator, SupplySlotProvider {
             for (int wallRow : new int[]{ chamber.bottomRow, chamber.topRow }) {
                 if (Level.isWall(grid[wallRow][tileColumn])
                         && random.nextFloat() < LevelGenConstants.LEVEL_GEN_ARMORY_BLAST_WALL_CHANCE) {
-                    grid[wallRow][tileColumn] = 'X';
+                    // R1: the retired chamber wall dressing keeps its roll; the LevelFinisher stamps the family.
                 }
             }
         }
@@ -1030,7 +1057,7 @@ public class CavernGenerator implements ILevelGenerator, SupplySlotProvider {
         for (int tileColumn = chamber.leftColumn; tileColumn <= chamber.rightColumn; tileColumn++) {
             if (Level.isWall(grid[chamber.topRow][tileColumn])
                     && random.nextFloat() < LevelGenConstants.LEVEL_GEN_CRYO_WALL_CHANCE) {
-                grid[chamber.topRow][tileColumn] = 'Z';
+                // R1: the retired chamber wall dressing keeps its roll; the LevelFinisher stamps the family.
             }
         }
         // Bio-pod '&' rows at 2-tile spacing
@@ -1049,7 +1076,7 @@ public class CavernGenerator implements ILevelGenerator, SupplySlotProvider {
             for (int wallColumn : new int[]{ chamber.leftColumn, chamber.rightColumn }) {
                 if (Level.isWall(grid[tileRow][wallColumn])
                         && random.nextFloat() < LevelGenConstants.LEVEL_GEN_CONTAINMENT_GLASS_CHANCE) {
-                    grid[tileRow][wallColumn] = 'N';
+                    // R1: the retired chamber wall dressing keeps its roll; the LevelFinisher stamps the family.
                 }
             }
         }
@@ -1057,7 +1084,7 @@ public class CavernGenerator implements ILevelGenerator, SupplySlotProvider {
         for (int tileColumn = chamber.leftColumn; tileColumn <= chamber.rightColumn; tileColumn++) {
             if (Level.isWall(grid[chamber.topRow][tileColumn])
                     && random.nextFloat() < LevelGenConstants.LEVEL_GEN_CONTAINMENT_BIO_CHANCE) {
-                grid[chamber.topRow][tileColumn] = 'Q';
+                // R1: the retired chamber wall dressing keeps its roll; the LevelFinisher stamps the family.
             }
         }
     }
@@ -1391,7 +1418,8 @@ public class CavernGenerator implements ILevelGenerator, SupplySlotProvider {
                 ge.tbegvadze.toon3d.route.GeneratorId.CAVERN.stableId(), grid, this, new ArrayList<>(),
                 new FloorPopulator.EncounterFacts(-1, 0f, 0f, 0, 0), config, dungeonDepth, seed);
         return populated.attachTo(new Level(grid, populated.spawnPoints, populated.weaponSpawnPoints,
-                         LevelPalettes.generatedWithBaseWall(seed)));
+                         LevelFinisher.request(grid, seed).config(config).cavern()
+                                 .basePalette(LevelPalettes.legacy()).finish()));
     }
 
     // -------------------------------------------------------------------------
