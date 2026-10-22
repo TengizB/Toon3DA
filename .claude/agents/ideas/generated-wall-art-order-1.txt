@@ -1,4 +1,4 @@
-STATUS: NOT IMPLEMENTED
+STATUS: IN PROGRESS
 CATEGORY: Visual
 TITLE: Wall art order 1 - wall kit + Outer Facility region set
 CREATED: 2026-10-22
