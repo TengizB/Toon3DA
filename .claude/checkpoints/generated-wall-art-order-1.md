@@ -54,7 +54,7 @@ file's tick in the same commit as the work**. Never more than one checkpoint unc
       DONE WHEN: every committed enemy atlas/glow/manifest + fx file regenerates byte-identical.
 - [x] **CP2** — walls.py writes a valid manifest + atlas + glow + mips for the HALL group alone.
       DONE WHEN: `python3 walls.py <dir> outer_facility` writes the files; twice -> byte-identical; hall strips seamless.
-- [ ] **CP3** — all six room families + SIGNATURE generated and in the manifest.
+- [x] **CP3** — all six room families + SIGNATURE generated and in the manifest.
       DONE WHEN: manifest lists 30 walls; every room-family strip seamless; 6-copy BASE strips pass.
 - [ ] **CP4** — doors, columns, floor, ceiling generated; the five shipped files committed.
       DONE WHEN: A1, A3, A4 hold on the committed files.
@@ -90,3 +90,14 @@ Glow frame level 0 is baked at 0.06 (just above GLOW_DEAD) so the "off" frame ho
 lit lamp of the base face. Material `grime` is defined at runtime in outer_facility_walls.py - MOVE IT TO kit.py
 (appended) before CP4 and re-run the enemy regen check.
 Verified: 9 hall faces, LIGHT 4 frames animate=some (glow 1.07%), two runs byte-identical, join ratios 0.24-0.32.
+
+**CP3:** 30 walls in the manifest (9 HALL + 6 rooms x 3 + SIGNATURE x 3), via the ROOMS table at the bottom of
+outer_facility_walls.py. Families by SHAPE: MEDICAL one rounded white livery panel + teal care band (band 186-197,
+grammar) / dispenser + scrub hatch; SECURITY riveted gunmetal over carved chevrons / mesh-fronted rifle niche;
+CONTAINMENT quilted insulation pads + frost seams / dogged frosted porthole; MACHINERY two darkmetal cabinets +
+conduit rails / breaker panel + lever; RESEARCH narrow dark panels + continuous cyan seam lines (grammar rails, R-3) /
+wall terminal; STORAGE roll shutter in guide channels / shutter half up + crate edge; SIGNATURE crew lockers with
+scratched name plates / one ajar, a short scarf on a hook. E5 note: the first scarf (round hanging chains) read as a
+limb, the second (two equal tails) as trousers - the shipped one is a flat band, one long fringed tail + a short
+fold (lesson for the guide). 6-copy base strips: pass (only architecture repeats). Deterministic (cmp). No warnings.
+Dev helper (not committed): scratchpad/one.py <region> <out.png> <id substrings...> bakes chosen faces fast.
