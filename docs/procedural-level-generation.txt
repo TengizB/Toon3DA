@@ -164,11 +164,10 @@ by the generator, remaining solid 'x'. This guarantees a closed outer boundary.
 === TILE CHARS PRODUCED ===
 
 Walls (solid, block movement + raycasting):
-  'x'  Plain wall     — 82% of visible walls (default)
-  'c'  Conduit wall   — 10% (utility corridors, pipes)
-  'v'  Vent wall      — 5%  (room side walls)
-  'w'  Wires wall     — 2%  (near equipment areas)
-  't'  Terminal wall  — 1%  (rare corner alcoves)
+  The generators write ONLY 'x' for walls. Every wall symbol is chosen afterwards by the LevelFinisher
+  (see "THE LEVEL FINISHER" below) from the floor's region wall set: a symbol names a SLOT (HALL BASE 'x',
+  STRUCTURE 'k', LIGHT 'S', SERVICE 'c', VENT (apostrophe), MARKER 'h', BREACH 'G', and each room family's BASE +
+  ACCENT) - docs/tile-symbols.txt WALLS.
 
 Doors:
   'd'  Door — placed at every corridor-room boundary
@@ -258,12 +257,8 @@ geometry for the raycaster.
     else                              → keep ' ' (lit)
     Max flickering tiles per room: 2–3 (randomly chosen per room)
 
-3b. Wall Variety (all 'x' tiles adjacent to any non-wall tile):
-    roll < 0.01 → 't'
-    roll < 0.02 → 'w'
-    roll < 0.07 → 'v'
-    roll < 0.17 → 'c'
-    else        → keep 'x'
+3b. Wall Variety — RETIRED (generated-wall-art order 2): the pass keeps its rolls (the R1 draw ledger,
+    level/RetiredWallDressing) and writes nothing; the LevelFinisher dresses every wall.
 
 3c. Props (non-entrance rooms, 13% per interior floor tile):
     randomPropChar() distribution:
@@ -286,11 +281,12 @@ geometry for the raycaster.
      * Must run before assignFloorLighting() because lighting changes ' ' to 'l'/'u'/'f',
        which would confuse the door-detection heuristic.
   6. assignFloorLighting()           — vary ' ' within rooms
-  7. assignWallVariety()             — vary 'x' adjacent to non-walls
+  7. retiredWallVarietyRolls()       — the old variety rolls, drawn and discarded (R1)
   8. placePlayerSpawn()              — set 'p' at entrance room center
   9. placeProps()                    — stamp prop chars on floor tiles (runs before enemies)
   10. spawnEnemiesInRoom() per room  — add EnemySpawnPoints on walkable floor tiles
-  11. new Level(grid, spawnPoints)   — construct Level from generated grid
+  11. LevelFinisher.finish()          — walls dressed from the region set + the floor's palette
+  12. new Level(grid, spawnPoints, palette) — construct Level from the finished grid
 
 === CONSTANTS (all in Constants.java, prefix LEVEL_GEN_) ===
 
@@ -336,3 +332,30 @@ geometry for the raycaster.
   • No special room types beyond entrance + standard.
   • Corridors are always 1 tile wide; no wider passages or open-plan connections.
   • No level depth scaling; difficulty is constant across runs.
+
+
+=== THE LEVEL FINISHER — region wall sets (generated-wall-art order 2) ===
+
+EVERY generator's final grid (ROOMS_MST, LINEAR_CORRIDOR, CAVERN, BOSS_ARENA, MED_BAY, EVENT_ROOM,
+GATE_AIRLOCK, the start room and every fallback) goes through level/LevelFinisher before `new Level(...)`:
+
+  LevelFinisher.request(grid, seed).room(interiorL, B, R, T, WallGroup)...   // dungeon rooms / chambers
+               .floorGroup(G)        // special floors: MED_BAY MEDICAL, gate SECURITY, event + boss SIGNATURE
+               .cavern()             // P3: BREACH weighted up
+               .config(config)       // LevelGenConfig.wallSetId + floorIndexInRegion (World sets them)
+               .basePalette(p)       // the props/decals palette (allocator or legacy)
+               .finish();            // dresses the grid in place, returns the floor's LevelPalette
+
+It resets every wall to 'x' (only a wall symbol ever replaces a wall symbol), stamps each room's family
+(RoomBlueprint.wallGroup(); LinearCorridor's local STORAGE_BAY / REACTOR name STORAGE / MACHINERY), then
+runs the placement rules P2-P9 (docs/wall-art-creation-guide.txt section 7) on its OWN seeded stream
+(GameMath.wallSetSeed) and builds the palette from the region set (tileset/RegionPaletteBuilder). Rates:
+LevelGenConstants.WALL_SET_*.
+
+R1 — THE 2D GAME IS UNTOUCHED. The generators' old wall-dressing passes (wall variety, per-type room
+theming, salvage panels, generic accents, rust / gore near decals, the cave biome reskins) KEEP every random
+draw and write no picture; draws that were conditioned on a wall still being plain 'x' read
+level/RetiredWallDressing, which records what the retired passes would have repainted. The deterministic
+bulkhead pass (no RNG) was deleted. Proved for order 2: 200 seeds x 7 generators x depths 1-25 + 200 start
+rooms - walkable mask, every fixed symbol, spawns, stations and credits identical to the build before.
+

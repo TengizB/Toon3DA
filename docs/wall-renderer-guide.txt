@@ -1,11 +1,10 @@
-# TILESET SYSTEM: a wall symbol is a fixed CATEGORY slot; its sprite is chosen PER LEVEL via the
-#  level's LevelPalette + EnvironmentTextureSet. See docs/environment-tileset-system.txt.
-# GONE as of order-7 (DONE): the fixed constructor-built wall/column texture table this guide used to
-#  describe NO LONGER EXISTS. WallRenderer no longer owns or builds wall/column textures; it resolves
-#  each symbol per frame through symbol -> sprite id (the level's LevelPalette) -> Texture (the per-level
-#  EnvironmentTextureSet, which OWNS and disposes them). At level load setEnvironmentTextureSet()
-#  PRE-RESOLVES those into small char-indexed arrays so the hot per-column draw stays a single O(1) array
-#  read. Below, "wallTexture" means "the texture resolved for the struck symbol", not a single global asset.
+# REGION WALL ATLAS (generated-wall-art order 2): every wall, door and column face of a floor comes from the
+#  floor's region wall set - render/tilesetgfx/RegionWallAtlas, built by World with the floor and disposed with
+#  it. WallRenderer.setRegionWallAtlas(atlas, floorSeed) resolves each char to face indices ONCE per level
+#  (wall symbol -> WallSlotTable slot -> the set's face ids -> atlas indices; doors d R Y B; the floor's
+#  column), so the hot per-column path reads plain int arrays. The old per-symbol textures, generators and
+#  EnvironmentTextureSet wall role are DELETED. The contract is docs/wall-art-creation-guide.txt section 13.
+#  Below, "wallTexture" means "the region atlas" and texColumn/srcY are offsets inside the struck face.
 
 # Moved from: .claude/CLAUDE.md
 # WallRenderer implementation details — reference for agents extending the renderer.
@@ -18,13 +17,20 @@
 4. For each screen column: cast DDA ray → perpWallDistance → texColumn → draw 1px-wide wall stripe.
    All column draws (1280 at HD, 1920 at FULL HD) accumulated in one batch call.
 
-batch.draw per column:
-  batch.draw(wallTexture,
+batch.draw per column (region atlas):
+  face   = wallFaceIndices[start[char] + GameMath.wallVariantIndex(column, row, side, floorSeed, count)]
+  mip    = GameMath.wallMipLevel(lineHeight, 256, WALL_MIP_BIAS, 2);   size = 256 >> mip
+  batch.draw(atlas,
              screenColumn * columnWidth, drawBottom,
              columnWidth, drawTop - drawBottom,
-             texColumn, 0, 1, textureHeight,   // srcX, srcY, srcW, srcH
+             faceX(mip) + texColumn, faceY(mip) + clipSrcY, 1, clipSrcHeight,   // srcX, srcY, srcW, srcH
              false, false);                     // no flip needed
-  srcY=0 = top of image; LibGDX Y-up maps image row 0 to visual top without manual flip.
+  faceY = the face's TOP row in the atlas; LibGDX Y-up maps image rows top-down without manual flip.
+  side: 0 W / 1 E / 2 S / 3 N face of the struck tile (from the DDA step), so variants are stable per face.
+GLOW (PHASE 4, after the muzzle-light pass): the glow atlas at the same face rect / mip (an animated face at
+  mip 0 uses its current frame's rect), NORMAL blend, colour (1,1,1, alpha) - ungraded; alpha =
+  GameMath.wallGlowDistanceAlpha(distance, 10, 20, 0.6) x level.getLightMultiplier() (BLACKOUT). A column
+  with a door panel draws only the panel's glow.
 
 Shading: batch.setColor(red, green, blue, 1f) before each draw — embeds tint in vertex data, no flush.
   The scalar shade (falloff × face × tile brightness, clamped) is GRADED per column by the floor's
@@ -40,23 +46,20 @@ Shading: batch.setColor(red, green, blue, 1f) before each draw — embeds tint i
   panel lights the panel only. See docs/art-direction.txt section 11.
 
 BASE-PASS COST CUTS (render-performance-full-hd, both pixel-identical):
-  R16 OPAQUE BASE PASS - every wall/column/door texture goes through finalizeWallTexture(pixmap), which
-      records whether every texel is opaque (OPAQUE_WALL_TEXTURES; pruned by forgetWallTextureOpacity on
-      dispose). resolveLevelWallAndColumnTextures() folds the level's set into levelSurfacesOpaque; when true the
-      base pass runs with batch.disableBlending() (re-enabled before Phase 3), which saves fill-rate for nothing
-      blending would have changed. A level with any non-opaque wall texture keeps blending.
+  R16 OPAQUE BASE PASS - the region atlas is RGB by contract (guide section 12), so levelSurfacesOpaque is
+      always true and the base pass runs with batch.disableBlending() (re-enabled before Phase 3).
   R18 COLUMN MERGE - neighbouring columns whose surface slice is EXACTLY equal (texture, texColumn, srcY,
       srcHeight, drawBottom, drawTop, colour; no door panel) are submitted as one wider quad sampling the same
       1-texel source column (isSameSurfaceSlice). Built because the base-pass submission measured ~31% (median)
-      of the CPU wall pass. A W-ATLAS (one atlas page for the level's wall textures) was measured NOT to be worth
-      it (median 3 wall draw calls) and is not built.
+      of the CPU wall pass. With the region atlas the key (texture, absolute srcX, srcY, height) implies the
+      face, variant and mip; merges still happen within a face slice.
   The muzzle-light Phase 3 still draws per column.
 
 Performance:
   Ceiling + floor  → drawn by FloorCeilingRenderer (its own batch), not here
-  Texture switch   → 1 GL call  (whitePixelTexture → wallTexture)
-  all wall cols    → 1 GL call  (at batch.end())
-  Total: 2 GL draw calls regardless of resolution or texture size.
+  Base pass        → 1 bind (the region atlas: walls + doors + columns)
+  Glow pass        → 1 bind (the glow atlas)
+  Draw calls do not grow with the number of distinct walls on the floor.
 
 === RESOLUTION CONTROL ===
 

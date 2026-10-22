@@ -2,6 +2,12 @@ ENVIRONMENT TILESET SYSTEM — Symbol/Sprite Reuse
 ================================================
 STATUS: LIVE (migration complete — orders 0-9 shipped)
 
+>>> WALLS, DOORS AND COLUMNS LEFT THIS SYSTEM (generated-wall-art order 2, 2026-10-22). They are built from
+>>> the floor's REGION WALL SET — see section 15 "REGION WALL SETS" and docs/wall-art-creation-guide.txt.
+>>> What sections 1, 2, 4, 6, 7, 8, 9 and the BASE-WALL VARIETY addendum say about walls, the column, the
+>>> base-wall alternates or "wall_*" / "column_*" sprites is SUPERSEDED (kept as history); the prop and decal
+>>> half of those sections is still live.
+
 Single source of truth for the symbol/sprite decoupling subsystem. The migration that built it is
 COMPLETE: every order (0-9) has shipped, and this doc now describes SHIPPED behaviour, not a target.
 It was created in order-0 (before any code changed) and filled section-by-section, in-commit, by each
@@ -90,6 +96,7 @@ SECTION PLACEHOLDERS (each filled by its order, in the same commit that ships th
 
 1. ART CATALOG & REGISTRIES  [DONE — order-1]
    The `…toon3d.tileset` package (headless, no LibGDX imports) is the data-driven ART CATALOG: the
+   [SUPERSEDED FOR WALLS + COLUMNS by section 15 (generated-wall-art order 2): props and decals only below.]
    fixed set of tile CATEGORIES and a registry of every environment SPRITE the game can draw. order-1
    is pure data + registration — NO per-level binding, NO allocator, NO renderer change. The legacy
    WallRenderer texture table and PropRenderer switch stay the runtime authority; the registry exists
@@ -146,6 +153,7 @@ SECTION PLACEHOLDERS (each filled by its order, in the same commit that ships th
 
 2. SYMBOL BUDGET (FIXED vs FLEXIBLE)  [DONE — order-2]
    The SAFETY BOUNDARY of the whole series: the authoritative declaration of which level-file symbols
+   [SUPERSEDED FOR WALLS + COLUMNS by section 15 (generated-wall-art order 2): props and decals only below.]
    the per-level allocator (order-4) MAY reassign a sprite to (FLEXIBLE) and which it must NEVER touch
    (FIXED). Isolated as one small, heavily-tested config so the allocator can trust it and a reviewer
    can see, in one place, exactly what is safe to vary. Pure config + a small value object — NO
@@ -276,6 +284,7 @@ SECTION PLACEHOLDERS (each filled by its order, in the same commit that ships th
 
 4. ALLOCATION (SymbolAllocator)  [DONE — order-4]
    THE HEART of the series: the deterministic, headless engine (`…toon3d.tileset`, no LibGDX) that turns
+   [SUPERSEDED FOR WALLS + COLUMNS by section 15 (generated-wall-art order 2): props and decals only below.]
    a floor's seed + the rooms actually placed into a concrete LevelPalette. This is where symbol reuse,
    freed-symbol reclamation, and rule-governed (never random) variety happen. SymbolAllocator.allocate()
    is a PURE FUNCTION of its request — no static mutable state, no clock, no iteration-order dependence —
@@ -496,6 +505,7 @@ SECTION PLACEHOLDERS (each filled by its order, in the same commit that ships th
 
 6. TEXTURE REALIZATION (per level)  [DONE — order-6]
    The RENDER-SIDE foundation that makes "each level uses a subset of a large pool" real IN MEMORY. Today
+   [SUPERSEDED FOR WALLS + COLUMNS by section 15 (generated-wall-art order 2): props and decals only below.]
    WallRenderer generates EVERY wall texture in its constructor and holds them all forever; that does not
    scale to the large pool this series enables. order-6 splits GENERATION (data-driven, registered per
    sprite id) from REALIZATION (per level, lazy): a level builds textures only for the handful of sprite
@@ -568,6 +578,7 @@ SECTION PLACEHOLDERS (each filled by its order, in the same commit that ships th
 
 7. RENDER INTEGRATION  [DONE — order-7]
    THE FLIP: the renderers stop reading their own constructor-built per-char texture tables and instead
+   [SUPERSEDED FOR WALLS + COLUMNS by section 15 (generated-wall-art order 2): props and decals only below.]
    resolve each environment symbol through the level's LevelPalette + EnvironmentTextureSet (order-6). After
    this order, changing a level's palette VISIBLY changes what its walls / columns / props look like.
    Because every level still defaults to the LEGACY palette (order-3) — which maps each symbol to the SAME
@@ -644,6 +655,7 @@ SECTION PLACEHOLDERS (each filled by its order, in the same commit that ships th
 
 8. GENERATOR INTEGRATION  [DONE — order-8]
    Where the whole series becomes VISIBLE on generated floors. LevelGenerator now (1) selects rooms from
+   [SUPERSEDED FOR WALLS + COLUMNS by section 15 (generated-wall-art order 2): props and decals only below.]
    the RoomBlueprintRegistry, (2) asks the SymbolAllocator for a per-level LevelPalette built from the
    rooms it actually placed, (3) attaches that palette to the Level, and (4) paints generic rooms + halls
    with rule-driven variety. Two freshly generated levels now visibly differ in walls / columns / props,
@@ -749,6 +761,7 @@ SECTION PLACEHOLDERS (each filled by its order, in the same commit that ships th
 
 9. RECIPES & FINAL STATE  [DONE — order-9]
    The load-bearing payoff of the whole series: new environment art and new rooms are added by
+   [SUPERSEDED FOR WALLS + COLUMNS by section 15 (generated-wall-art order 2): props and decals only below.]
    REGISTRATION ALONE — never an edit to LevelGenerator, WallRenderer/PropRenderer draw logic, or Level.
    This is the same "never a switch statement" discipline route/RouteRegistries.bootstrap() established.
    Both recipes below were EXERCISED END-TO-END in order-9 as the acceptance proof (see ACCEPTANCE
@@ -1131,8 +1144,10 @@ SECTION PLACEHOLDERS (each filled by its order, in the same commit that ships th
    LEVEL_GEN_SETPIECE_ROOM_SELECTION_WEIGHT (all in util/LevelGenConstants.java).
 
 
-BASE-WALL VARIETY — the plain 'x' wall varies per generated level  [ADDENDUM]
+BASE-WALL VARIETY — the plain 'x' wall varies per generated level  [ADDENDUM — SUPERSEDED, DELETED]
 ============================================================================
+   [DELETED by generated-wall-art order 2: the alternates, chooseBaseWall and generatedWithBaseWall are gone;
+    'x' is the HALL BASE slot of the floor's region set, with 3 variants picked per face (section 15).]
 PROBLEM: 'x' is the 80-90% bulk wall (order-2 PLAIN-WALL RULE) and was PERMANENTLY bound to the single
 sprite "wall_plain" (a static disk image, textures/lab/lab_wall_generic.jpg). Because every level's bulk
 wall was that one image, all levels read as the same place regardless of seed — the accent walls varied
@@ -1229,3 +1244,47 @@ SANDSTONE_MORTAR_THICKNESS / CLEANLAB_WALL_TEXTURE_SIZE / CLEANLAB_PANEL_ROWS / 
 CLEANLAB_WALL_SEED / TILED_WALL_TEXTURE_SIZE / TILED_WALL_TILE_SIZE / TILED_WALL_GROUT_THICKNESS /
 TILED_WALL_SEED. Sprite-id constants TilesetRegistries.SPRITE_ID_WALL_PLAIN_SANDSTONE /
 SPRITE_ID_WALL_PLAIN_CLEAN / SPRITE_ID_WALL_PLAIN_TILED.
+
+
+15. REGION WALL SETS  [DONE — generated-wall-art order 2]
+==========================================================
+THE KNOWLEDGE DOCUMENT FOR WALLS IS docs/wall-art-creation-guide.txt (sections 6, 7, 12, 13). This section is the
+tileset-side summary.
+
+WHAT CHANGED: walls, doors and columns are no longer environment sprites. The catalog (TilesetRegistries) holds
+props and decals only; the symbol budget and the allocator handle props and decals only. A WALL SYMBOL NAMES A
+SLOT: TilesetConstants.WALL_SLOT_TABLE (21 symbols, parsed by tileset/WallSlotTable) maps each to a (WallGroup,
+WallSlot) - HALL x BASE, k STRUCTURE, S LIGHT, c SERVICE, ' VENT, h MARKER, G BREACH; MEDICAL M/Q, SECURITY X/w,
+CONTAINMENT Z/N, MACHINERY U/j, RESEARCH t/D, STORAGE v/", SIGNATURE F/` (base/accent). Level.isWall is exactly
+that table (SymbolCategories derives WALL from it and COLUMN from 'P'); no symbol was added or removed.
+
+CLASSES (headless, tileset):
+  WallGroup / WallSlot      enums with per-constant data (id tokens, BASE variant counts, slots, focal flag,
+                            the R3 fallback ACCENT/BREACH -> BASE, others -> HALL BASE)
+  RegionWallSet             one set: ids derived from the stable naming (wall_<l>_<group>_<slot>[_<v>],
+                            door_<l>_<kind>, column_<l>_<kind>), breach base/step, file names; or an ALIAS row
+  RegionWallSetRegistry     register / resolve (follows aliases) / validate
+  RegionWallSets            THE CATALOG: outer_facility real; research_wing, reactor_depths, the_breach, the_core
+                            alias it until orders 3-4 (a set is one row; switching an alias to a real set is one
+                            line). resolveOrDefault(id) = set A for null / unknown.
+  RegionPaletteBuilder      base palette + set -> every wall symbol bound to its slot's variant-0 face, 'P' to the
+                            set's first column, LevelPalette.wallSetId() = the REAL set
+CHOOSING (level): level/LevelFinisher - every generator's final grid (rooms, corridor, cavern, boss arena, med bay,
+event, gate, start room, fallbacks) goes through it: family stamping from RoomBlueprint.wallGroup() (P2/P3), the
+hall placement P4-P9, then RegionPaletteBuilder. Own seeded stream (GameMath.wallSetSeed); the generators keep
+every random draw of their retired wall passes (level/RetiredWallDressing) so layout, spawns and supply are
+byte-identical (R1). LevelPalettes.legacy() = props/decals + set A, so hand levels read their walls through the
+slot table as written.
+REGION: RegionAmbience.wallSetId (route) names each region's set; RouteRegistries fails startup on an unknown id;
+World.applyFloorWallSet sets LevelGenConfig.wallSetId + floorIndexInRegion per floor (like the lighting mood).
+DRAWING (render/tilesetgfx): RegionWallAtlas replaces EnvironmentTextureSet's wall/door/column role (the set
+realizes props and decals only); WallRenderer reads the atlas through per-level face tables; SurfaceMaterials
+loads each set's floor + ceiling.
+
+RECIPES FOR WALLS (replace RECIPE A for walls):
+  ADD A WALL FACE / VARIANT  the region's builder in .claude/skills/enemy-art (walls.py) + its manifest; nothing in
+                             Java unless a variant count changes (WallGroup.baseVariantCount).
+  ADD A REGION SET           ship the five files under assets/textures/walls/generated/ and turn its RegionWallSets
+                             row from alias(...) into of(id, letter, breachBase, breachStep).
+  ADD A ROOM                 RECIPE B as before - its RoomBlueprint registration names an existing WallGroup.
+

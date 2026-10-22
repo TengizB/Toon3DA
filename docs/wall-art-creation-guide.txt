@@ -35,7 +35,7 @@ CONTENTS
   10. Glow and animation
   11. Doors, columns, floors and ceilings
   12. Output: atlas, mips, manifest
-  13. Engine contract                                              [PLANNED: order 2]
+  13. Engine contract                                              [shipped: order 2]
   14. Verification and the owner approval gate
   15. Lessons already paid for
   16. The five regions (design briefs)
@@ -227,30 +227,45 @@ CONTENTS
   RESEARCH     t base   D accent        STORAGE    v base   " accent
   SIGNATURE    F base   ` accent
   Doors d R Y B and the column P are FIXED symbols whose pictures come from the region set.
-  [PLANNED: order 2 puts this table in TilesetConstants; docs/tile-symbols.txt then describes wall
-  symbols by slot.]
+  SHIPPED (order 2): the table is TilesetConstants.WALL_SLOT_TABLE, parsed by tileset/WallSlotTable
+  (groupOf / slotOf / symbolFor with the slot fallback); docs/tile-symbols.txt describes wall symbols by slot.
+  Level.isWall is exactly this table; 'P' is the COLUMN. No symbol was added or removed.
 
 
 ====================================================================================================
-7. HOW OFTEN EACH WALL APPEARS (THE PLACEMENT RULES)  [PLANNED: order 2]
+7. HOW OFTEN EACH WALL APPEARS (THE PLACEMENT RULES)                [shipped: order 2]
 ====================================================================================================
-The level picks walls by rule, on its own seeded RNG stream (never the generator's), so layout, spawns
-and supply never change. Design every wall knowing how often it will be seen:
-  P1  REGION: the floor's region picks the set; start room and hand-made levels use region A.
-  P2  ROOMS: a room's perimeter is its family's BASE; its ACCENT on 1-3 tiles (the wall facing the
-      entrance first), never two accents adjacent.
-  P3  SPECIAL FLOORS: MED_BAY -> MEDICAL, gate -> SECURITY, event + boss arena -> SIGNATURE, caverns ->
-      HALL with BREACH weighted up.
-  P4  RHYTHM: on a straight exposed hall run >= 5 tiles every 4th tile is STRUCTURE; the walls flanking a
-      door are STRUCTURE.
-  P5  LIGHT: no exposed hall run >= 7 tiles without a LIGHT; never two LIGHTs adjacent.
-  P6  VARIETY: SERVICE / VENT on 6-10% of the remaining hall base in 1-3 tile clusters; MARKER 1-3 per
-      floor near the arrival point and the exit.
-  P7  BREACH: hall density = breachBase + floorIndexInRegion x breachStep, in seeded clusters; 0 on a
-      region's first floor, clearly visible on its last; never on a door frame.
-  P8  Only exposed walls (a walkable 4-neighbour) are dressed; only a wall symbol replaces a wall symbol.
-  P9  SPACING: two FOCAL walls (LIGHT, MARKER, ACCENT, the signature ACCENT) are never adjacent and keep
-      >= 2 tiles between them along a run; the same focal wall keeps >= 4.
+The level picks walls by rule, on its own seeded RNG stream (GameMath.wallSetSeed - never the generator's),
+so layout, spawns and supply never change (order 2 proved it: 200 seeds x 7 generators x depths 1-25 + 200
+start rooms, walkable mask and every fixed symbol identical). ONE place does it: level/LevelFinisher, which
+every generator's final grid goes through. Rates are LevelGenConstants.WALL_SET_*. Design every wall knowing
+how often it will be seen:
+  P1  REGION: the floor's region picks the set (World.applyFloorWallSet: the route plan's region for the depth,
+      like the lighting mood; RegionAmbience.wallSetId); start room, dev runs and hand-made levels use set A.
+  P2  ROOMS: a room's perimeter (the exposed walls whose open neighbour lies inside its interior) is its family's
+      BASE; its ACCENT on 1-3 tiles (1 in a room narrower than 3), the wall facing the entrance first, never on
+      a door frame. Each RoomBlueprint names its family (RoomBlueprint.wallGroup()); HALL rooms are not stamped.
+  P3  SPECIAL FLOORS: MED_BAY -> MEDICAL, gate -> SECURITY, event + boss arena -> SIGNATURE for every wall no
+      room claims (+ its accents); caverns -> HALL with BREACH density +WALL_SET_CAVERN_BREACH_BONUS; cavern
+      chambers name their family like rooms.
+  P4  RHYTHM: a RUN is a maximal straight line of rhythm walls (HALL, or a special floor's own group) sharing
+      one open side; on a run >= 5 tiles every 4th tile is STRUCTURE (phase seeded per run). The walls flanking
+      a door IN LINE with it are STRUCTURE (door frames), whoever owns them.
+  P5  LIGHT: no run >= 7 tiles without a LIGHT (placed on the latest base tile before the stretch closes,
+      preferring one flanked by base on both sides - a lamp between two panels); never two LIGHTs adjacent.
+  P6  VARIETY: MARKER 1-3 per floor (near the arrival 'p', near the exit '>', then anywhere); SERVICE / VENT on
+      6-10% of the remaining hall base in 1-3 tile clusters along a line.
+  P7  BREACH: hall density = breachBase + floorIndexInRegion x breachStep (RegionWallSet; set A 0.00 + 0.03),
+      in seeded clusters; 0 on a region's first floor, ~12% of hall base on its fifth; never on a door frame.
+  P8  Only exposed walls (a non-wall 4-neighbour) are dressed; only a wall symbol replaces a wall symbol; the
+      finisher first resets every wall to the HALL BASE 'x'.
+  P9  SPACING: two FOCAL walls (LIGHT, MARKER, ACCENT) keep a Chebyshev distance > 2 (never adjacent, >= 2
+      tiles between); the same focal wall > 4. P9 wins over P5 when nothing is allowed.
+  MEASURED (order 2, 40 seeds per generator, exposed walls): rooms floors ~72% BASE (hall 46% + room bases
+  26%), STRUCTURE 16-18% (P4's "every 4th" + door frames - more than the old "~10%" estimate), LIGHT ~4%,
+  SERVICE + VENT ~4%, breach 0% -> ~6% of exposed walls from a region's first to its last floor; caverns ~80%
+  BASE (few straight runs). A STRUCTURE face is therefore seen about as often as a BASE variant: design it as
+  quiet architecture, never as a feature.
   Consequence for design: ~65-75% of what a player sees is BASE (in variants), so BASE carries the
   region's mood quietly; ~10% is STRUCTURE/LIGHT rhythm; everything focal is rare and spaced.
 
@@ -395,17 +410,40 @@ brightest moods (sprite guide 4.5).
 
 
 ====================================================================================================
-13. ENGINE CONTRACT  [PLANNED: order 2]
+13. ENGINE CONTRACT                                                 [shipped: order 2]
 ====================================================================================================
-  - One region atlas per floor (walls + doors + columns: one bind), one glow atlas, the two surfaces;
-    loaded with the floor, disposed with it. A manifest that fails to load -> the floor uses region A.
-  - BASE variant per face = pure hash of (tile column, row, side, floor seed): stable, no popping.
-  - Distance LOD: mip 0/1/2 from texels per screen pixel (256 / stripe height) - kills distant shimmer.
-  - Glow: NORMAL blend, ungraded, BLACKOUT-dimmed, alpha fading from 10 tiles to 0.6 at 20.
-  - The base pass keeps its opaque/unblended path and equal-column merge (render-performance-full-hd).
-  - Every world pass grades walls at environment strength 1.0 under the region's mood and fogs by depth.
-  The order that ships this rewrites this section as SHIPPED behaviour.
-
+  - CHOOSING (headless): tileset/WallGroup + WallSlot (per-constant data: id tokens, variant counts, focal flag,
+    the R3 fallback ACCENT/BREACH -> BASE, others -> HALL BASE), WallSlotTable, RegionWallSet (ids DERIVED from
+    the stable naming of section 12 - wall_<letter>_<group>_<slot>[_<variant>], door_<letter>_<kind>,
+    column_<letter>_<kind>) + RegionWallSetRegistry, RegionWallSets.bootstrap() (THE CATALOG: set A real, B-E
+    rows that ALIAS it until orders 3-4 - an alias is one row), RegionPaletteBuilder (every wall symbol ->
+    its slot's variant-0 face, 'P' -> the set's first column, everything else copied). LevelPalette.wallSetId()
+    names the REAL set. The route region names its set (RegionAmbience.wallSetId); startup fails loud on an
+    unregistered id.
+  - DRAWING: render/tilesetgfx/RegionWallAtlas.loadForFloor(palette.wallSetId()) parses the manifest into dense
+    face arrays and loads the two atlases (Nearest); World builds it with the floor and disposes it with the
+    floor (one region resident). It cross-checks every id the set names; a manifest that fails, or lacks an
+    id, falls back to set A, and if even A fails the walls draw flat - never a crash (R7).
+  - WallRenderer.setRegionWallAtlas(atlas, floorSeed) resolves each char to face indices ONCE per level; the
+    worker threads read plain int arrays. Per column: BASE variant = GameMath.wallVariantIndex(column, row,
+    side, floorSeed, variants) with side 0 W / 1 E / 2 S / 3 N (a corner seen from two halls may show two
+    variants); mip = GameMath.wallMipLevel(stripe height, 256, WALL_MIP_BIAS 1.0, 2); srcX = face origin at
+    that mip + texel column, srcY = the face's top row + the clipped row (the Y-up rule unchanged). Doors and
+    columns use the same atlas; the door slide and keycard logic are untouched. The floor's column picture is
+    picked per FLOOR from the set's two columns (one architecture per floor).
+  - BASE pass: unblended (the atlas is RGB, R16), equal neighbouring slices merged (R18; the key srcX/srcY/
+    height implies the mip), ONE texture bind. Graded at environment strength 1.0 and fogged by depth.
+  - GLOW pass (after the muzzle-light pass): the glow atlas at the same rect/mip, NORMAL blend, colour white x
+    alpha - exempt from the grade, the red-alert dampen and the muzzle light; alpha = GameMath.
+    wallGlowDistanceAlpha (1.0 to 10 tiles, 0.6 at 20 and beyond) x the floor's light multiplier (BLACKOUT dims
+    glow by its factor only). A column with a door panel shows only the panel's glow. ONE bind.
+  - ANIMATION: at mip 0 an animated face picks its glow frame from the world clock (GameMath.wallGlowFrameIndex)
+    with a per-face phase bucket hashed from (tile, side, seed); "animate": "some" runs on a seeded 1 face in
+    WALL_GLOW_SOME_ANIMATE_ONE_IN (6), the rest hold frame 0; past mip 0 the static glow mips are drawn.
+  - SURFACES: render/SurfaceMaterials registers "<set>.floor" / "<set>.ceiling" for every set id (aliases load
+    the borrowed set), read once from the PNG and flipped to the generator layout (row 0 = south); each lighting
+    mood binds its region's set surfaces. FloorCeilingRenderer is unchanged.
+  - Constants: RenderConstants WALL_* (face size, max mip, mip bias, glow fade, some-animate, hash sides).
 
 ====================================================================================================
 14. VERIFICATION AND THE OWNER APPROVAL GATE
@@ -470,6 +508,18 @@ brightest moods (sprite guide 4.5).
        luminance; the ceiling band (<= 0.18) needed concrete_dk. Measure (walls.luminance), never guess.
   15.19 Panel gaps must be EVEN across the tile edge (4..124 / 132..252: 8 px both ways) or the BASE beats as
        pairs of panels.
+  15.20 (order 2) Removing a generator's wall pass is not "delete the writes": its RANDOM DRAWS feed every later
+       prop, spawn and pickup, and a few later passes drew only when a wall was still plain 'x'. The passes keep
+       every draw and write nothing; level/RetiredWallDressing remembers which walls they WOULD have repainted
+       so the 'x'-conditioned draws see what they saw. Prove R1 with a full sweep, never a spot check.
+  15.21 A LIGHT placed on "the latest tile before the 7-stretch closes" kept landing beside a STRUCTURE rib
+       (k S pairs along every hall). Preferring a tile flanked by base on both sides centres the lamp between
+       ribs (k x S x k) and reads as architecture.
+  15.22 "animate": "some" is a seeded 1 in 6 PER FACE (side included): ten lamps in a row can all hold still.
+       To capture a flicker, find an animating face by its hash (run-game `lookat:S:INDEX:BACK:SIDE`), do not
+       sample at random.
+  15.23 P4's "every 4th tile" + door frames makes STRUCTURE ~17% of exposed walls - as common as a BASE
+       variant. A structure face must stay quiet; it is architecture, not a feature.
 
 
 ====================================================================================================
@@ -535,7 +585,9 @@ ADD A WALL TO A REGION SET (a variant, a slot face)
 
 ADD A REGION SET
   [ ] all of 6.1 (36 faces + 2 surfaces); trim lines written into section 5; breach base/step
-  [ ] the RegionWallSet registry row stops aliasing region A [PLANNED: order 2 mechanism]
+  [ ] its RegionWallSets row changes from RegionWallSet.alias(id, "outer_facility") to
+      RegionWallSet.of(id, letter, LevelGenConstants.WALL_SET_<L>_BREACH_BASE, ..._STEP) - one line; the
+      manifest's ids must follow section 12 (the atlas loader refuses a set that lacks one)
   [ ] section 16 brief; owner gate
 
 ADD A ROOM FAMILY
@@ -547,4 +599,5 @@ ADD A ROOM (that uses an existing family)
   [ ] its RoomBlueprint registration names the family - no art, no symbol, nothing else
 
 CHANGE THE PLACEMENT RULES
-  [ ] constants in LevelGenConstants (WALL_SET_*), section 7 updated in the same commit
+  [ ] level/LevelFinisher + constants in LevelGenConstants (WALL_SET_*), section 7 updated in the same commit;
+      prove R1 (walkable mask + fixed symbols unchanged) before shipping

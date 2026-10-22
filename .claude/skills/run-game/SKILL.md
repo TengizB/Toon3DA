@@ -82,6 +82,7 @@ count events with `grep -c Pause FILE`.
 | `equipmelee:ITEM_TYPE` | builds the melee weapon as a pickup does (`World.createMeleeWeaponForType`) and selects it, so FIRE swings it for real (`WEAPON_HAMMER`: 50% knockback roll per swing) |
 | `logmoments` | wraps the floor's `EnemyVisualListener` so every visual moment prints (`moment STAGGERED …`): proof a reaction came from a real weapon. Issue it once per floor |
 | `fx` | prints how many generated effect particles are alive (order-3 pool) |
+| `textures` | prints LibGDX's managed texture count (`Texture.getNumManagedTextures()`) — a leak check across floor transitions (generated-wall-art order 2 used it for 20 transitions) |
 | `clip:INDEX` | prints `state=… clip=…` — which animated clip (`render/enemyvisual`) the enemy shows, or `LEGACY` |
 | `burst:NAME:COUNT:INTERVAL` | COUNT shots `NAME_00…` every INTERVAL s from now (one per frame at most; 0.05 at 30 fps ≈ every other frame) — turn them into a GIF with `burst2gif.sh` |
 | `timestart` / `timestop` | average frame time between them (render + `glFinish`); use `--fps 0` |

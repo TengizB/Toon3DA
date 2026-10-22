@@ -227,6 +227,10 @@ public class CaptureLauncher extends ApplicationAdapter {
                 case "fx":
                     printEffectCount();
                     break;
+                case "textures":
+                    System.out.println("[capture] managed textures=" + com.badlogic.gdx.graphics.Texture.getNumManagedTextures()
+                            + " at " + clockSeconds + "s");
+                    break;
                 case "logmoments":
                     logVisualMoments();
                     break;

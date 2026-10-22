@@ -59,7 +59,10 @@ Never `git add -A`.
 - [x] **CP5** — variants + LOD + glow + animation; captures A4-A6 sent.
 - [x] **CP6** — floor/ceiling from the set's surfaces; capture sent.
 - [x] **CP7** — Part 3 deletion; tests updated; build green; A3 grep clean; A7.
-- [ ] **CP8** — probe + leak check (A8); docs (A9); reviewer gate; STATUS IMPLEMENTED.
+- [x] **CP8a** — docs (A9): wall-art guide 6.4/7/13/15/17, art-direction 5/6/7/17, environment-tileset §15 +
+      superseded notes, tile-symbols, wall-renderer-guide, procedural-level-generation, route-map-system, CLAUDE.md;
+      run-game `textures` step; leak check done.
+- [ ] **CP8b** — probe (A8) recorded; R1 re-run on the final code; both balance gates; reviewer; STATUS IMPLEMENTED.
 
 ## UPDATED TESTS (W10)
 
@@ -195,3 +198,7 @@ ids/files/constants/wallPalette over core + assets + skills is clean (docs come 
 (region B alias, cavern), depth 5 boss arena (SIGNATURE lockers), depth 21 (region E), start room — all set A, no
 missing texture, no fallback log. Hand-made levels: legacy palette covered by LevelPaletteTest (LevelLoader path is
 dev-only).
+
+**CP8a:** LEAK (A8): 20 floor transitions (rooms, cavern, corridor, boss arena, med bay) - `Texture.getNumManagedTextures()`
+stays 11-29 depending on floor/overlay state, no growth (a per-floor atlas leak would add +2 per floor). Docs updated
+(see ledger). Probe A/B (base worktree /tmp/base-wt at c163c98, runtime /tmp/base-rt) running; results go in CP8b.
