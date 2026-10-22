@@ -97,8 +97,7 @@ B2  LEVEL — level/LevelLoader.java (~line 65)
     - EncounterBudgetPlanner's comment says the Spiresower is "placed by its own systems", so the
       omission may be deliberate for GENERATED floors. In a HAND-MADE level, '}' is currently left in
       the grid as an unknown character instead of becoming an enemy.
-    - Fix: decide (see OPEN QUESTIONS), then add '}' to the list and to the comment, or write the
-      reason it is excluded into the comment and docs/tile-symbols.txt.
+    - Fix (D1): add '}' to the list and to the comment.
 
 B3  LEVEL — level/EncounterPlacer.java (~lines 150-180)
     - The placer merges a group into a room only while
