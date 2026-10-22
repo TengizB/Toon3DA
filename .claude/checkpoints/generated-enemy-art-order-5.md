@@ -61,7 +61,7 @@ file's tick in the same commit as the work**. Never more than one checkpoint unc
 - [x] **CP5b** — the NEW Mire Wraith (dangerous, alive, not an egg): rig + full clip set + effects row; stills, clip GIFs
       and in-engine bursts (default + one mood) sent. DONE WHEN: sent; build green.
 - [x] **CP5c** — owner approval of the new Mire Wraith recorded (stop until it is); then its row wired, A2 verified.
-- [ ] **CP6** — docs (guide, art-direction 16, SKILL.md, enemy-system); reviewer PASS; STATUS: IMPLEMENTED.
+- [x] **CP6** — docs (guide, art-direction 16, SKILL.md, enemy-system); reviewer PASS; STATUS: IMPLEMENTED.
 
 ## NOTES CARRIED FORWARD
 
@@ -154,3 +154,7 @@ Re-run on the committed state: all four aberrations animated (ALERT clip), Wrait
 shot/impact, 9.1 aberration set, 9.2 burst ids, lessons 12.17-12.20, recipe), art-direction 16 (rows, roster, G13 number),
 enemy-system (order 5 + the chainAlertQueue finding), enemy-art + run-game SKILL.md, CLAUDE.md enemyvisual row; idea
 IMPLEMENTATION NOTE, STATUS IN PROGRESS. Next: reviewer, then STATUS IMPLEMENTED.
+
+**CP6:** reviewer r1 PASS WITH FIXES (generated-enemy-art-order-5.reviewer-r1.md): required fix applied (GameMath.distance in
+EnemyEffectSystem.launch; one-declaration-per-line nit too); build: only StoryBarkTest red. Non-blocking items accepted and
+recorded in the IMPLEMENTATION NOTE. STATUS: IMPLEMENTED 2026-10-22.

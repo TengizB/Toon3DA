@@ -1,8 +1,8 @@
-STATUS: IN PROGRESS
+STATUS: IMPLEMENTED
 CATEGORY: Visual
 TITLE: Enemy visual rework 5 - the Aberrations
 CREATED: 2026-10-21
-IMPLEMENTED: -
+IMPLEMENTED: 2026-10-22
 ---
 
 IMPLEMENTATION NOTE (2026-10-22)
@@ -34,6 +34,10 @@ IMPLEMENTATION NOTE (2026-10-22)
     EnemyManager.chainAlertQueue overflows when several DORMANT enemies added after the floor starts wake in one turn.
   - G13: 6 alerted aberrations, animated 10.11 / 10.10 ms vs legacy 10.33 / 10.03 ms per frame (llvmpipe) - no cost.
   - A2-A5 verified in-engine (real sim; DEFEND and Block forced, as the capture tool provides). No tests (G12).
+  - REVIEWER r1: PASS WITH FIXES - the one required fix applied (EnemyEffectSystem uses GameMath.distance). Accepted as is
+    (cosmetic, recorded): a HURT during the self-destruct countdown drops the Hulk back to PRIMING's swell until its next
+    countdown turn; a hold that replaces another hold now starts at frame 0 for every creature; the dying-hover check is a
+    type check matching the existing live-hover check; sump_wretch's art ships unwired until its own idea lands (D3).
 
 Part of the generated-enemy-art series. Requires orders 1-4. Read generated-enemy-art.txt and
 docs/sprite-art-creation-guide.txt before starting.

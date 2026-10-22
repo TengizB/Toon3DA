@@ -130,8 +130,7 @@ public final class EnemyEffectSystem {
         particle.trailTimerSeconds = 0f;
         particle.projectile     = true;
         if (impact != null) {
-            float distanceTiles = (float) Math.sqrt((toTileX - fromTileX) * (toTileX - fromTileX)
-                    + (toTileY - fromTileY) * (toTileY - fromTileY));
+            float distanceTiles = GameMath.distance(fromTileX, fromTileY, toTileX, toTileY);
             particle.impactBurst     = impact;
             particle.impactAtSeconds = GameMath.projectileImpactSeconds(travelSeconds, distanceTiles,
                     EffectConstants.ENEMY_EFFECT_PROJECTILE_IMPACT_LEAD_TILES);
@@ -147,7 +146,9 @@ public final class EnemyEffectSystem {
             if (particle.impactBurst != null && particle.ageSeconds >= particle.impactAtSeconds) {
                 // Order 5: the glob bursts where it lands. Read its state first: emit() may recycle this particle.
                 EnemyEffectSet.Burst impact = particle.impactBurst;
-                float tileX = particle.tileX, tileY = particle.tileY, height = particle.height;
+                float tileX = particle.tileX;
+                float tileY = particle.tileY;
+                float height = particle.height;
                 float tilesPerPixel = particle.tilesPerPixel;
                 particle.active = false;
                 particle.trailBurst = null;
