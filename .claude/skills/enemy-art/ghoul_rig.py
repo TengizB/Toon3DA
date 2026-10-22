@@ -20,7 +20,7 @@ LEG_BULK = 1.8                    # the legs heavier again (owner, 2026-10-22: "
 # Owner, 2026-10-22: the body ~12% longer (spine 58 -> 65) and the arms ~12% longer (44/42 -> 50/47); the pelvis moved
 # down 6 px so the head keeps its place on the canvas, the legs giving back ~5% (still far longer than a person's).
 SKELETON = Humanoid(pelvis=(80.0, 118.0), spine=65.0, neck=9.0, head=11.0, shoulder_half=19.5, hip_half=12.0,
-                    upper_arm=50.0, fore_arm=47.0, hand=12.0, thigh=55.0, shin=57.0, foot=9.0,
+                    upper_arm=50.0, fore_arm=47.0, hand=12.0, thigh=55.0, shin=55.0, foot=9.0,
                     arm_rest=0.11, leg_rest=0.035)
 
 GHOUL_POSE = Humanoid.params(
@@ -116,8 +116,8 @@ def _leg(j, side, s):
         # the boot: rubber to mid-shin, the toe turned out
         limb(an[0] + (kn[0] - an[0]) * 0.38, an[1] + (kn[1] - an[1]) * 0.38, *an, 4.6 * LEG_BULK, 4.4 * LEG_BULK, "rubber", op="add", depth=1.4),
         limb(*lerp_pt(an, kn, 0.40), *lerp_pt(an, kn, 0.34), 5.1 * LEG_BULK, 5.1 * LEG_BULK, "darkmetal", op="add", depth=1.6),
-        limb(*an, *to, 4.6 * LEG_BULK, 3.6 * LEG_BULK, "rubber", k=3),
-        blob(an[0] + s * 1.5, an[1] + 1.8, 5.0 * LEG_BULK, 3.0 * LEG_BULK, "rubber", depth=3, k=3),
+        limb(*an, *to, 4.6 * 1.6, 3.6 * 1.6, "rubber", k=3),
+        blob(an[0] + s * 1.5, an[1] + 0.4, 5.0 * LEG_BULK, 2.6 * LEG_BULK, "rubber", depth=3, k=3),   # the sole, kept off the canvas edge
     ]
 
 
@@ -247,7 +247,7 @@ GHOUL_CLIPS = [
     ], mode="once"),
     Clip("HURT_HEAVY", [   # it rocks back on its long legs, arms flung - and keeps coming
         (0.00, dict(_REST)),
-        (0.08, dict(by=-5.0, torso=-0.10, chest=-0.06, head=-0.30, l_sh=0.30, r_sh=0.34, l_el=0.1, r_el=0.12, l_curl=0.0,
+        (0.08, dict(by=-5.0, torso=-0.10, chest=-0.06, head=-0.30, l_sh=0.20, r_sh=0.22, l_el=0.0, r_el=0.0, l_curl=0.0,
                     r_curl=0.0, l_hip=0.12, r_hip=0.10, eye_glow=0.4, crack=0.4), "out"),
         (0.25, dict(by=-1.0, torso=0.06, head=0.50, l_sh=0.15, r_sh=0.25, l_el=-0.1, r_el=-0.2, eye_glow=1.3, crack=0.0)),
         (0.42, dict(_REST)),
@@ -262,7 +262,7 @@ GHOUL_CLIPS = [
     Clip("DEATH", [        # folds at the knees, sways, and goes down on its face
         (0.00, dict(_REST, squat=0.03, by=0.0, fall=0.0, dim=0.0)),
         (0.12, dict(head=-0.20, eye_glow=1.9, l_sh=0.30, r_sh=0.35, by=-2.0), "out"),
-        (0.38, dict(squat=1.0, by=44.0, l_knee=-0.6, r_knee=-0.55, l_hip=0.30, r_hip=0.28, l_sh=0.05, r_sh=0.10,
+        (0.38, dict(squat=1.0, by=41.0, l_knee=-0.6, r_knee=-0.55, l_hip=0.30, r_hip=0.28, l_sh=0.05, r_sh=0.10,
                     l_el=0.0, r_el=0.0, head=0.45, torso=0.06), "in"),
         (0.52, dict(by=40.0, torso=-0.06, head=0.30)),
         (0.80, dict(fall=1.0, by=46.0, l_hip=0.12, r_hip=0.10, l_sh=-0.10, r_sh=-0.05, l_el=-0.3, r_el=-0.4, l_curl=0.3, r_curl=0.4, head=0.6), "in"),

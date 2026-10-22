@@ -178,6 +178,12 @@ DECISIONS
       arm replaces the baton, the right hand is a plain closed gauntlet that is never articulated, and the attack is a
       SHIELD BASH (braced -> drawn back -> the shield driven at the viewer). WIND_UP = crouched behind the raised shield.
       VISUAL DESIGN's "shock baton" and "overhead smash" are superseded.
+  D6  GHOUL BUILD (owner, 2026-10-22): "too thin, looks weak" -> thicker (no muscles), then heavier legs, then heavier
+      again with the body and the arms ~12% longer (approved). A version matched to the owner's reference image of a
+      hazard-suit figure was judged "fat" and reverted. Approved: BULK 1.6 (body, arms), LEG_BULK 1.8, spine 65, arms 50/47.
+  D7  ALL APPROVED (owner, 2026-10-22: "Approved now. You have my approve for everything. Now implement the idea
+      fully"): the five undead - Ghoul (D6), Crawler, Revenant (riot shield, D5), Vortex Eye, Blight Corruptor - their
+      clips, the undead effect set and the SUMMON runtime row. A2 met.
 
 
 OPEN QUESTIONS

@@ -59,7 +59,7 @@ file's tick in the same commit as the work**. Never more than one checkpoint unc
       GIFs (default + one mood) SENT. DONE WHEN: sent; build green.
 - [x] **CP3b** — the Revenant redesigned after the owner's clip-gate feedback (D5: no club; riot shield + shield bash);
       re-baked, in-engine re-checked, clip + in-engine GIFs sent. DONE WHEN: sent; others byte-identical.
-- [ ] **CP4** — owner approval of all five recorded (stop until it is).
+- [x] **CP4** — owner approval of all five recorded (stop until it is).
 - [ ] **CP5** — five registry rows + SUMMON clip row wired; A3-A5 verified in-engine; build green.
 - [ ] **CP6** — docs (guide, art-direction 16, SKILL.md, enemy-system, CLAUDE.md row); reviewer PASS; STATUS: IMPLEMENTED.
 
@@ -156,3 +156,9 @@ capsule; boots 8.4/9.6; fingers 27 long, r 1.6, palm 4.6. Owner features kept (s
 and fingers). Still + side-by-side with the reference sent; awaiting approval; UNBAKED.
 Owner: the reference-matched version "looks fat" -> REVERTED to the previous variant (ghoul_rig.py as at e84f5de: BULK 1.6,
 LEG_BULK 1.8, spine 65, arms 50/47). Awaiting approval; UNBAKED.
+
+**CP4:** owner approved everything (D6, D7). The approved Ghoul (the e84f5de variant) baked to the shipped folder after three
+clamps for its heavier feet (the soles reached row 237/240, so any 3 px body drop touched the canvas bottom): shin 57 -> 55,
+the foot capsule at x1.6 instead of LEG_BULK, the sole blob raised 1.4 px; DEATH's knee drop by 44 -> 41; HURT_HEAVY's arm
+fling 0.30/0.34 -> 0.20/0.22 (the longer arms reached the right edge). No edge warnings. Only ghoul.* changed.
+Next: CP5 - the five EnemyVisualRegistry rows, build, in-engine re-verification of all five.
