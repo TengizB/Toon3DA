@@ -109,7 +109,7 @@ MATERIALS = {
     # overalls: the Organization work coverall / hazard suit - a desaturated slate, matte canvas
     "overalls":   dict(ramp=ramp("101318", "1c2129", "2b323b", "3e4650", "57606a", "767f88"), spec=(0.06, 10), grain=(0.06, 2)),
     # hazmat: quarantine rubberised suit - a dull olive-grey (never green, G5), a soft rubber sheen
-    "hazmat":     dict(ramp=ramp("121310", "22231c", "35362b", "4b4c3e", "666654", "868670"), spec=(0.22, 14), grain=(0.04, 3)),
+    "hazmat":     dict(ramp=ramp("131411", "232420", "36372f", "4c4d43", "67675b", "878776"), spec=(0.22, 14), grain=(0.04, 3)),
     # labcoat: the researchers' coat - an off-white one step under livery, cloth, matte, dusty
     "labcoat":    dict(ramp=ramp("1f2124", "3b3e42", "5e6165", "86888a", "adadab", "cfcdc6"), spec=(0.05, 8), grain=(0.06, 2)),
     # visor: smoked respirator / helmet glass - dark, cold, very glossy (the soul light shows through it as added eyes)

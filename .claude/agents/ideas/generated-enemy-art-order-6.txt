@@ -158,7 +158,13 @@ ASSUMPTIONS
 
 DECISIONS
 ---------
-(none yet)
+  D1  OWNER OVERRIDE (2026-10-22, the /implement request; supersedes VISUAL DESIGN and AS2 where they clash): no human
+      face is ever visible - at most glowing eyes; every undead is covered (armour, hazard suit, hood, respirator,
+      helmet). One enemy is a TALL, THIN humanoid with disproportionately long legs, arms and fingers, in a hazard suit
+      and a gas mask with ONE glass visor (never two lenses) and glowing RED eyes; others may wear two-lens masks.
+      Built as the GHOUL. The red eyes are an owner-approved exception to G5 (material `redeye`).
+  D2  OWNER GATE ORDER (same request): the concept still of every enemy is shown and approved BEFORE any animation is
+      made; this replaces the Ghoul-alone early read of A1 / RISKS.
 
 
 OPEN QUESTIONS

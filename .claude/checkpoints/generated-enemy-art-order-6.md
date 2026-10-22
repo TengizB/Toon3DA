@@ -52,8 +52,9 @@ file's tick in the same commit as the work**. Never more than one checkpoint unc
 - [x] **CP0** — this file, committed and pushed before anything else changes.
 - [x] **CP1** — kit: humanoid rig helper, cloth/suit/skin materials appended, soul ink as the UNDEAD family ink, fold
       helper, cloth lag. DONE WHEN: every earlier creature + fx set regenerates byte-identical.
-- [ ] **CP2** — five rigs at rest pose (concept stills, owner override applied); family sheet + one image per enemy
-      SENT; STOP for the owner's concept read (A1 recorded). DONE WHEN: sent and the answer recorded in DECISIONS.
+- [x] **CP2a** — five rigs at rest pose (concept stills, owner override applied); family sheet + one image per enemy
+      SENT. DONE WHEN: `--stills` renders all five with no edge warning and the images are sent.
+- [ ] **CP2b** — the owner's concept read recorded in DECISIONS (A1); requested changes applied. STOP until it is.
 - [ ] **CP3** — all clips + ability clips (DEBUFF_PLAYER, SUMMON) + the `undead` effect set; clip GIFs + in-engine burst
       GIFs (default + one mood) SENT. DONE WHEN: sent; build green.
 - [ ] **CP4** — owner approval of all five recorded (stop until it is).
@@ -75,3 +76,16 @@ from MIRRORED joint angles, + = outward, children relative; `Humanoid.params(**d
 it upside down = a body on all fours seen head-on - the Crawler), `hand(wrist, angle, side, length, mat, fingers,
 finger_length, curl, ...)`, `lag(clip, param, delay, duration)` (cloth that follows its limb late). Verified: bestiary +
 effects regenerated into the scratchpad, all 32 shipped files byte-identical (cmp).
+
+**CP2a:** five rigs, rest poses only, five CREATURES rows with EMPTY clip lists (do NOT run the default bake for them before
+CP3): `ghoul_rig.py` (seed 53) = THE owner's tall thin gas-masked figure (slate hazard suit, hood, ONE panoramic visor,
+red eyes, arms to the knee, 29 px gloved fingers, badge "14" on a lanyard); `crawler_rig.py` (61) = Humanoid with a
+NEGATIVE spine (head-on all fours), lab coat, clean-room hood, two-lens respirator, the coat split down the spine leaking
+soul; `revenant_rig.py` (59) = riot armour, one cracked visor, soul eyes, domed pauldrons, baton, soul breach in the chest
+plate, stencil S-07; `vortex_eye_rig.py` (67) = isolation-helmet bust (oval window, two eye ports pouring soul), torn
+coat hem, 3 uneven torn soul strands (hover baked: bust ~y40-150, vortex to ~y200); `blight_corruptor_rig.py` (71) =
+olive-grey hazmat, two-lens mask, spore pods riding skeleton joints (own layer, in front of the left arm), decon tank
++ wand, stencil Q. Decision taken: the Ghoul is the owner's tall gas-mask humanoid (the humanoid-rig showcase, slow
+grabber with long fingers; its 0.90 walls makes it fill its canvas top to bottom). The hazmat ramp was desaturated after
+the CP1 cmp - a new material no earlier sprite uses. A1: the owner's own instruction ("send the image of each enemy
+before animations") replaces the idea's Ghoul-alone early read; all five concepts were sent together.
