@@ -45,7 +45,7 @@ One commit per checkpoint, pushed immediately, prefixed `sump-wretch-acid-death/
       (all 0); World + SimWorld call it. DONE WHEN: build + test green, behaviour unchanged (A9).
 - [x] **CP2** — SUMP_WRETCH + constants + schema rows + 'o' (STRICT RULE) + ORA line + legacy fallback + SPAWN_POOL; splash
       live. DONE WHEN: build + test green.
-- [ ] **CP3** — GameMath.deathSplashThreatPoints + baseThreatPoints term + DEATH_SPLASH_ADJACENT_SHARE + the one
+- [x] **CP3** — GameMath.deathSplashThreatPoints + baseThreatPoints term + DEATH_SPLASH_ADJACENT_SHARE + the one
       BalanceAuditTest method. DONE WHEN: test green, A12 + A13.
 - [ ] **CP4** — registry row + AcidSplash seam -> ACID_SPLASH bursts; A1, A2-A8, A15 verified in-engine.
 - [ ] **CP5** — balanceSim green (A14).
@@ -75,3 +75,15 @@ behaviour change: the new pool member reshuffles every generated roster from flo
 DEVIATION: the in-engine scratch-level check of A2-A6/A8 is folded into CP4's run-game session (one session, with the
 animated sprite + bursts live) rather than run twice. Splash TP not yet priced (CP3).
 LevelLoader '}' gap: EncounterBudgetPlanner's comment says the Spiresower is "placed by its own systems" — still report it.
+
+**CP3:** `GameMath.deathSplashThreatPoints(perStack, stacks, share)` + `EnemyType.deathSplashThreatPoints()` (perStack from
+the depth-1 on-curve player's max HP) added to `baseThreatPoints()`. BalanceAuditTest +1 method
+(`deathSplashIsPricedOnlyWhereItExistsAndTheWretchStaysInBand`). TUNING (inside the idea's 0.3-0.7 range):
+DEATH_SPLASH_ADJACENT_SHARE = 0.4, not the designed 0.5 — swept 0.3/0.4/0.45/0.5/0.6/0.7: from 0.45 up the higher wretch
+TP thins the depth-1 COMBAT floor, MYSTERY_EV hits 1.30 (ceiling) and linear_corridor d1 gets a room with 4 of one
+archetype (V7); 0.7 also tips R-RELIC salvage_hook d15. 0.3 and 0.4 are green. So A12's "TP 15.6 +/- 1" reads 14.4
+(splash term 4.8) — record as a DECISION in the idea file at CP6. BalanceReport: Sump Wretch CHAFF TP 14.4 OK, 2|21 OK;
+C-ENEMY / C-HAZARD admitted; telegraph row OK; every other archetype's splash term asserted exactly 0 (A13).
+"rest EV discount 0.58 OUT-OF-BAND" in the report is pre-existing (identical at CP2) and not an audit failure.
+Snapshot re-baselined again (62efb6fb...). V7 note to report: linear_corridor can exceed the 3-per-room cap when the
+roster shifts — the placer cap is not airtight on that layout (pre-existing, sensitive to seeds).

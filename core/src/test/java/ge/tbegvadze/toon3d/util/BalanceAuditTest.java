@@ -1022,6 +1022,34 @@ class BalanceAuditTest {
         assertNoViolations(roomVariety);
     }
 
+    /**
+     * The DEATH SPLASH TP term (sump-wretch-acid-death): it is exactly 0 for every archetype that does not splash (so
+     * no pre-existing TP moved), it is part of a splashing archetype's TP, and the Sump Wretch lands in its CHAFF band.
+     */
+    @Test
+    void deathSplashIsPricedOnlyWhereItExistsAndTheWretchStaysInBand() {
+        for (ge.tbegvadze.toon3d.enemy.EnemyType type : ge.tbegvadze.toon3d.enemy.EnemyType.values()) {
+            if (type.deathSplashPlayerStacks() == 0) {
+                assertEquals(0f, type.deathSplashThreatPoints(), type + " has no splash, so no splash TP");
+            }
+        }
+        ge.tbegvadze.toon3d.enemy.EnemyType wretch = ge.tbegvadze.toon3d.enemy.EnemyType.SUMP_WRETCH;
+        assertTrue(wretch.deathSplashPlayerStacks() > 0, "the Sump Wretch splashes the player");
+        assertTrue(wretch.deathSplashThreatPoints() > 0f, "the Sump Wretch's splash is priced");
+        float statBlockThreatPoints = wretch.baseThreatPoints() - wretch.deathSplashThreatPoints();
+        assertTrue(statBlockThreatPoints > 0f, "the splash is ADDED to the stat-block TP");
+        assertEquals(0f, GameMath.deathSplashThreatPoints(2, 0, BalanceConfig.DEATH_SPLASH_ADJACENT_SHARE),
+                "no stacks -> no threat");
+        boolean found = false;
+        for (BalanceSchema.RuleResult result : BalanceSchema.enemyThreatPointResults()) {
+            if (!result.subject.equals(wretch.displayName())) continue;
+            found = true;
+            assertTrue(result.satisfied, "Sump Wretch TP " + result.value + " outside its CHAFF band ["
+                    + result.bandMinimum + ", " + result.bandMaximum + "]");
+        }
+        assertTrue(found, "R-ENEMY prices the Sump Wretch");
+    }
+
     /** The full sweep — belt-and-braces over the per-kind tests (catches rule kinds added later). */
     @Test
     void fullSchemaSweepHasNoViolations() {

@@ -3478,6 +3478,7 @@ public final class BalanceSchema {
         CONSTANT_SUBJECTS.put("SUMP_WRETCH_SPLASH_PLAYER_STACKS",     RuleKind.HAZARD);
         CONSTANT_SUBJECTS.put("SUMP_WRETCH_SPLASH_ENEMY_STACKS",      RuleKind.HAZARD);
         CONSTANT_SUBJECTS.put("SUMP_WRETCH_PUDDLE_LIFETIME_TURNS",    RuleKind.HAZARD);
+        CONSTANT_SUBJECTS.put("DEATH_SPLASH_ADJACENT_SHARE",          RuleKind.ENEMY_THREAT_POINTS);
     }
 
     /** Fields deliberately banded by no rule: field name -> a one-line reason. Empty until a new field needs it. */

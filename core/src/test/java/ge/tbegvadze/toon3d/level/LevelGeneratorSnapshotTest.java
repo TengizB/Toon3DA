@@ -154,9 +154,10 @@ class LevelGeneratorSnapshotTest {
     // its passage guard — so every generated roster, spawn tile and barrel moved. A deliberate change.
     // RE-BASELINE (sump-wretch-acid-death): a new CHAFF archetype, SUMP_WRETCH, joins EncounterBudgetPlanner's
     // SPAWN_POOL (minSpawnDepth 1), so the chaff roulette draws differently from floor 1 and every generated
-    // roster, spawn tile and later RNG-consuming pass moved. A deliberate change.
+    // roster, spawn tile and later RNG-consuming pass moved; pricing its death splash into its TP (CP3) moved the
+    // planner's budget arithmetic again. A deliberate change.
     private static final String EXPECTED_DIGEST =
-            "c4257089d4f764b974bb397dc87e7c09f866cb40743ee01613e74f96b48e5497";
+            "62efb6fbf3d7c64b515977ef6d1b979c2e903aa79ab0477e1581e37cbd05e633";
 
     @Test
     void generatedGridsAreByteForByteStableAcrossSeedsAndDepths() {

@@ -816,7 +816,21 @@ public enum EnemyType {
      */
     public float baseThreatPoints() {
         float survivalTurns = effectiveHitPoints() / BalanceConfig.REFERENCE_PLAYER_DPT;
-        return cycleAveragedDamagePerTurn() * survivalTurns * positionalMultiplier();
+        return cycleAveragedDamagePerTurn() * survivalTurns * positionalMultiplier() + deathSplashThreatPoints();
+    }
+
+    /**
+     * The TP term of this archetype's DEATH SPLASH (sump-wretch-acid-death): the poison its splash deals an
+     * orthogonally adjacent depth-1 on-curve player, priced at DEATH_SPLASH_ADJACENT_SHARE of deaths
+     * (GameMath.deathSplashThreatPoints). 0 for every archetype that does not splash.
+     */
+    public float deathSplashThreatPoints() {
+        int splashStacks = deathSplashPlayerStacks();
+        if (splashStacks <= 0) return 0f;
+        int playerPoisonPerStack = GameMath.statusTickDamage(BalanceConfig.POISON_TICK_FRACTION,
+                Math.round(GameMath.expectedPlayerAtDepth(1).maxHealth), 1);
+        return GameMath.deathSplashThreatPoints(playerPoisonPerStack, splashStacks,
+                BalanceConfig.DEATH_SPLASH_ADJACENT_SHARE);
     }
 
     /**

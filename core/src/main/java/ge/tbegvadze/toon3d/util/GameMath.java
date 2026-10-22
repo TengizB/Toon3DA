@@ -2240,6 +2240,29 @@ public final class GameMath {
     }
 
     /*
+     * Formula: Death Splash Threat Points (sump-wretch-acid-death — the TP term of an enemy's DEATH SPLASH)
+     * Derivation:
+     *   A death splash puts S POISONED stacks on an orthogonally adjacent player. Poison ticks perStack x liveStacks
+     *   each turn, then decays by one stack, so the splash alone deals
+     *       splashDamage = perStack x (S + (S - 1) + ... + 1) = perStack x S x (S + 1) / 2
+     *   (S = 3, perStack 2 -> 2 x 3 x 4 / 2 = 12 HP). Only the share of deaths that happen next to the player
+     *   actually lands it, so the threat the archetype adds is
+     *       threat = splashDamage x adjacentDeathShare
+     *   (12 x 0.5 = 6.0). It is ADDED to the stat-block TP in EnemyType.baseThreatPoints.
+     * Edge cases:
+     *   splashStacks <= 0 or adjacentDeathShare <= 0 -> 0 (an archetype with no splash adds nothing, so every
+     *   other archetype's TP is byte-identical). perStack < 0 is clamped to 0. Pre-existing poison and the
+     *   POISON_MAX_STACKS cap are ignored (the splash alone sits under the cap). Integer product computed in long
+     *   arithmetic before the float multiply, so no overflow for any sane stack count.
+     */
+    public static float deathSplashThreatPoints(int playerPoisonPerStack, int splashStacks, float adjacentDeathShare) {
+        if (splashStacks <= 0 || adjacentDeathShare <= 0f) return 0f;
+        long stackTurns   = (long) splashStacks * (splashStacks + 1) / 2;
+        float splashDamage = (float) (Math.max(0, playerPoisonPerStack) * stackTurns);
+        return splashDamage * adjacentDeathShare;
+    }
+
+    /*
      * Formula: Toxic Average Stacks (balance-overhaul order 4, H10 — hazard pricing read-out)
      * Derivation:
      *   A host standing in a toxic tile gains stacksPerTurn each turn (capped at maxStacks); the status

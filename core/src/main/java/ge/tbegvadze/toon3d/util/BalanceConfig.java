@@ -544,6 +544,15 @@ public final class BalanceConfig {
      * Used by GameMath.specialEquivalentDebuffWeak / specialEquivalentDebuffControl. Range: 0.4–0.8.
      */
     public static final float DEBUFF_TP_EQUIVALENCE       = 0.6f;
+
+    /**
+     * The share of a death-splashing enemy's deaths assumed to happen ORTHOGONALLY NEXT TO THE PLAYER, used to price
+     * the splash into its Threat Points (GameMath.deathSplashThreatPoints, sump-wretch-acid-death AS14). 0.4: two in
+     * five wretch deaths land next to the player. Designed at 0.5; tuned to 0.4 at build time because from 0.45 the
+     * higher wretch TP thins the depth-1 combat floor enough to push MYSTERY_EV to its 1.30 ceiling and a
+     * linear-corridor room to four of one archetype (V7). The sim validates it. Range: 0.3-0.7.
+     */
+    public static final float DEATH_SPLASH_ADJACENT_SHARE = 0.4f;
     /**
      * Bodies a SUMMON verb is expected to add over one fight, for TP pricing (GameMath.specialEquivalent-
      * Summon). Priced CONSERVATIVELY below the max batch (SUMMON_COUNT_MIN..MAX in EnemyConstants): a
