@@ -102,6 +102,25 @@ MATERIALS = {
     "key_red":     dict(ramp=ramp("4d0e0c", "801714", "bf2320", "ff2e29", "ff2e29", "ff2e29"), emissive=True),
     "key_yellow":  dict(ramp=ramp("4d420e", "806e17", "bfa423", "ffdb2e", "ffdb2e", "ffdb2e"), emissive=True),
     "key_blue":    dict(ramp=ramp("112d4d", "1c4a80", "2a6fbf", "3894ff", "3894ff", "3894ff"), emissive=True),
+    # THE UNDEAD (generated-enemy-art order 6). Appended LAST, like every addition before them, so each earlier material
+    # keeps its index and every earlier sprite regenerates byte-identical. The undead are the facility's own staff, and
+    # (owner, 2026-10-22) NO human face is ever visible: every one is sealed in what it wore to work. SOUL (above,
+    # wall-art order 1) is the family's glow ink: pale, cold, low saturation, never the purple "special" colour.
+    # overalls: the Organization work coverall / hazard suit - a desaturated slate, matte canvas
+    "overalls":   dict(ramp=ramp("101318", "1c2129", "2b323b", "3e4650", "57606a", "767f88"), spec=(0.06, 10), grain=(0.06, 2)),
+    # hazmat: quarantine rubberised suit - a dull olive-grey (never green, G5), a soft rubber sheen
+    "hazmat":     dict(ramp=ramp("121310", "22231c", "35362b", "4b4c3e", "666654", "868670"), spec=(0.22, 14), grain=(0.04, 3)),
+    # labcoat: the researchers' coat - an off-white one step under livery, cloth, matte, dusty
+    "labcoat":    dict(ramp=ramp("1f2124", "3b3e42", "5e6165", "86888a", "adadab", "cfcdc6"), spec=(0.05, 8), grain=(0.06, 2)),
+    # visor: smoked respirator / helmet glass - dark, cold, very glossy (the soul light shows through it as added eyes)
+    "visor":      dict(ramp=ramp("0a0e13", "141d26", "203039", "31464f", "4a6670", "73919a"), spec=(0.85, 60), grain=(0.0, 4)),
+    # deadskin: ash grey with a cold undertone - only ever at a torn cuff or a split seam, never a face
+    "deadskin":   dict(ramp=ramp("17171b", "2a2a30", "403f45", "5a585c", "777377", "979195"), spec=(0.10, 12), grain=(0.05, 2)),
+    # SPORE pods: a translucent swollen membrane over the soul light (the Blight Corruptor)
+    "spore":      dict(ramp=ramp("15161c", "262833", "3b3e4b", "555866", "737686", "9799a6"), glow="soul", spec=(0.45, 36), grain=(0.03, 3)),
+    # REDEYE: the tall gas-masked Ghoul's eyes behind its single visor (owner request, 2026-10-22 - the one place an
+    # undead burns red instead of soul-white: a deliberate, owner-approved exception to G5 / N4)
+    "redeye":     dict(ramp=ramp("3a0806", "6e0f0b", "a8180f", "e0301c", "ff7356", "ffd2c4"), emissive=True),
 }
 
 # The wet sheen's glint colour: near-white with the slightest warmth (never pure white: the hit flash owns it).
@@ -286,6 +305,183 @@ def teeth_row(x1, y1, x2, y2, count, length, r, mat="bone", side=1.0, sag=0.0, r
         shapes += spike(bx, by, bx + tx * length * size, by + ty * length * size, r * (0.85 + 0.3 * size), mat,
                         tip=tip, segments=3, k=k, **kw)
     return shapes
+
+
+def fold_lines(x1, y1, x2, y2, count, length, width=0.9, mat="overalls", angle=0.5, jitter=0.3, seed=0, side=1.0):
+    """CLOTH FOLDS (generated-enemy-art order 6): `count` short carved creases set along (x1, y1) -> (x2, y2), each
+    `length` px, leaning `angle` radians off the line's normal (x side), seeded jitter on spacing, length and lean
+    (deterministic). Carves, so pass them in the cloth's layer; they ride any transform like every other shape.
+    A crease is what turns a smooth capsule into fabric: bunching at the elbow, pulled diagonals across a chest."""
+    import random
+    rng = random.Random(seed)
+    dx, dy = x2 - x1, y2 - y1
+    line = math.hypot(dx, dy) or 1e-6
+    ux, uy = dx / line, dy / line
+    nx, ny = -uy * side, ux * side
+    out = []
+    for i in range(count):
+        t = (i + 0.5 + rng.uniform(-jitter, jitter)) / count
+        bx, by = x1 + dx * t, y1 + dy * t
+        a = angle * (1 + rng.uniform(-jitter, jitter))
+        cx, cy = nx * math.cos(a) + ux * math.sin(a), ny * math.cos(a) + uy * math.sin(a)
+        half = length * (1 + rng.uniform(-jitter, jitter)) / 2
+        out.append(limb(bx - cx * half, by - cy * half, bx + cx * half, by + cy * half, width, width * 0.6, mat, op="carve"))
+    return out
+
+
+class Humanoid:
+    """THE HUMANOID RIG (generated-enemy-art order 6): one skeleton, many bodies. Proportions are bone lengths in
+    canvas px; a pose is joint ANGLES (radians), so a walk, a reach or a collapse is keyframes, never a new drawing.
+
+    Conventions (front-facing billboard, image space, y DOWN):
+      - every limb angle is measured from STRAIGHT DOWN and is MIRRORED per side: + swings the limb OUTWARD, away
+        from the body's centre line, for the screen-left ("l_") and the screen-right ("r_") limb alike, so one key
+        set reads on both sides;
+      - a child angle (elbow, wrist, knee, ankle) is RELATIVE to its parent; + bends outward, - inward (an elbow
+        folding the hand in across the chest is negative);
+      - `torso` leans the whole upper body about the pelvis (+ = its top to the screen-right, clockwise); `chest`
+        bends the upper spine on top of it; `neck` and `head` likewise;
+      - foreshortening: `<limb>_fore` (0..1) shortens a segment pointing toward or away from the viewer (a reach at
+        the camera, a knee lifted in a step): length x (1 - fore x 0.75).
+    joints(p, prefix="") reads pose parameters prefix + name from the pose `p`, with 0 for any it does not find, and
+    returns a dict of named canvas points: pelvis, chest, neck, head (the head CENTRE), l_shoulder, l_elbow, l_wrist,
+    l_hand (the end of the hand), l_hip, l_knee, l_ankle, l_toe (and r_...), plus the absolute angle of every hand
+    and foot ("l_hand_angle" ...). The rig then hangs its own shapes on those points."""
+
+    PARAMS = ("bx", "by", "torso", "chest", "neck", "head",
+              "l_sh", "l_el", "l_wr", "r_sh", "r_el", "r_wr", "l_hip", "l_knee", "l_ank", "r_hip", "r_knee", "r_ank",
+              "l_arm_fore", "r_arm_fore", "l_leg_fore", "r_leg_fore", "squat")
+
+    def __init__(self, pelvis=(80.0, 120.0), spine=50.0, neck=10.0, head=10.0, shoulder_half=16.0, hip_half=8.0,
+                 upper_arm=34.0, fore_arm=32.0, hand=14.0, thigh=50.0, shin=50.0, foot=10.0,
+                 arm_rest=0.10, leg_rest=0.03):
+        self.pelvis, self.spine, self.neck_len, self.head_len = pelvis, spine, neck, head
+        self.shoulder_half, self.hip_half = shoulder_half, hip_half
+        self.upper_arm, self.fore_arm, self.hand = upper_arm, fore_arm, hand
+        self.thigh, self.shin, self.foot = thigh, shin, foot
+        self.arm_rest, self.leg_rest = arm_rest, leg_rest
+
+    @staticmethod
+    def params(**defaults):
+        """The rig's pose defaults for every skeleton parameter (0 unless given), to merge into a Rig's defaults."""
+        out = {name: 0.0 for name in Humanoid.PARAMS}
+        out.update(defaults)
+        return out
+
+    @staticmethod
+    def _dir(angle, side):
+        # side -1 = screen-left (outward = toward -x), +1 = screen-right
+        return (side * math.sin(angle), math.cos(angle))
+
+    def joints(self, p, prefix=""):
+        g = lambda name: float(p.get(prefix + name, 0.0)) if hasattr(p, "get") else 0.0
+        out = {}
+        squat = g("squat")                                        # 0 stand .. 1 knees folded (legs shorten, pelvis drops)
+        px, py = self.pelvis[0] + g("bx"), self.pelvis[1] + g("by")
+        out["pelvis"] = (px, py)
+        torso, chest = g("torso"), g("chest")
+        up = lambda a: (math.sin(a), -math.cos(a))                # an UP vector leaned clockwise by a
+        mid_angle = torso
+        top_angle = torso + chest
+        mid = (px + up(mid_angle)[0] * self.spine * 0.5, py + up(mid_angle)[1] * self.spine * 0.5)
+        ch = (mid[0] + up(top_angle)[0] * self.spine * 0.5, mid[1] + up(top_angle)[1] * self.spine * 0.5)
+        out["waist"], out["chest"] = mid, ch
+        neck_angle = top_angle + g("neck")
+        nk = (ch[0] + up(neck_angle)[0] * self.neck_len, ch[1] + up(neck_angle)[1] * self.neck_len)
+        head_angle = neck_angle + g("head")
+        out["neck"] = nk
+        out["head"] = (nk[0] + up(head_angle)[0] * self.head_len, nk[1] + up(head_angle)[1] * self.head_len)
+        out["head_angle"] = head_angle
+        out["chest_angle"] = top_angle
+        # shoulders sit on the line through the chest point, perpendicular to the upper spine
+        across = (math.cos(top_angle), math.sin(top_angle))
+        hips_across = (math.cos(torso * 0.35), math.sin(torso * 0.35))
+        for side, s in (("l", -1), ("r", 1)):
+            sh = (ch[0] + across[0] * self.shoulder_half * s, ch[1] + across[1] * self.shoulder_half * s)
+            # the upper body's lean carries the arm: outward for one side is the lean's sense on the other
+            base = top_angle * (-s)
+            a1 = base + self.arm_rest + g(f"{side}_sh")
+            fore = 1 - 0.75 * g(f"{side}_arm_fore")
+            d = self._dir(a1, s)
+            el = (sh[0] + d[0] * self.upper_arm * fore, sh[1] + d[1] * self.upper_arm * fore)
+            a2 = a1 + g(f"{side}_el")
+            d = self._dir(a2, s)
+            wr = (el[0] + d[0] * self.fore_arm * fore, el[1] + d[1] * self.fore_arm * fore)
+            a3 = a2 + g(f"{side}_wr")
+            d = self._dir(a3, s)
+            hd = (wr[0] + d[0] * self.hand * (0.4 + 0.6 * fore), wr[1] + d[1] * self.hand * (0.4 + 0.6 * fore))
+            out.update({f"{side}_shoulder": sh, f"{side}_elbow": el, f"{side}_wrist": wr, f"{side}_hand": hd,
+                        f"{side}_hand_angle": a3})
+            hp = (px + hips_across[0] * self.hip_half * s, py + hips_across[1] * self.hip_half * s)
+            lf = 1 - 0.75 * g(f"{side}_leg_fore")
+            b1 = self.leg_rest + g(f"{side}_hip")
+            d = self._dir(b1, s)
+            thigh = self.thigh * lf * (1 - 0.35 * squat)
+            kn = (hp[0] + d[0] * thigh, hp[1] + d[1] * thigh)
+            b2 = b1 + g(f"{side}_knee")
+            d = self._dir(b2, s)
+            shin = self.shin * (1 - 0.30 * squat)
+            an = (kn[0] + d[0] * shin, kn[1] + d[1] * shin)
+            b3 = g(f"{side}_ank")
+            # the foot points outward-and-toward the viewer: a short stub turned off the shin
+            ft_angle = b2 + 1.35 + b3
+            d = self._dir(ft_angle, s)
+            to = (an[0] + d[0] * self.foot, an[1] + d[1] * self.foot * 0.35)
+            out.update({f"{side}_hip": hp, f"{side}_knee": kn, f"{side}_ankle": an, f"{side}_toe": to,
+                        f"{side}_foot_angle": ft_angle})
+        return out
+
+
+def hand(wrist, angle, side, length, mat, fingers=4, finger_length=None, finger_r=1.3, palm_r=None, spread=0.35,
+         curl=0.0, thumb=True, k=2.0, **kw):
+    """A HAND (generated-enemy-art order 6) hung on a Humanoid's wrist: a palm along the hand's direction and
+    `fingers` chained fingers fanned `spread` radians around it; `curl` (0 open .. 1 a fist / a grab) bends each
+    finger's two outer joints inward. Long, thin fingers are what make a hand read at range - give a reaching hand
+    finger_length > palm. `angle` / `side` are the joint's absolute angle and side (-1 screen-left, +1 right), as
+    Humanoid.joints reports them. -> a list of shapes (keep them in the forearm's layer)."""
+    finger_length = finger_length if finger_length is not None else length * 0.9
+    palm_r = palm_r if palm_r is not None else finger_r * 2.2
+    d = (side * math.sin(angle), math.cos(angle))
+    palm_end = (wrist[0] + d[0] * length * 0.55, wrist[1] + d[1] * length * 0.55)
+    shapes = [limb(*wrist, *palm_end, palm_r * 0.9, palm_r, mat, k=k, **kw)]
+    for i in range(fingers):
+        f = (i - (fingers - 1) / 2) / max(1, (fingers - 1) / 2)          # -1 .. 1 across the hand
+        a = angle + f * spread * 0.5
+        base = (palm_end[0] + side * math.cos(angle) * f * palm_r * 0.75, palm_end[1] - math.sin(angle) * f * palm_r * 0.75)
+        seg = finger_length * (1 - 0.18 * abs(f)) / 3
+        pts = [base]
+        cur = a
+        for j in range(3):
+            cur = cur - curl * (0.55 + 0.25 * j)                          # each knuckle bends inward
+            dd = (side * math.sin(cur), math.cos(cur))
+            pts.append((pts[-1][0] + dd[0] * seg, pts[-1][1] + dd[1] * seg))
+        shapes += chain(pts, finger_r, finger_r * 0.7, mat, k=1.2, **kw)
+    if thumb:
+        a = angle - 0.9 - 0.4 * curl
+        dd = (side * math.sin(a), math.cos(a))
+        tb = (wrist[0] + d[0] * length * 0.25, wrist[1] + d[1] * length * 0.25)
+        shapes += chain([tb, (tb[0] + dd[0] * finger_length * 0.35, tb[1] + dd[1] * finger_length * 0.35),
+                         (tb[0] + dd[0] * finger_length * 0.6 + d[0] * finger_length * 0.15,
+                          tb[1] + dd[1] * finger_length * 0.6 + d[1] * finger_length * 0.15)],
+                        finger_r * 1.05, finger_r * 0.75, mat, k=1.2, **kw)
+    return shapes
+
+
+def lag(source, param, delay, duration, out_param=None, fps=12, loop=True, default=0.0):
+    """CLOTH LAG (generated-enemy-art order 6): keys for "<param>_lag" = the param's own track `delay` seconds LATE
+    (a hem, a sleeve, a hood that follows its limb a frame behind). Unlike jiggle() it has no spring - it is the
+    same motion, late, which is what loose cloth over a moving limb does. A loop wraps (the late copy of the start
+    is the end of the period). Merge into the clip's keys."""
+    drive = source if callable(source) else (lambda t: source.value(param, t, default))
+    out_param = out_param or f"{param}_lag"
+    n = max(2, int(round(duration * fps)))
+    keys = []
+    for i in range(n + (0 if loop else 1)):
+        t = duration * i / n
+        late = t - delay
+        late = late % duration if loop else max(0.0, late)
+        keys.append((t, {out_param: drive(late)}, "linear"))
+    return keys
 
 
 def chamfer_rect(x0, y0, x1, y1, c):

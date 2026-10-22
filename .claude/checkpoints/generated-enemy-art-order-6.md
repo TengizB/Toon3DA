@@ -50,7 +50,7 @@ file's tick in the same commit as the work**. Never more than one checkpoint unc
 ## STEP LEDGER
 
 - [x] **CP0** — this file, committed and pushed before anything else changes.
-- [ ] **CP1** — kit: humanoid rig helper, cloth/suit/skin materials appended, soul ink as the UNDEAD family ink, fold
+- [x] **CP1** — kit: humanoid rig helper, cloth/suit/skin materials appended, soul ink as the UNDEAD family ink, fold
       helper, cloth lag. DONE WHEN: every earlier creature + fx set regenerates byte-identical.
 - [ ] **CP2** — five rigs at rest pose (concept stills, owner override applied); family sheet + one image per enemy
       SENT; STOP for the owner's concept read (A1 recorded). DONE WHEN: sent and the answer recorded in DECISIONS.
@@ -66,3 +66,12 @@ file's tick in the same commit as the work**. Never more than one checkpoint unc
 into the canvas. REVENANT has heavyWindUp CHARGE (a real WIND_UP in the sim). VORTEX_EYE is ranged (DEBUFF_PLAYER) ->
 needs PROJECTILE/TRAIL/MUZZLE in the undead set. BLIGHT_CORRUPTOR uses SUMMON - no EnemyClipId/abilityClip row yet.
 `soul` (emissive) and `cloth`, `rubber` already exist in MATERIALS (wall-art order 1) - reuse them.
+
+**CP1:** kit.py APPENDS eight materials after key_blue: overalls (slate suit), hazmat (olive-grey rubber), labcoat (off-white
+cloth), visor (smoked glass, glossy), deadskin (ash grey: torn cuffs / split seams only, never a face), spore (translucent,
+glow=soul), redeye (emissive: the Ghoul's eyes - owner exception to G5). `soul` (wall-art order 1) is the UNDEAD ink.
+Helpers: `fold_lines(x1,y1,x2,y2,count,length,...)` (carved creases), `Humanoid` (one skeleton: joints(p) -> named points
+from MIRRORED joint angles, + = outward, children relative; `Humanoid.params(**defaults)`; a NEGATIVE spine/neck/head hangs
+it upside down = a body on all fours seen head-on - the Crawler), `hand(wrist, angle, side, length, mat, fingers,
+finger_length, curl, ...)`, `lag(clip, param, delay, duration)` (cloth that follows its limb late). Verified: bestiary +
+effects regenerated into the scratchpad, all 32 shipped files byte-identical (cmp).
