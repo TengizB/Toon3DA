@@ -2133,9 +2133,12 @@ public class WallRenderer implements Renderable, Disposable {
         if (baseWallSpriteId == null) {
             baseWallSpriteId = TilesetConstants.FIXED_WALL_SPRITE_ID; // defensive: every palette binds 'x'
         }
-        Texture plainTexture = textureSet.textureFor(baseWallSpriteId);
-        int     plainWidth   = textureSet.widthFor(baseWallSpriteId);
-        int     plainHeight  = textureSet.heightFor(baseWallSpriteId);
+        // TEMPORARY (generated-wall-art order 2, CP2-CP3): a region-set face has no texture until the atlas
+        // (CP4); walls draw as the shaded white pixel meanwhile.
+        boolean realized = textureSet.contains(baseWallSpriteId);
+        Texture plainTexture = realized ? textureSet.textureFor(baseWallSpriteId) : whitePixelTexture;
+        int     plainWidth   = realized ? textureSet.widthFor(baseWallSpriteId)   : 1;
+        int     plainHeight  = realized ? textureSet.heightFor(baseWallSpriteId)  : 1;
         Arrays.fill(levelWallTextures, plainTexture);
         Arrays.fill(levelWallWidths,   plainWidth);
         Arrays.fill(levelWallHeights,  plainHeight);
@@ -2144,7 +2147,7 @@ public class WallRenderer implements Renderable, Disposable {
             char symbol = (char) charIndex;
             if (!Level.isWall(symbol)) continue;
             String spriteId = palette.spriteIdOf(symbol);
-            if (spriteId == null) continue; // defensive: a wall char with no binding keeps the plain default
+            if (spriteId == null || !textureSet.contains(spriteId)) continue; // keeps the plain default
             levelWallTextures[charIndex] = textureSet.textureFor(spriteId);
             levelWallWidths[charIndex]   = textureSet.widthFor(spriteId);
             levelWallHeights[charIndex]  = textureSet.heightFor(spriteId);
@@ -2156,7 +2159,7 @@ public class WallRenderer implements Renderable, Disposable {
         // (always present in the set) so a missing binding degrades gracefully instead of NPE-ing in the
         // hot render path — the same defence the wall loop above uses.
         String columnSpriteId = palette.spriteIdOf(COLUMN_SYMBOL);
-        if (columnSpriteId == null) {
+        if (columnSpriteId == null || !textureSet.contains(columnSpriteId)) {
             levelColumnTexture       = plainTexture;
             levelColumnTextureWidth  = plainWidth;
             levelColumnTextureHeight = plainHeight;

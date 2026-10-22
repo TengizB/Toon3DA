@@ -55,6 +55,9 @@ public final class EnvironmentTextureSet implements Disposable {
         Map<String, Integer> widths   = new HashMap<>();
         Map<String, Integer> heights  = new HashMap<>();
         for (String spriteId : spriteIds) {
+            // TEMPORARY (generated-wall-art order 2, CP2-CP3): region wall set faces have no generator; the
+            // RegionWallAtlas (CP4) supplies them. Deleted with the old wall layer in CP7.
+            if (!generators.has(spriteId)) continue;
             Texture texture = generators.generate(spriteId);
             textures.put(spriteId, texture);
             widths.put(spriteId, texture.getWidth());

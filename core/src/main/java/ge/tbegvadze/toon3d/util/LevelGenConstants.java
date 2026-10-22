@@ -567,8 +567,6 @@ public final class LevelGenConstants {
     public static final int   MED_BAY_APPROACH_HALF_WIDTH = 1; // 2*half+1 = 3 tiles wide
     // Square cryo-pod alcove carved off the ward (top and/or bottom), floor side length.
     public static final int   MED_BAY_ALCOVE_SIZE       = 4;
-    // Width (columns) of the 'N' reinforced-glass viewing window band on the ward's top wall.
-    public static final int   MED_BAY_WINDOW_WIDTH      = 4;
 
     // -------------------------------------------------------------------------
     // EVENT ROOM (route-map order-10) — the bespoke small curated narrative room

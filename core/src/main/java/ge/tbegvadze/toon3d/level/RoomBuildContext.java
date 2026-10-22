@@ -39,18 +39,19 @@ public final class RoomBuildContext {
         generator.assignFloorLighting(grid, singletonRoom);
     }
 
-    // --- Wall theming ---
+    // --- Retired wall-dressing rolls (R1 draw ledger, generated-wall-art order 2: the draws stay, the
+    //     pictures come from the LevelFinisher) ---
 
-    void themeServerRoomWalls() {
-        generator.themeServerRoomWallsForRoom(grid, room);
+    void retiredServerRoomWallRolls() {
+        generator.retiredServerRoomWallRollsForRoom(grid, room);
     }
 
-    void themeNewRoomWalls() {
-        generator.themeNewRoomWallsForRoom(grid, room);
+    void retiredRoomWallRolls() {
+        generator.retiredRoomWallRollsForRoom(grid, room);
     }
 
-    void themeAtmosphericPlantWalls() {
-        generator.themeAtmosphericPlantWallsForRoom(grid, room);
+    void retiredAtmosphericPlantWallRolls() {
+        generator.retiredAtmosphericPlantWallRollsForRoom(grid, room);
     }
 
     // --- Columns ---

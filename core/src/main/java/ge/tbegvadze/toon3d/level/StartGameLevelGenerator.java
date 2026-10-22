@@ -112,7 +112,7 @@ public class StartGameLevelGenerator implements ILevelGenerator {
         }
 
         return new Level(matrix, Collections.emptyList(), Collections.emptyList(),
-                         LevelPalettes.generatedWithBaseWall(seed));
+                         LevelFinisher.request(matrix, seed).basePalette(LevelPalettes.legacy()).finish());
     }
 
     /** Returns the tile column for the weapon offer at the given index (0 to OFFER_COUNT-1). */

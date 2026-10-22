@@ -50,7 +50,7 @@ Never `git add -A`.
 - [x] **CP1** — GameMath wallSetSeed / wallVariantIndex / wallMipLevel; WallGroup, WallSlot, RegionWallSet,
       RegionWallSetRegistry, RegionWallSets.bootstrap() (A real from the manifest ids, B-E alias A); the slot table in
       TilesetConstants. DONE WHEN: they exist and the mirror build is green.
-- [ ] **CP2** — LevelFinisher exists, every generator's final Level goes through it with family stamping + the region
+- [x] **CP2** — LevelFinisher exists, every generator's final Level goes through it with family stamping + the region
       palette; no generator writes a wall picture char. DONE WHEN: build green and R1 script shows no difference.
 - [ ] **CP3** — route wallSetId + World resolution + LevelGenConfig fields; hall placement P4-P9. DONE WHEN: build
       green, R1 holds.
@@ -63,7 +63,10 @@ Never `git add -A`.
 
 ## UPDATED TESTS (W10)
 
-(none yet)
+- CP2 `level/LevelGeneratorSnapshotTest` — EXPECTED_DIGEST re-baselined (wall symbols change by design; R1 proven
+  separately), stable across two JVM runs.
+- CP2 `level/RoomBlueprintBuildDemandTest` — unchanged and green: the blueprint demands lost their wall rows
+  (build() no longer stamps a wall picture), so "stamped flexible symbols == declared demand" still holds.
 
 ## NOTES CARRIED FORWARD
 
@@ -89,3 +92,26 @@ cannot read assets headlessly (tests have no Gdx.files); the render-side RegionW
 of the set against the manifest and falls back to set A on a mismatch (R7). DECISION: the column ('P') picture is
 chosen per FLOOR by the renderer (wallVariantIndex over the set's two columns), not per tile, so a row of columns
 reads as one architecture.
+
+**CP2:** R1 PROVEN: `r1-cp2.txt` vs `r1-baseline.txt` — 35 200 / 35 200 cases identical, 0 errors (walkable mask +
+every fixed symbol + spawns + stations + credits; 7 generators x 200 seeds x depths 1-25 + 200 start rooms).
+`level/LevelFinisher` (`request(grid, seed).room(interiorL,B,R,T, group)...floorGroup(G).cavern().config(cfg)
+.basePalette(p).finish()` -> LevelPalette; dresses the grid in place): P8 normalise + exposure, P2/P3 ownership
+(first room whose interior a wall faces), family BASE, accents (facing-entrance first, then random, P9 via
+`FocalSpacing`, Chebyshev), RegionPaletteBuilder. Every generator + the start room + every fallback builds through it
+(MED_BAY MEDICAL, gate SECURITY, event + boss SIGNATURE, cavern `.cavern()`, chambers/rooms with their groups;
+LinearCorridor's local STORAGE_BAY/REACTOR name STORAGE/MACHINERY via `RoomType.localWallGroup`).
+`RoomBlueprint.wallGroup()` per registration row (family table of the master). `LevelGenConfig.wallSetId` +
+`floorIndexInRegion` exist (World does not set them yet — CP3). Blueprint demands lost their wall rows.
+THE R1 MECHANISM: generators keep every random draw of the retired wall passes and write no picture; a few old draws
+were conditioned on "is this wall still plain 'x'" (rust, gore, the old bulkhead), so `level/RetiredWallDressing`
+(per-generator ledger, shared with the LevelGenerator bridge via `buildRoomForBridge(..., ledger)`) records which
+walls a retired pass would have repainted (`paint(grid,c,r,sym)` writes 'x'; `markDressed`; `isPlainWall`). Retired
+passes are renamed `retired*Rolls`; the per-type room theming switch became `RETIRED_ROOM_WALL_PAINT_CHANCE` (summed
+rates); `stampGenericVarietyAccents` sizes its two nextInt draws from `RETIRED_ACCENT_RESERVATIONS` (what the old
+demands reserved) so the demands could lose their wall rows. The bulkhead pass had no RNG -> deleted. Cavern biome
+wall lists -> `retiredWallDrawSpan` ints; MedBay's accent painting deleted (no RNG). Geometry writes of a picture
+char (research-lab force-field barrier 'F', observatory shell '`') now write 'x'.
+TEMPORARY STATE (until CP4): EnvironmentTextureSet skips sprite ids without a generator and WallRenderer draws
+unrealized wall/column ids with the white pixel (walls render flat-shaded). Both marked TEMPORARY in code; CP4
+replaces the path, CP7 deletes it.

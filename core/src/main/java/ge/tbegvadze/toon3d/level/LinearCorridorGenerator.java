@@ -53,7 +53,21 @@ public class LinearCorridorGenerator implements ILevelGenerator, SupplySlotProvi
         ENTRANCE, STANDARD, SERVER_ROOM,
         MEDICAL_BAY, ARMORY, CRYO_CHAMBER,
         POWER_PLANT, COMMAND_CENTER, CONTAINMENT_BLOCK,
-        RESEARCH_LAB, STORAGE_BAY, REACTOR
+        RESEARCH_LAB,
+        // This generator's own room types (no registered blueprint) name their wall family here (P2).
+        STORAGE_BAY(ge.tbegvadze.toon3d.tileset.WallGroup.STORAGE),
+        REACTOR(ge.tbegvadze.toon3d.tileset.WallGroup.MACHINERY);
+
+        /** The wall family of a local type; null = the room's blueprint names it. */
+        final ge.tbegvadze.toon3d.tileset.WallGroup localWallGroup;
+
+        RoomType() {
+            this(null);
+        }
+
+        RoomType(ge.tbegvadze.toon3d.tileset.WallGroup localWallGroup) {
+            this.localWallGroup = localWallGroup;
+        }
     }
 
     private static final class Room {
@@ -96,11 +110,13 @@ public class LinearCorridorGenerator implements ILevelGenerator, SupplySlotProvi
     }
 
     private       Random                 random;
-    // Raw floor seed, kept for deterministic per-level BASE-WALL selection (independent of `random`, so it
-    // never perturbs the generated grid). See LevelPalettes.generatedWithBaseWall.
+    // Raw floor seed: the LevelFinisher's own wall-dressing stream derives from it (independent of
+    // `random`, so it never perturbs the generated grid). See LevelFinisher.
     private final long                   seed;
     private final LevelGenConfig         config;
     private       List<int[]>            spineCenterTiles;
+    // R1 draw ledger (generated-wall-art order 2): what the retired wall-dressing passes would have repainted.
+    private       RetiredWallDressing    retiredWallDressing;
 
     // E6 footprint scale (balance-overhaul order 2): the spine (and its bend) is scaled to this fraction of
     // its usual length. 1 = the full-length artery.
@@ -155,6 +171,8 @@ public class LinearCorridorGenerator implements ILevelGenerator, SupplySlotProvi
     private Level generateOnce() {
         char[][] grid = new char[LevelGenConstants.LEVEL_GEN_GRID_HEIGHT][LevelGenConstants.LEVEL_GEN_GRID_WIDTH];
         fillAll(grid, 'x');
+        retiredWallDressing  = new RetiredWallDressing(LevelGenConstants.LEVEL_GEN_GRID_HEIGHT,
+                                                       LevelGenConstants.LEVEL_GEN_GRID_WIDTH);
         spineCenterTiles     = new ArrayList<>();
 
         boolean horizontal = random.nextFloat() < LevelGenConstants.LEVEL_GEN_SPINE_HORIZONTAL_CHANCE;
@@ -166,7 +184,7 @@ public class LinearCorridorGenerator implements ILevelGenerator, SupplySlotProvi
 
         // Phase 3 — Decoration
         assignFloorLighting(grid, rooms);
-        assignWallVariety(grid);
+        retiredWallVarietyRolls(grid);
         // Delegated specials (STELLAR_OBSERVATORY, GORE_NEST, ATMOSPHERIC_PLANT, SALVAGE_BAY, SUPPLY_CACHE)
         // are stamped canonically via the LevelGenerator build bridge AFTER wall variety — variety only
         // recolours 'x', so their themed/sealed walls survive it — and BEFORE doors/props so entrances and
@@ -182,9 +200,9 @@ public class LinearCorridorGenerator implements ILevelGenerator, SupplySlotProvi
 
         placeProps(grid, rooms);
 
-        // Atmospheric post-passes
-        placeRustWallsNearUnlit(grid);
-        placeGoreWallsNearCorpses(grid);
+        // Retired wall-dressing rolls (R1 draw ledger)
+        retiredRustWallRolls(grid);
+        retiredGoreWallRolls(grid);
 
         // Phase 5 — Connectivity audit
         verifyAndRepairConnectivity(grid, rooms);
@@ -213,7 +231,24 @@ public class LinearCorridorGenerator implements ILevelGenerator, SupplySlotProvi
                         encounter.floorBudget(), encounter.bodyTarget(), footprintTarget),
                 config, dungeonDepth, seed);
         return populated.attachTo(new Level(grid, populated.spawnPoints, populated.weaponSpawnPoints,
-                         LevelPalettes.generatedWithBaseWall(seed)));
+                         finishWalls(grid, rooms)));
+    }
+
+    /**
+     * Region wall sets (generated-wall-art order 2): the finished grid goes through the {@link LevelFinisher}
+     * with every room's interior and its wall group — the local STORAGE_BAY / REACTOR types name their own,
+     * every other room its blueprint's.
+     */
+    private ge.tbegvadze.toon3d.tileset.LevelPalette finishWalls(char[][] grid, List<Room> rooms) {
+        LevelFinisher.Request request = LevelFinisher.request(grid, seed).config(config)
+                .basePalette(LevelPalettes.legacy());
+        for (Room room : rooms) {
+            ge.tbegvadze.toon3d.tileset.WallGroup group = room.type.localWallGroup != null
+                    ? room.type.localWallGroup
+                    : room.blueprint != null ? room.blueprint.wallGroup() : ge.tbegvadze.toon3d.tileset.WallGroup.HALL;
+            request.room(room.leftColumn + 1, room.bottomRow + 1, room.rightColumn - 1, room.topRow - 1, group);
+        }
+        return request.finish();
     }
 
     // -------------------------------------------------------------------------
@@ -864,7 +899,7 @@ public class LinearCorridorGenerator implements ILevelGenerator, SupplySlotProvi
                 buildBridge.setDungeonDepthForBridge(dungeonDepth);
             }
             buildBridge.buildRoomForBridge(grid, room.leftColumn, room.bottomRow,
-                    room.rightColumn, room.topRow, room.blueprint);
+                    room.rightColumn, room.topRow, room.blueprint, retiredWallDressing);
         }
     }
 
@@ -1099,12 +1134,16 @@ public class LinearCorridorGenerator implements ILevelGenerator, SupplySlotProvi
     // Phase 3 — Wall variety
     // -------------------------------------------------------------------------
 
-    private void assignWallVariety(char[][] grid) {
+    /**
+     * R1 draw ledger: the retired spine wall-variety pass; every exposed wall still consumes its roll and the
+     * ledger records what it would have repainted. Pictures come from the LevelFinisher.
+     */
+    private void retiredWallVarietyRolls(char[][] grid) {
         for (int tileRow = 0; tileRow < LevelGenConstants.LEVEL_GEN_GRID_HEIGHT; tileRow++) {
             for (int tileColumn = 0; tileColumn < LevelGenConstants.LEVEL_GEN_GRID_WIDTH; tileColumn++) {
-                if (grid[tileRow][tileColumn] != 'x') continue;
+                if (!retiredWallDressing.isPlainWall(grid, tileColumn, tileRow)) continue;
                 if (!isAdjacentToOpen(grid, tileColumn, tileRow)) continue;
-                grid[tileRow][tileColumn] = randomWallChar();
+                retiredWallDressing.paint(grid, tileColumn, tileRow, randomWallChar());
             }
         }
     }
@@ -1245,7 +1284,7 @@ public class LinearCorridorGenerator implements ILevelGenerator, SupplySlotProvi
         for (int tileColumn = room.leftColumn; tileColumn <= room.rightColumn; tileColumn++) {
             if (Level.isWall(grid[room.topRow][tileColumn])
                     && random.nextFloat() < LevelGenConstants.LEVEL_GEN_SERVER_WALL_TERMINAL_CHANCE) {
-                grid[room.topRow][tileColumn] = 't';
+                retiredWallDressing.paint(grid, tileColumn, room.topRow, 't');
             }
         }
     }
@@ -1256,7 +1295,7 @@ public class LinearCorridorGenerator implements ILevelGenerator, SupplySlotProvi
             for (int wallRow : new int[]{ room.bottomRow, room.topRow }) {
                 if (Level.isWall(grid[wallRow][tileColumn])
                         && random.nextFloat() < LevelGenConstants.LEVEL_GEN_MEDICAL_WALL_CHANCE) {
-                    grid[wallRow][tileColumn] = 'M';
+                    retiredWallDressing.paint(grid, tileColumn, wallRow, 'M');
                 }
             }
         }
@@ -1264,7 +1303,7 @@ public class LinearCorridorGenerator implements ILevelGenerator, SupplySlotProvi
             for (int wallColumn : new int[]{ room.leftColumn, room.rightColumn }) {
                 if (Level.isWall(grid[tileRow][wallColumn])
                         && random.nextFloat() < LevelGenConstants.LEVEL_GEN_MEDICAL_WALL_CHANCE) {
-                    grid[tileRow][wallColumn] = 'M';
+                    retiredWallDressing.paint(grid, wallColumn, tileRow, 'M');
                 }
             }
         }
@@ -1286,7 +1325,7 @@ public class LinearCorridorGenerator implements ILevelGenerator, SupplySlotProvi
             for (int wallRow : new int[]{ room.bottomRow, room.topRow }) {
                 if (Level.isWall(grid[wallRow][tileColumn])
                         && random.nextFloat() < LevelGenConstants.LEVEL_GEN_ARMORY_BLAST_WALL_CHANCE) {
-                    grid[wallRow][tileColumn] = 'X';
+                    retiredWallDressing.paint(grid, tileColumn, wallRow, 'X');
                 }
             }
         }
@@ -1314,7 +1353,7 @@ public class LinearCorridorGenerator implements ILevelGenerator, SupplySlotProvi
         for (int tileColumn = room.leftColumn; tileColumn <= room.rightColumn; tileColumn++) {
             if (Level.isWall(grid[room.topRow][tileColumn])
                     && random.nextFloat() < LevelGenConstants.LEVEL_GEN_CRYO_WALL_CHANCE) {
-                grid[room.topRow][tileColumn] = 'Z';
+                retiredWallDressing.paint(grid, tileColumn, room.topRow, 'Z');
             }
         }
         // Bio-pod '&' rows at 2-tile spacing inside
@@ -1333,7 +1372,7 @@ public class LinearCorridorGenerator implements ILevelGenerator, SupplySlotProvi
             for (int wallRow : new int[]{ room.bottomRow, room.topRow }) {
                 if (Level.isWall(grid[wallRow][tileColumn])
                         && random.nextFloat() < LevelGenConstants.LEVEL_GEN_POWERPLANT_RAD_WALL_CHANCE) {
-                    grid[wallRow][tileColumn] = 'U';
+                    retiredWallDressing.paint(grid, tileColumn, wallRow, 'U');
                 }
             }
         }
@@ -1359,7 +1398,7 @@ public class LinearCorridorGenerator implements ILevelGenerator, SupplySlotProvi
         for (int tileColumn = room.leftColumn; tileColumn <= room.rightColumn; tileColumn++) {
             if (Level.isWall(grid[room.bottomRow][tileColumn])
                     && random.nextFloat() < LevelGenConstants.LEVEL_GEN_COMMAND_GLASS_WALL_CHANCE) {
-                grid[room.bottomRow][tileColumn] = 'N';
+                retiredWallDressing.paint(grid, tileColumn, room.bottomRow, 'N');
             }
         }
         // Terminal 'T' row along the back
@@ -1384,7 +1423,7 @@ public class LinearCorridorGenerator implements ILevelGenerator, SupplySlotProvi
             for (int wallColumn : new int[]{ room.leftColumn, room.rightColumn }) {
                 if (Level.isWall(grid[tileRow][wallColumn])
                         && random.nextFloat() < LevelGenConstants.LEVEL_GEN_CONTAINMENT_GLASS_CHANCE) {
-                    grid[tileRow][wallColumn] = 'N';
+                    retiredWallDressing.paint(grid, wallColumn, tileRow, 'N');
                 }
             }
         }
@@ -1392,7 +1431,7 @@ public class LinearCorridorGenerator implements ILevelGenerator, SupplySlotProvi
         for (int tileColumn = room.leftColumn; tileColumn <= room.rightColumn; tileColumn++) {
             if (Level.isWall(grid[room.topRow][tileColumn])
                     && random.nextFloat() < LevelGenConstants.LEVEL_GEN_CONTAINMENT_BIO_CHANCE) {
-                grid[room.topRow][tileColumn] = 'Q';
+                retiredWallDressing.paint(grid, tileColumn, room.topRow, 'Q');
             }
         }
     }
@@ -1407,7 +1446,7 @@ public class LinearCorridorGenerator implements ILevelGenerator, SupplySlotProvi
         for (int tileColumn = room.leftColumn; tileColumn <= room.rightColumn; tileColumn++) {
             if (Level.isWall(grid[room.topRow][tileColumn])
                     && random.nextFloat() < LevelGenConstants.LEVEL_GEN_SPINE_RESEARCH_HOLO_WALL_CHANCE) {
-                grid[room.topRow][tileColumn] = 'D';
+                retiredWallDressing.paint(grid, tileColumn, room.topRow, 'D');
             }
         }
         // Row of specimen tanks 'I' along the back interior row.
@@ -1458,7 +1497,7 @@ public class LinearCorridorGenerator implements ILevelGenerator, SupplySlotProvi
             for (int wallRow : new int[]{ room.bottomRow, room.topRow }) {
                 if (Level.isWall(grid[wallRow][tileColumn])
                         && random.nextFloat() < LevelGenConstants.LEVEL_GEN_SPINE_REACTOR_RAD_WALL_CHANCE) {
-                    grid[wallRow][tileColumn] = 'U';
+                    retiredWallDressing.paint(grid, tileColumn, wallRow, 'U');
                 }
             }
         }
@@ -1709,12 +1748,13 @@ public class LinearCorridorGenerator implements ILevelGenerator, SupplySlotProvi
     // Atmospheric post-passes
     // -------------------------------------------------------------------------
 
-    private void placeRustWallsNearUnlit(char[][] grid) {
+    /** R1 draw ledger: the retired rust-wall rolls; reads the ledger exactly as the old pass read 'x'. */
+    private void retiredRustWallRolls(char[][] grid) {
         int[] deltaColumns = { 0,  0,  1, -1 };
         int[] deltaRows    = { 1, -1,  0,  0 };
         for (int tileRow = 0; tileRow < LevelGenConstants.LEVEL_GEN_GRID_HEIGHT; tileRow++) {
             for (int tileColumn = 0; tileColumn < LevelGenConstants.LEVEL_GEN_GRID_WIDTH; tileColumn++) {
-                if (grid[tileRow][tileColumn] != 'x') continue;
+                if (!retiredWallDressing.isPlainWall(grid, tileColumn, tileRow)) continue;
                 boolean nearUnlit = false;
                 for (int direction = 0; direction < 4; direction++) {
                     int neighborColumn = tileColumn + deltaColumns[direction];
@@ -1723,18 +1763,19 @@ public class LinearCorridorGenerator implements ILevelGenerator, SupplySlotProvi
                     if (grid[neighborRow][neighborColumn] == 'u') nearUnlit = true;
                 }
                 if (nearUnlit && random.nextFloat() < LevelGenConstants.LEVEL_GEN_RUST_WALL_CHANCE) {
-                    grid[tileRow][tileColumn] = 'j';
+                    retiredWallDressing.paint(grid, tileColumn, tileRow, 'j');
                 }
             }
         }
     }
 
-    private void placeGoreWallsNearCorpses(char[][] grid) {
+    /** R1 draw ledger: the retired gore-wall rolls; reads the ledger exactly as the old pass read 'x'. */
+    private void retiredGoreWallRolls(char[][] grid) {
         int[] deltaColumns = { 0,  0,  1, -1 };
         int[] deltaRows    = { 1, -1,  0,  0 };
         for (int tileRow = 0; tileRow < LevelGenConstants.LEVEL_GEN_GRID_HEIGHT; tileRow++) {
             for (int tileColumn = 0; tileColumn < LevelGenConstants.LEVEL_GEN_GRID_WIDTH; tileColumn++) {
-                if (grid[tileRow][tileColumn] != 'x') continue;
+                if (!retiredWallDressing.isPlainWall(grid, tileColumn, tileRow)) continue;
                 boolean nearGore = false;
                 for (int direction = 0; direction < 4; direction++) {
                     int neighborColumn = tileColumn + deltaColumns[direction];
@@ -1744,7 +1785,7 @@ public class LinearCorridorGenerator implements ILevelGenerator, SupplySlotProvi
                     if (neighbor == 'm' || neighbor == '.') nearGore = true;
                 }
                 if (nearGore && random.nextFloat() < LevelGenConstants.LEVEL_GEN_GORE_WALL_CHANCE) {
-                    grid[tileRow][tileColumn] = 'G';
+                    retiredWallDressing.paint(grid, tileColumn, tileRow, 'G');
                 }
             }
         }
@@ -2058,7 +2099,7 @@ public class LinearCorridorGenerator implements ILevelGenerator, SupplySlotProvi
                 ge.tbegvadze.toon3d.route.GeneratorId.LINEAR_CORRIDOR.stableId(), grid, this, new ArrayList<>(),
                 new FloorPopulator.EncounterFacts(-1, 0f, 0f, 0, 0), config, dungeonDepth, seed);
         return populated.attachTo(new Level(grid, populated.spawnPoints, populated.weaponSpawnPoints,
-                         LevelPalettes.generatedWithBaseWall(seed)));
+                         LevelFinisher.request(grid, seed).config(config).basePalette(LevelPalettes.legacy()).finish()));
     }
 
     // -------------------------------------------------------------------------
