@@ -148,3 +148,9 @@ Owner: "even thicker legs and arms and body, the body 10-15% longer, the hands 1
 spine 58 -> 65, upper_arm/fore_arm 44/42 -> 50/47 ("hands" read as the ARMS, as in the first brief; fingers unchanged),
 pelvis y 112 -> 118 with thigh/shin 58/60 -> 55/57 so the head keeps its place, shoulder_half 19.5, hip_half 12; the hip band
 and the pelvis end of the lower torso narrowed (they swelled into a waist bulge). Still re-sent; awaiting approval; UNBAKED.
+Owner: "make the body even longer; the reference is this picture (the hazard-suit figure) - match the proportion and
+thickness". Reference measured from its silhouette (head ~14%, shoulders ~19%, crotch ~54%, shoulder width ~31%, waist ~24%,
+leg ~10%, arm ~7% of its height). `ghoul_rig.py`: BULK/LEG_BULK replaced by ARM_R (7.8, 7.2, 6.4) and LEG_R (11, 10, 8.8);
+skeleton pelvis y 128, spine 71, shoulder_half 22, hip_half 11, arms 47/45, legs 50/51; a boxy bevelled trunk slab + core
+capsule; boots 8.4/9.6; fingers 27 long, r 1.6, palm 4.6. Owner features kept (single visor, red eyes, long mask, long arms
+and fingers). Still + side-by-side with the reference sent; awaiting approval; UNBAKED.
