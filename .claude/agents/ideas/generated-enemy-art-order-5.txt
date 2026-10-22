@@ -167,6 +167,9 @@ DECISIONS
       order: its own idea file comes from creative-game-designer and the owner approves it separately.
   D4  The acid gets an ARRIVAL SPLASH where it lands (owner: "yes also add a splash where the acid lands") - a runtime
       projectile-arrival burst, named in the IMPLEMENTATION NOTE.
+  D5  OWNER GATE 2 (CP5b, 2026-10-22): the REDESIGNED Mire Wraith (lamprey maw, acid gullet, hooked arms, ragged shroud;
+      stills, clip GIF + strip, in-engine bursts incl. a 2-tile close-up of the spit and the landing splash, cool_steel +
+      amber_hot) - owner: "Now I like everything, you have my approvals to continue". Wired.
 
 
 OPEN QUESTIONS

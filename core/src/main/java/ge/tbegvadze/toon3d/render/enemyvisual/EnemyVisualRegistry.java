@@ -29,10 +29,11 @@ public final class EnemyVisualRegistry {
         register(EnemyType.SHELL_BRUTE, "harvest_tick");
         // Order 4: the insect family's MINI_ELITE, the first creature built from its brief through the whole pipeline.
         register(EnemyType.IRON_STALKER, "iron_stalker");
-        // Order 5: the Aberrations the owner approved (the Mire Wraith follows its redesign's own gate).
+        // Order 5: the Aberrations (the Mire Wraith is its second, re-gated design; the first is kept as sump_wretch).
         register(EnemyType.PLAGUE_HULK, "plague_hulk");
         register(EnemyType.EYE_TYRANT,  "eye_tyrant");
         register(EnemyType.GORE_BITER,  "gore_biter");
+        register(EnemyType.MIRE_WRAITH, "mire_wraith");
     }
 
     public static void register(EnemyType type, String creatureId) {

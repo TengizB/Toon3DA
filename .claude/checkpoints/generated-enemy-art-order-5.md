@@ -60,7 +60,7 @@ file's tick in the same commit as the work**. Never more than one checkpoint unc
       A2-A5 for the three re-verified in-engine; build green.
 - [x] **CP5b** — the NEW Mire Wraith (dangerous, alive, not an egg): rig + full clip set + effects row; stills, clip GIFs
       and in-engine bursts (default + one mood) sent. DONE WHEN: sent; build green.
-- [ ] **CP5c** — owner approval of the new Mire Wraith recorded (stop until it is); then its row wired, A2 verified.
+- [x] **CP5c** — owner approval of the new Mire Wraith recorded (stop until it is); then its row wired, A2 verified.
 - [ ] **CP6** — docs (guide, art-direction 16, SKILL.md, enemy-system); reviewer PASS; STATUS: IMPLEMENTED.
 
 ## NOTES CARRIED FORWARD
@@ -145,3 +145,7 @@ raised forearm must fold it INWARD (negative el) or the hand leaves the canvas. 
 (overrides incl. IMPACT -> ACID_SPLASH). Fresh bake == shipped; other sets unchanged. Captures used a TEMPORARY row
 MIRE_WRAITH -> mire_wraith (removed, not committed). Sent: stills (early), clip GIF + strip, in-engine GIFs (default +
 amber_hot, a 2-tile close-up and the full reaction run). WAITING for owner approval (CP5c).
+
+**CP5c:** owner approved the new Mire Wraith (D5, "Now I like everything, you have my approvals to continue" - the same
+message approves .claude/agents/ideas/sump-wretch-acid-death.txt, separate work). Row MIRE_WRAITH -> mire_wraith committed.
+Re-run on the committed state: all four aberrations animated (ALERT clip), Wraith ATTACK + DEBUFF_PLAYER, no exception.
