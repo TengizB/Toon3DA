@@ -1,0 +1,114 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Visual
+TITLE: Wall art order 7 - Core kit (the mind)
+CREATED: 2026-10-22
+IMPLEMENTED: -
+---
+
+Series: generated-wall-art.txt (concept, rules W1-W12, roles, dressing). Method: order 1's rules R1-R11
+(texture, tiling, trim lines, variants, glow, animation, mips, atlas, manifest, story detail,
+determinism) apply UNCHANGED - this order is CONTENT ONLY plus one registry swap.
+
+
+OVERVIEW
+--------
+The last stratum: the being's mind, where the Organization's drills were heading and the soul every
+Cradle burned comes from. No facility is left except what the player brought down. It must feel like
+standing inside something that thinks - beautiful, not grotesque - so that the endings land.
+
+
+SCOPE
+-----
+IN
+  - walls.py: the the_core STRATA row (trim lines + 16 walls: BASE x3, STRUCTURE, LIGHT, SERVICE x2,
+    MARKER, FEATURE, BREACH, CLINICAL, CONTAINMENT, MACHINERY, SECURITY, DATA); LIGHT and FEATURE carry glow FRAMES (a synapse travelling along the lattice: 8
+    frames, ~1.4 s).
+  - New materials, if any, APPENDED to kit.MATERIALS (enemies + earlier strata regenerate byte-identical).
+  - Shipped: assets/textures/walls/generated/the_core.walls.png / .glow.png / .walls.json.
+  - WallStrata: the the_core row switches from placeholders to wall_e_* atlas sprites
+    (order 3's mechanism - one registry edit, no renderer change).
+  - Docs: sprite-art-creation-guide WALLS roster line; art-direction WALLS roster; tileset section 15.
+OUT
+  - Any runtime or allocator change (order 2/3 own them). Doors, columns, floors (8, 9).
+  - Changing the region's mood numbers - if the kit fights the mood, the KIT changes (W6), unless the
+    owner decides otherwise in DECISIONS.
+
+
+VISUAL DESIGN - STRATUM E, THE CORE (mood core_white_violet)
+------------------------------------------------------------
+A nacre-bone lattice grown like a neural mesh (the approved prototype), the hollows between filled with
+deep membrane and soul light. The lattice's struts are larger and calmer than the prototype (it read
+busy at range): fewer, thicker struts, bigger hollows.
+  BASE (x3)     the lattice at three phases of the same mesh (the struts meet across tile edges).
+  STRUCTURE     a thick trunk strut, vertical, like a spine.
+  LIGHT         a synapse node: a bright soul core with dendrites (travelling pulse).
+  SERVICE (x2)  dead Organization cable runs, pulled taut through the lattice; a bore hole with a
+                drill sleeve, the lattice healing over it.
+  MARKER        the last Organization plate: a survey marker ("SEAM" in stencil), cracked.
+  FEATURE       a memory window: a large hollow where the soul light shows a faint human shape
+                (the original self - story/03-the-planet.md, how the planet gives memory back).
+  BREACH        none - fallbackRole BASE (the planet does not breach itself).
+  CLINICAL / CONTAINMENT / MACHINERY / SECURITY / DATA
+                the Organization's last forward camp, bolted into the lattice: one panel each of
+                stratum A's design (livery, steel) clamped onto nacre - the facility as the foreign
+                body now.
+Palette: nacre, flesh_dk (hollows), membrane, soul, bone; livery/gunmetal only on the camp walls.
+Purple is semantic (V5): the violet comes from the MOOD, the materials stay pearl-grey and pale.
+
+
+BALANCE NOTES / BALANCE ADMISSION
+---------------------------------
+None - adds no balance-bearing content.
+
+
+ACCEPTANCE CRITERIA
+-------------------
+  A1  walls.py writes the the_core files byte-identically twice; enemy atlases and earlier strata
+      regenerate byte-identical.
+  A2  The manifest lists the 16 walls of the design table, LIGHT and FEATURE with 8 glow frames.
+  A3  Tiled strip of the whole kit: no seams, trim lines meet.
+  A4  On a generated floor of this region (run-game, mood core_white_violet): base variants, structure rhythm,
+      lights, at least one FEATURE and the room-role walls of any signature room on that floor; on the
+      region's LAST floor, BREACH clusters are visible (dressing D9).
+  A5  Enemies of this region read in front of the walls at 2 and 4 tiles (capture with spawn:TYPE -
+      the Core's enemies and the final boss arena).
+  A6  Owner verdict recorded in DECISIONS (W9).
+
+
+IMPLEMENTATION PLAN
+-------------------
+  1. CONTENT   walls.py stratum row + materials (Python)
+  2. DATA      (java-architect) WallStrata row swap
+  3. TESTS     None. Not balance-bearing; verified by regeneration + previews + run-game captures.
+  4. DOCS      guide roster, art-direction roster, tileset section 15
+  5. GATE      contact sheet + strip + glow GIFs + in-engine captures; STOP; record the verdict.
+
+
+CHECKPOINTS
+-----------
+  CP0  the checkpoint file exists on the branch, committed and pushed
+  CP1  the BASE x3 + STRUCTURE + LIGHT walls exist and tile (strip preview); enemy atlases byte-identical
+  CP2  all 16 walls exist; shipped files committed
+  CP3  the WallStrata row points at the new art; build green; region capture taken
+  CP4  owner verdict recorded (or the requested changes done and re-shown)
+
+
+ASSUMPTIONS
+-----------
+  AS1  The camp walls reuse stratum A's builders with a nacre clamp layer (one builder, two strata).
+  AS2  The memory-window figure is a silhouette only; no face, no text.
+
+
+DECISIONS
+---------
+  (none yet)
+
+
+OPEN QUESTIONS
+--------------
+None.
+
+
+RELATED
+-------
+  generated-wall-art.txt, -order-1 (rules), -order-3 (runtime), story/05-descent-structure.md

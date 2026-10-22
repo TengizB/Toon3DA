@@ -1,0 +1,187 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Visual
+TITLE: Wall art order 1 - wall kit + Habitation Rings kit
+CREATED: 2026-10-22
+IMPLEMENTED: -
+---
+
+Series: generated-wall-art.txt (read it first: the concept, rules W1-W12, the role model, decisions).
+Method: docs/sprite-art-creation-guide.txt (the enemy-art kit). This order is OFFLINE ONLY: no Java.
+
+
+OVERVIEW
+--------
+Turn the 2026-10-22 prototype script (.claude/skills/enemy-art/walls_prototype.py) into the real wall
+builder, walls.py, and use it to make the complete STRATUM A kit - the Habitation Rings. The output is
+what order 3's runtime will load: one opaque wall atlas per stratum, a glow atlas, mip levels and a JSON
+manifest. Nothing is wired into the game here; the gate is the owner's approval of stratum A.
+
+
+SCOPE
+-----
+IN
+  - walls.py beside bestiary.py: the tiling bake, the STRATA table (one row per stratum: its walls by
+    role + variant), the atlas/manifest writer, mips, previews, CLI (mirrors bestiary.py's).
+  - Environment materials APPENDED to kit.MATERIALS (concrete, concrete_dk, ceramic, rubber, rust,
+    soul, nacre, capsule - the prototype's set, tuned) - every enemy sprite regenerates byte-identical.
+  - kit additions needed by walls, APPENDED: the stencil font gains the missing capitals (C at least),
+    a `chamfer_rect` helper, wall primitives (panel, tile_field, pipe_run, grille, tear_edge, vein).
+  - Stratum A complete: BASE x3 variants, STRUCTURE, LIGHT (+ a 4-frame flicker glow cycle on one
+    LIGHT variant), SERVICE x2, MARKER, FEATURE, BREACH, CLINICAL, CONTAINMENT, MACHINERY, SECURITY,
+    DATA = 16 textures.
+  - Shipped: assets/textures/walls/generated/outer_facility.walls.png (+ .glow.png, + .walls.json).
+  - docs/sprite-art-creation-guide.txt: a new section "WALLS" (method, tiling, trim lines, roles,
+    variants, manifest schema, lessons) + recipes; SKILL.md gains a walls table and commands.
+  - walls_prototype.py stays as the record of the approved prototypes until order 10 deletes it.
+OUT
+  - Any Java / runtime / allocator change (orders 2-3).
+  - Strata B-E (orders 4-7), doors, columns, floors (8-9).
+  - Committing previews (never committed - guide 11).
+
+
+RULES
+-----
+  R1  TEXTURE: 256x256 RGB, opaque (alpha 255 everywhere), row 0 = ceiling line, row 255 = floor line.
+  R2  TILING: built on a 3-tile canvas (shapes stamped at x-256, x, x+256), cropped to the middle.
+      Verified: the strip of every wall beside every other wall of the stratum shows no seam.
+  R3  TRIM LINES: each stratum declares its trim heights in the STRATA row (A: cornice 0-30, cable
+      tray 24-33, panel field 40-196, bump rail 205, kick plate 214-255). Every wall of the stratum
+      honours them, so walls of different roles join along the same lines (a LIGHT next to a BASE
+      continues the rail).
+  R4  VARIANTS: BASE ships 3 variants of one design (seeded differences: a dented panel, a different
+      vent, a missing bolt, a scuff, a stencil number). They must not be told apart at 4 tiles, only
+      noticed up close - variety without noise.
+  R5  GLOW: emissive pixels are written to the glow atlas at the same rect (binary alpha, kit rule);
+      a wall without emissives has no glow rect. Glow per wall <= ~6% of its pixels (lesson 12.8).
+  R6  ANIMATION: a wall may list glow FRAMES (2-8) with a duration each; only the glow changes between
+      frames. Stratum A: one flickering LIGHT variant (a failing tube), 4 frames.
+  R7  MIPS: level 0 = 256, levels 1-2 = 128, 64, each a 2x2 box filter of the level above, packed in
+      the same atlas (the floor material's approach, art-direction section 6).
+  R8  ATLAS: <= 2048x2048, 2 px padding (edge texels duplicated into the padding, so Nearest sampling at
+      a column edge never bleeds), deterministic packing order = manifest order.
+  R9  MANIFEST (<stratum>.walls.json, version 1):
+        { "version": 1, "stratum": "outer_facility", "size": 256, "mips": 3,
+          "trim": {"cornice": [0,30], "rail": 205, "kick": [214,255]},
+          "walls": [ { "id": "wall_a_base", "role": "BASE", "variant": 0,
+                       "rect": [x,y], "mipRects": [[x,y],[x,y]], "glowRect": [x,y] | null,
+                       "glowFrames": [ {"rect":[x,y], "duration": 0.08}, ... ] | null } ... ] }
+      Sprite ids are STABLE: wall_<stratum letter>_<role>[_<n>], never renamed once shipped.
+  R10 Every wall carries the stratum's story detail at least once across the kit (W8): A = ring serials
+      (R1-xx), an evacuation notice board (MARKER), lockers with name plates scratched off (FEATURE).
+  R11 Determinism: running walls.py twice writes byte-identical files; bestiary.py output unchanged.
+
+
+VISUAL DESIGN - STRATUM A, THE HABITATION RINGS (mood cool_steel)
+------------------------------------------------------------------
+An evacuated company town. Everything is Organization issue and recently lived in: painted livery
+panels, rubber bump rails at hip height (trolleys, crowds), riveted kick plates, cable trays under the
+ceiling. The wrongness is small: a notice board with the notices torn off, lockers whose name plates
+were scratched out, a hairline seep of ichor at a panel seam (BREACH, deeper floors only).
+  BASE (x3)     the approved prototype: two chamfered livery panels, vent inset, bump rail, kick plate.
+  STRUCTURE     a gunmetal pilaster with a ring serial stencil, the rail passing behind it.
+  LIGHT         a recessed cyan strip lamp in the panel field (variant b flickers - a failing tube).
+  SERVICE (x2)  an exposed riser pipe pair through a panel cut-out; an access hatch with a grille.
+  MARKER        an evacuation board: empty frames, torn paper (livery), an arrow stencil, "R1".
+  FEATURE       a bank of crew lockers, plates scratched off, one door ajar (dark inside).
+  BREACH        the base panel with a cracked seam weeping a thin line of ichor (emissive, 1-2 px).
+  CLINICAL      white livery with a cyan cross-less "medical" band (no red cross - V5), a dispenser.
+  CONTAINMENT   a heavy sealed panel with a porthole of frosted capsule glass.
+  MACHINERY     a breaker cabinet: dark steel doors, conduits, a small cyan status lamp.
+  SECURITY      a gunmetal blast shutter (chevron grooves carved, not painted yellow).
+  DATA          a wall terminal: dark screen bezel, a few cyan text lines (emissive), keys.
+Value: panels mid-light livery (the prototype read slightly too bright and flat at range: drop the
+livery panel one ramp step, add grime at the panel foot) so enemies read in front (W6).
+
+
+TECHNICAL NOTES
+---------------
+  - walls.py structure: `tiled()`, `bake_wall(layers, seed, stencils) -> (img, glow)`, wall builders as
+    functions taking (variant, seed), STRATA = {"outer_facility": dict(trim=..., walls=[(id, role,
+    variant, builder, glow_frames?)...])}, `write_stratum(name, out_dir, preview_dir)`.
+  - Glow frames: the builder takes a `glow_level` argument; frame n bakes with its level (e.g. flicker
+    1.0, 0.2, 1.0, 0.0); only the glow image of each frame is kept.
+  - Previews (never committed): the contact sheet (every wall 2x, labelled), the tiled strip of the
+    whole kit in a plausible sequence (BASE BASE STRUCTURE BASE LIGHT BASE ...), GIFs of glow frames.
+  - In-engine preview without wiring (order 3 not built yet): the throwaway preview trick used for the
+    prototypes - a TEMP edit in the working tree only (TextureGeneratorRegistry.generate() returning a
+    file from an env var for wall_* ids), reverted before any commit; never committed.
+  - Kit: the 'C' (and any missing) stencil glyph appended to STENCIL_FONT.
+
+
+BALANCE NOTES / BALANCE ADMISSION
+---------------------------------
+None - adds no balance-bearing content.
+
+
+INTERACTIONS
+------------
+  - Enemy art: shares kit.py; must regenerate byte-identical (check with bestiary.py + cmp).
+  - Order 3 consumes the manifest exactly as specified in R9 - change R9 only together with order 3.
+  - Mood cool_steel grades these at strength 1.0 (walls are environment).
+
+
+EDGE CASES
+----------
+  - A stencil glyph missing from the font: the kit raises; add the glyph, never skip the stencil.
+  - A shape that crosses the 3-tile canvas edge (x < -256 or > 512): the bake warns; keep shapes
+    within one tile of the face.
+
+
+ACCEPTANCE CRITERIA
+-------------------
+  A1  `python3 walls.py <dir> outer_facility` writes outer_facility.walls.png/.glow.png/.walls.json;
+      running it twice gives byte-identical files.
+  A2  `python3 bestiary.py <dir>` after this order writes byte-identical enemy atlases to the committed ones.
+  A3  The manifest lists 16 walls with the roles and ids of the VISUAL DESIGN table, 3 mips each, the
+      flickering LIGHT with 4 glow frames; the atlas is <= 2048x2048 and fully opaque.
+  A4  The tiled strip (every A wall next to every other) shows no seam at 1x and the trim lines meet.
+  A5  docs/sprite-art-creation-guide.txt has a WALLS section and recipes; SKILL.md lists walls.py.
+  A6  The owner has seen the contact sheet, the strip, the flicker GIF and in-engine captures under
+      cool_steel, and the answer is recorded in DECISIONS.
+
+
+IMPLEMENTATION PLAN
+-------------------
+  1. KIT          (main thread / any spoke with Python)  materials + glyphs + primitives appended
+  2. BUILDER      walls.py: tiling bake, STRATA table, atlas/mips/glow/manifest writer, previews
+  3. CONTENT      the 16 stratum A walls
+  4. TESTS        None. Not balance-bearing; verified by regeneration + previews + in-engine captures.
+  5. DOCS         guide WALLS section, SKILL.md
+  6. GATE         send sheets + captures; STOP; record the verdict.
+
+RISKS AND UNKNOWNS
+  - 16 walls x 3 mips = ~1.4 MB of atlas per stratum: fine, but confirm the packing stays <= 2048x1024.
+  - The kit's render time on a 768x256 canvas is ~4 s per wall: ~1 min per stratum. Fine.
+
+
+CHECKPOINTS
+-----------
+  CP0  the checkpoint file exists on the branch, committed and pushed
+  CP1  kit.py has the environment materials + glyphs + helpers appended, and bestiary.py regenerates
+       every committed enemy atlas byte-identical
+  CP2  walls.py writes a valid manifest + atlas + glow + mips for the prototype's ring panel alone
+  CP3  all 16 stratum A walls exist in walls.py and the shipped files are committed
+  CP4  guide WALLS section + SKILL.md updated
+  CP5  owner verdict recorded in DECISIONS (approval or the changes requested, then re-done)
+
+
+ASSUMPTIONS
+-----------
+  AS1  Roles and ids follow the master's role model; the room roles are generic per stratum.
+  AS2  The output folder is assets/textures/walls/generated/ (parallel to enemies/generated/).
+  AS3  Three mip levels (256/128/64) are enough: beyond ~8 tiles the fog covers the rest.
+
+
+DECISIONS
+---------
+  (none yet)
+
+
+OPEN QUESTIONS
+--------------
+None (blocked only by the master's Q1).
+
+
+RELATED
+-------
+  generated-wall-art.txt, docs/sprite-art-creation-guide.txt, .claude/skills/enemy-art/

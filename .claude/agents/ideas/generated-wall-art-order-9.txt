@@ -1,0 +1,98 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Visual
+TITLE: Wall art order 9 - floors and ceilings in the kit
+CREATED: 2026-10-22
+IMPLEMENTED: -
+---
+
+Series: generated-wall-art.txt (concept, rules W1-W12). Method: order 1's rules apply unchanged where
+they are about the kit, determinism, materials and the owner gate.
+
+
+OVERVIEW
+--------
+The captures of 2026-10-22 show the old floor and ceiling materials (flat tile grids, tread plates, neon
+lattices drawn as lines) clashing with the sculpted walls. The ten 64x64 surface materials
+(render/SurfaceMaterials, art-direction section 6) are regenerated with the kit so floor, wall and
+ceiling read as one place. The GPU floor/ceiling pipeline (render-performance-full-hd) is NOT touched -
+only where its texels come from.
+
+
+SCOPE
+-----
+IN
+  - walls.py: a SURFACES group per stratum: one floor + one ceiling, 64x64, TILING IN BOTH AXES (a
+    3x3 canvas, cropped to the centre), opaque, in the same light rig (a floor seen from above: the
+    kit's light hits it as a flat face, which is what the pipeline expects - its shading is the
+    vertex colour on top).
+  - Shipped as PNGs; SurfaceMaterialRegistry loads them into its packed int[] layout (row 0 = the
+    tile's south edge, column 0 = west - convert from the PNG's top-left origin once, at load) and
+    builds its 4 mip levels exactly as today.
+  - The ten material ids keep their names and their mood bindings (cool_steel -> deck_grating_steel ...)
+    but their pixels are the strata's: A deck plates with a rubber runner + ceiling cable trays and
+    strip lamps; B tile floor with drains + ceiling hook rails; C grating over soul-lit channels + fuel
+    manifolds; D membrane over deck fragments + torn conduit and tissue; E lattice floor + lattice
+    ceiling (matching the walls).
+  - Value bands R9 (floors 0.10-0.24, ceilings 0.06-0.18 average luminance) are kept - floors and
+    ceilings stay below the walls.
+OUT
+  - Any change to FloorCeilingRenderer's geometry, batching, mip selection or the far band.
+  - Emissive floors (no glow layer for floors in this series).
+
+
+RULES
+-----
+  R1  Each material tiles seamlessly in both axes at 1x (3x3 preview).
+  R2  No moire at the far band: avoid periods of 8 texels or less (art-direction section 6 learned this).
+  R3  Value bands kept (measured by a throwaway script on the shipped PNGs).
+
+
+BALANCE NOTES / BALANCE ADMISSION
+---------------------------------
+None - adds no balance-bearing content.
+
+
+ACCEPTANCE CRITERIA
+-------------------
+  A1  Ten PNG materials shipped; regeneration byte-identical; SurfaceMaterials' procedural code no longer
+      runs (deleted in order 10 or here if nothing else uses it).
+  A2  Each region captured in-engine (walk + turn burst): floor, walls and ceiling read as one place;
+      no far-band moire.
+  A3  Probe: floor/ceiling pass unchanged within noise (same pipeline).
+  A4  art-direction section 6 rewritten for the new materials; owner verdict recorded.
+
+
+IMPLEMENTATION PLAN
+-------------------
+  1. CONTENT  walls.py surfaces (both-axis tiling bake)
+  2. LOAD     (libgdx-specialist) SurfaceMaterialRegistry from PNGs
+  3. TESTS    None. Not balance-bearing.
+  4. DOCS + GATE
+
+
+CHECKPOINTS
+-----------
+  CP0  the checkpoint file exists on the branch, committed and pushed
+  CP1  both-axis tiling bake + stratum A floor/ceiling; the registry loads PNGs; region A renders them
+  CP2  B-E floors/ceilings; value bands measured
+  CP3  captures, docs, owner verdict
+
+
+ASSUMPTIONS
+-----------
+  AS1  64x64 stays the material size (the pipeline's mips and tables assume it).
+
+
+DECISIONS
+---------
+  (none yet)
+
+
+OPEN QUESTIONS
+--------------
+None (blocked only by the master's Q2 - if the owner says no, this order is set to REJECTED).
+
+
+RELATED
+-------
+  generated-wall-art.txt, docs/art-direction.txt section 6 + FLOOR / CEILING PIPELINE

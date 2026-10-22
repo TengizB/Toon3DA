@@ -1,0 +1,119 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Visual
+TITLE: Wall art order 6 - Wound kit (the facility consumed)
+CREATED: 2026-10-22
+IMPLEMENTED: -
+---
+
+Series: generated-wall-art.txt (concept, rules W1-W12, roles, dressing). Method: order 1's rules R1-R11
+(texture, tiling, trim lines, variants, glow, animation, mips, atlas, manifest, story detail,
+determinism) apply UNCHANGED - this order is CONTENT ONLY plus one registry swap.
+
+
+OVERVIEW
+--------
+The fourth stratum: no longer facility. The Deepworks gives way to the being's raw body - plating torn
+and peeled back, muscle and glands pushing through, drills still buried in living tissue. Here the
+BASE is what was BREACH above: the inversion of the whole descent is that the planet is now the wall.
+
+
+SCOPE
+-----
+IN
+  - walls.py: the the_breach STRATA row (trim lines + 16 walls: BASE x3, STRUCTURE, LIGHT, SERVICE x2,
+    MARKER, FEATURE, BREACH, CLINICAL, CONTAINMENT, MACHINERY, SECURITY, DATA); the LIGHT (gland) and FEATURE carry glow FRAMES (a heartbeat: 8 frames, ~1.2 s, a
+    double pulse).
+  - New materials, if any, APPENDED to kit.MATERIALS (enemies + earlier strata regenerate byte-identical).
+  - Shipped: assets/textures/walls/generated/the_breach.walls.png / .glow.png / .walls.json.
+  - WallStrata: the the_breach row switches from placeholders to wall_d_* atlas sprites
+    (order 3's mechanism - one registry edit, no renderer change).
+  - Docs: sprite-art-creation-guide WALLS roster line; art-direction WALLS roster; tileset section 15.
+OUT
+  - Any runtime or allocator change (order 2/3 own them). Doors, columns, floors (8, 9).
+  - Changing the region's mood numbers - if the kit fights the mood, the KIT changes (W6), unless the
+    owner decides otherwise in DECISIONS.
+
+
+VISUAL DESIGN - STRATUM D, THE WOUND (mood corrupted_violet)
+------------------------------------------------------------
+Muscle under strain (dense swollen fibre bundles with constrictions - the prototype's third pass; the
+lobe version read as sausages and the plank version as wood: see LESSONS below), translucent glands lit
+by ichor, branching ichor veins, the torn facility edge along the top with rivets still in it.
+  BASE (x3)     the approved prototype minus the drill (the drill on every tile was the wallpaper
+                problem): torn plating at different heights, fibre bundles, veins; one variant has no
+                plating at all (pure tissue).
+  STRUCTURE     a surviving steel column, wrapped and half-swallowed by tissue.
+  LIGHT         a large gland cluster, heartbeat pulse.
+  SERVICE (x2)  a severed pipe still dripping into tissue; cables grown through like nerves.
+  MARKER        a facility sign plate (D-xx) half-absorbed, readable only at the edge.
+  FEATURE       the buried drill (prototype): the bit, its flutes and collar, tissue scarred around it.
+  BREACH        (this stratum's base is breach) -> an open wound: a vertical split showing ribs
+                (bone) and a deep ichor glow inside.
+  CLINICAL      a medical panel overgrown: the white livery visible through membrane.
+  CONTAINMENT   a membrane sac in the wall with a shape moving inside (glow frames).
+  MACHINERY     a reactor housing crushed by a fist of muscle.
+  SECURITY      a blast door section bent inward by the tissue.
+  DATA          a terminal swallowed by membrane, its cyan screen still glowing through.
+Palette: flesh, flesh_dk, membrane, ichor, bone, chitin_dk; gunmetal/darkmetal/rust for the dying
+facility. No red (V5): wound reads through anatomy and glow, never blood.
+LESSONS from the prototype (go into the guide): separate lobes read as sausages; parallel full-height
+bundles read as planks unless constricted and varied in width; glands must be op="add" or they are
+buried by the muscle's height.
+
+
+BALANCE NOTES / BALANCE ADMISSION
+---------------------------------
+None - adds no balance-bearing content.
+
+
+ACCEPTANCE CRITERIA
+-------------------
+  A1  walls.py writes the the_breach files byte-identically twice; enemy atlases and earlier strata
+      regenerate byte-identical.
+  A2  The manifest lists the 16 walls of the design table, LIGHT and FEATURE with 8 glow frames.
+  A3  Tiled strip of the whole kit: no seams, trim lines meet.
+  A4  On a generated floor of this region (run-game, mood corrupted_violet): base variants, structure rhythm,
+      lights, at least one FEATURE and the room-role walls of any signature room on that floor; on the
+      region's LAST floor, BREACH clusters are visible (dressing D9).
+  A5  Enemies of this region read in front of the walls at 2 and 4 tiles (capture with spawn:TYPE -
+      PLAGUE_HULK, GORE_BITER, MIRE_WRAITH, EYE_TYRANT).
+  A6  Owner verdict recorded in DECISIONS (W9).
+
+
+IMPLEMENTATION PLAN
+-------------------
+  1. CONTENT   walls.py stratum row + materials (Python)
+  2. DATA      (java-architect) WallStrata row swap
+  3. TESTS     None. Not balance-bearing; verified by regeneration + previews + run-game captures.
+  4. DOCS      guide roster, art-direction roster, tileset section 15
+  5. GATE      contact sheet + strip + glow GIFs + in-engine captures; STOP; record the verdict.
+
+
+CHECKPOINTS
+-----------
+  CP0  the checkpoint file exists on the branch, committed and pushed
+  CP1  the BASE x3 + STRUCTURE + LIGHT walls exist and tile (strip preview); enemy atlases byte-identical
+  CP2  all 16 walls exist; shipped files committed
+  CP3  the WallStrata row points at the new art; build green; region capture taken
+  CP4  owner verdict recorded (or the requested changes done and re-shown)
+
+
+ASSUMPTIONS
+-----------
+  AS1  The Wound's dressing breachBase is 0 (its base already is tissue); BREACH is the open wound row.
+  AS2  The heartbeat is the same for every LIGHT on a floor but phase-offset per face by the runtime.
+
+
+DECISIONS
+---------
+  (none yet)
+
+
+OPEN QUESTIONS
+--------------
+None.
+
+
+RELATED
+-------
+  generated-wall-art.txt, -order-1 (rules), -order-3 (runtime), story/05-descent-structure.md

@@ -1,0 +1,181 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Visual
+TITLE: Wall art order 2 - strata model, role allocator, dressing
+CREATED: 2026-10-22
+IMPLEMENTED: -
+---
+
+Series: generated-wall-art.txt (read it first - THE WALL ROLE MODEL and THE WALL DRESSING PASS sections
+are this order's spec). Headless only: tileset + level + route + world wiring. No renderer change.
+
+
+OVERVIEW
+--------
+Replace the level "wall randomizer" with a model that knows WHERE the floor is. Today a wall symbol is
+bound to a picture by SymbolAllocator's seeded weighted grab (themes/depth weights that mostly collapse
+to a plain random pick), the dungeon generator's rooms reserve old sprite ids, the cavern generator
+reskins walls with random chars from a biome list, and every other generator (corridor, boss arena,
+med bay, event, gate, start room) uses the region-blind legacy table. RegionAmbience even carries a
+per-region `wallPalette` string that nothing reads.
+
+After this order: a floor has a STRATUM (from its region), every wall symbol means a ROLE, the stratum
+decides each role's sprite, rooms demand roles, and a seeded WALL DRESSING PASS arranges the walls by
+architectural rules on every generated floor. The new art does not exist yet in the game, so every
+stratum's rows point at PLACEHOLDER old sprites chosen by role - the game looks re-arranged, not new.
+Order 3 swaps stratum A's rows to the generated art.
+
+
+SCOPE
+-----
+IN
+  - tileset: WallRole (enum: BASE STRUCTURE LIGHT SERVICE MARKER FEATURE BREACH CLINICAL CONTAINMENT
+    MACHINERY SECURITY DATA, each with a fallbackRole - per-constant data), WallStratum (immutable:
+    id, sprite id list per role, breachBase, breachStep), WallStratumRegistry + WallStrata.bootstrap()
+    (five rows), the SYMBOL -> ROLE table in TilesetConstants (master's default table), and a
+    StratumPaletteBuilder: (stratum, levelSeed) -> LevelPalette binding every wall symbol to its
+    role's sprite (variant choice is the RENDERER's, order 3 - the palette binds the role's FIRST sprite).
+  - Walls only: COLUMN / SOLID_PROP / FLOOR_DECAL allocation is unchanged (SymbolAllocator keeps doing
+    those exactly as today).
+  - route: RegionAmbience.wallPalette (+ RouteMapConstants.REGION_*_WALL_PALETTE) replaced by
+    wallStratumId; World resolves the floor's stratum exactly like the lighting mood
+    (World.resolveLightingMood's path) with fallback outer_facility + one log line.
+  - level: LevelGenConfig gains wallStratumId + floorIndexInRegion (set by World like its other
+    per-floor fields); a single `LevelFinisher` (package level) that every generator's final
+    `new Level(...)` goes through: run WallDressingPass, then build the stratum palette.
+  - level: WallDressingPass implementing D1-D10 (master), constants WALL_DRESSING_* in LevelGenConstants.
+  - RoomBlueprint.symbolDemand(): signature rooms demand ROLES (medical_bay -> CLINICAL, cryo /
+    containment -> CONTAINMENT, power_plant -> MACHINERY, armory / command -> SECURITY, server /
+    research -> DATA, observatory -> FEATURE/STRUCTURE) through the symbols they already stamp.
+  - CavernGenerator: biome wall reskin draws ROLES (BASE / SERVICE / BREACH weights per biome), not
+    old picture chars.
+  - Placeholder strata rows (temporary, deleted by order 10), by role, from the OLD catalog, e.g.
+    A: BASE wall_plain, STRUCTURE wall_bulkhead, LIGHT wall_emergency, SERVICE wall_conduit/wall_vent,
+    MARKER wall_hazard, FEATURE wall_glass, BREACH wall_rust, CLINICAL wall_medical, CONTAINMENT
+    wall_cryo, MACHINERY wall_radiation, SECURITY wall_blast, DATA wall_terminal - and per stratum the
+    closest old wall to its theme (B base wall_plain_tiled, C base wall_bulkhead, D base wall_gore,
+    E base wall_hex_plate ...). Exact rows decided by the builder and listed in the checkpoint file.
+  - Existing tileset/level tests that encode the old allocator behaviour are UPDATED (W10).
+  - docs/environment-tileset-system.txt: new section 15 "WALL STRATA" (+ ORDER STATUS row); a note in
+    sections 4/8 that walls no longer go through the variety grab; docs/procedural-level-generation.txt
+    gains the dressing pass.
+OUT
+  - Any renderer / texture change (order 3). New art (order 1 / 4-7).
+  - Hand-made .txt levels: they keep the legacy palette until order 10 (AS7 of the master).
+  - Props, columns, decals: unchanged.
+
+
+RULES
+-----
+  R1  The 2D game is untouched (W7): for every seed and generator, the set of wall tiles, floor tiles,
+      doors, spawns, pickups and props is identical before and after this order; only WHICH wall
+      symbol sits on a wall tile may change.
+  R2  Determinism: same seed + depth + stratum -> byte-identical grid and palette.
+  R3  The dressing pass draws from its OWN RNG stream (GameMath.paletteSymbolSeed-style derivation with
+      a new salt), so the generator's existing random sequence - and therefore room layout, spawns and
+      supply - is unchanged.
+  R4  A role a stratum does not supply resolves through fallbackRole (e.g. BREACH -> BASE in stratum E),
+      never to null, never to another stratum's sprite.
+  R5  Dressing never rewrites a tile a signature room stamped (its room role wins) nor a tile adjacent
+      to a door except as STRUCTURE (D4).
+  R6  floorIndexInRegion = depth - region.firstDepth (0..4); BREACH density uses it (D9).
+
+
+TECHNICAL NOTES
+---------------
+  - Ownership: World -> LevelGenConfig fields -> generator -> LevelFinisher.finish(grid, spawns, ...,
+    config) -> WallDressingPass.apply(grid, config, seed) -> StratumPaletteBuilder.build(...) ->
+    new Level(...). One code path for every generator; no generator decides a wall picture again.
+  - The SymbolAllocator keeps its non-wall job; its wall branch (base-wall roll, accent variety,
+    VARIETY_ONLY handling for walls) is removed from the generated path. The legacy table stays for
+    hand levels until order 10.
+  - "Exposed" = a wall tile with a walkable 4-neighbour (Level predicates, not char checks).
+  - Straight runs: scan rows and columns of exposed wall faces facing the same open side.
+  - Startup assertion (TilesetRegistries style): every stratum row names registered sprite ids, and
+    every RegionPlan region names a registered stratum - fail loud (like LightingMoods.bootstrap()).
+  - Registry discipline: strata are register() rows; no switch on a stratum or role id anywhere.
+
+
+BALANCE NOTES / BALANCE ADMISSION
+---------------------------------
+None - adds no balance-bearing content. (Dressing never changes walkability, spawns or supply - R1 - so
+neither balance gate is affected; both still run as part of `./gradlew test` / build.)
+
+
+INTERACTIONS
+------------
+  - Level generation snapshot tests (LevelGeneratorSnapshotTest) digest the grid: wall SYMBOLS change
+    by design, so the digest is updated; add nothing new (Testing Policy) - prove R1 by updating the
+    existing snapshot to digest walkability + fixed symbols separately if that is the existing test's
+    intent, otherwise update the digest values with a one-line reason in the commit.
+  - RoomBlueprintBuildDemandTest: demands are now roles; the test is updated accordingly.
+  - Mini-map draws walls by category - unaffected.
+  - BLACKOUT / tile lighting (floor symbols) - unaffected.
+
+
+EDGE CASES
+----------
+  - A floor whose region cannot be resolved (start room, dev runs): stratum outer_facility.
+  - Boss arenas: dressed with the boss floor's stratum; D6 FEATURE allowed on the arena's far wall.
+  - Tiny rooms (< 3 wide): D3/D6 skip; D5 still lights runs.
+  - Doors on a corner: D4 only marks wall tiles in line with the door.
+
+
+ACCEPTANCE CRITERIA
+-------------------
+  A1  `./gradlew build` green (the existing suite, with the updated tests named in the checkpoint file).
+  A2  For 200 seeds x every generator x depths 1-25, the walkable mask and every fixed symbol are
+      identical to the pre-order build (checked by a throwaway script / the updated snapshot test).
+  A3  RegionAmbience has no wallPalette; every region names a stratum; a missing stratum fails startup.
+  A4  On a generated region-A floor (run-game), long corridors show STRUCTURE every 4th tile, lights
+      along runs, framed doors - with the placeholder art.
+  A5  No generator constructs a Level except through LevelFinisher (grep).
+  A6  docs/environment-tileset-system.txt section 15 and docs/procedural-level-generation.txt updated.
+
+
+IMPLEMENTATION PLAN
+-------------------
+  1. DATA       (java-architect)  WallRole, WallStratum, registry, bootstrap, symbol->role table
+  2. LOGIC      (java-architect)  StratumPaletteBuilder, WallDressingPass, LevelFinisher, generator rewiring
+  3. ROUTE      (java-architect)  wallStratumId replaces wallPalette; World resolution + config fields
+  4. TESTS      None new. Existing tileset/level tests updated where the old allocator is encoded.
+  5. DOCS       environment-tileset-system.txt 15, procedural-level-generation.txt, tile-symbols.txt
+                (symbol descriptions now say "role", e.g. 'Z' = CONTAINMENT wall), CLAUDE.md tileset row
+
+RISKS AND UNKNOWNS
+  - Generators that stamp old-meaning symbols for gameplay-adjacent reasons (e.g. 'S' emergency strips
+    near the exit): check each use; meaning by role must still make visual sense.
+  - The snapshot tests are the riskiest edit: never weaken them; split the digest if needed.
+
+
+CHECKPOINTS
+-----------
+  CP0  the checkpoint file exists on the branch, committed and pushed
+  CP1  WallRole / WallStratum / registry / bootstrap with five placeholder rows exist, build green
+  CP2  StratumPaletteBuilder + LevelFinisher exist and every generator builds through them (no dressing
+       yet); A2 holds; build green
+  CP3  wallStratumId replaces wallPalette end to end; World resolves the stratum; build green
+  CP4  WallDressingPass implements D1-D10; A2 still holds; run-game capture of a region-A floor
+  CP5  room demands as roles + cavern biomes as roles; updated tests green
+  CP6  docs updated
+
+
+ASSUMPTIONS
+-----------
+  AS1  The role table in the master is the default; the builder may move a symbol to another role
+       only with a DECISIONS note.
+  AS2  floorIndexInRegion comes from RegionPlan, never a modulo.
+
+
+DECISIONS
+---------
+  (none yet)
+
+
+OPEN QUESTIONS
+--------------
+None.
+
+
+RELATED
+-------
+  generated-wall-art.txt, symbol-sprite-reuse-system*.txt, docs/environment-tileset-system.txt

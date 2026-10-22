@@ -1,0 +1,92 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Visual
+TITLE: Wall art order 10 - retire the old wall layer
+CREATED: 2026-10-22
+IMPLEMENTED: -
+---
+
+Series: generated-wall-art.txt (concept, rules W1-W12). Method: order 1's rules apply unchanged where
+they are about the kit, determinism, materials and the owner gate.
+
+
+OVERVIEW
+--------
+The enemy series' order 9 equivalent: once every stratum, door, column and surface has shipped, delete
+the old layer so there is exactly one way walls are made and drawn.
+
+
+SCOPE
+-----
+IN
+  - Delete: every old wall/door/column generator in WallRenderer (generate*WallTexture,
+    generateProceduralDoorTexture, generateColumn*), loadWallTexture's JPEG path, the files
+    assets/textures/lab/lab_wall_*.jpg, lab_door_*.jpg, assets/textures/wall.png (after checking nothing
+    else loads them - barrel_radioactive.png is a PROP and stays), the old wall_* / column_* sprite ids,
+    TilesetRegistries.VARIETY_ONLY_SPRITE_IDS' wall entries, the base-wall alternates, the old
+    SymbolAllocator wall branch, GameBalance PALETTE_* knobs that only served walls, the placeholder
+    strata rows, the *_WALL_TEXTURE_SIZE / colour constants in RenderConstants that only served them,
+    walls_prototype.py.
+  - Hand-made levels (assets/levels/*.txt) bind to stratum A through the same role table (LevelPalettes
+    legacy() becomes "stratum A, undressed").
+  - The observatory room keeps its props/decals; its wall symbols are stratum roles since order 2.
+  - Final performance pass: probe every region, interleaved against the order-9 build, recorded.
+  - Docs: environment-tileset-system (sections 1/4/6/7 rewritten or marked superseded by 15),
+    tile-symbols.txt (wall symbols described by ROLE), wall-renderer-guide, art-direction, CLAUDE.md
+    (tileset row, WallRenderer paragraph: "Owns ... wallTexture" is stale), the guide's WALLS section final.
+  - Existing tests that reference deleted ids are UPDATED to the new catalog (never deleted wholesale,
+    never weakened: a test that guarded "every symbol has a sprite" keeps guarding it for the strata).
+OUT
+  - New art. Any rule change.
+
+
+ACCEPTANCE CRITERIA
+-------------------
+  A1  grep finds no reference to the deleted generators, ids or files; ./gradlew build green.
+  A2  Every generator, every region, the start room, the boss arenas and a hand-made level render
+      with no missing texture (run-game captures, one per case).
+  A3  Probe numbers per region recorded; no regression beyond noise vs order 9.
+  A4  APK asset size before/after recorded (the JPEGs out, the atlases in).
+  A5  Every doc listed in SCOPE updated in the same commits; series master STATUS -> IMPLEMENTED after
+      reviewer passes.
+
+
+BALANCE NOTES / BALANCE ADMISSION
+---------------------------------
+None - adds no balance-bearing content.
+
+
+IMPLEMENTATION PLAN
+-------------------
+  1. DELETE   (java-architect + libgdx-specialist) code, ids, files, constants
+  2. TESTS    update existing tests to the new catalog (no new tests)
+  3. PERF     run-game probe matrix
+  4. DOCS     the list above
+
+
+CHECKPOINTS
+-----------
+  CP0  the checkpoint file exists on the branch, committed and pushed
+  CP1  hand levels on stratum A; legacy table gone; build green
+  CP2  old generators + files + ids + constants deleted; tests updated; build green
+  CP3  captures of every case (A2) + probe matrix (A3) + asset size (A4)
+  CP4  docs; reviewer PASS; STATUS set
+
+
+ASSUMPTIONS
+-----------
+  AS1  Nothing outside walls/doors/columns uses the deleted textures (verify with grep before deleting).
+
+
+DECISIONS
+---------
+  (none yet)
+
+
+OPEN QUESTIONS
+--------------
+None.
+
+
+RELATED
+-------
+  generated-wall-art.txt and every order; generated-enemy-art-order-9.txt (the same retirement for enemies)
