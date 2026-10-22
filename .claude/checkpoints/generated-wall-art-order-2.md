@@ -47,7 +47,7 @@ Never `git add -A`.
 ## STEP LEDGER
 
 - [x] **CP0** — this file, committed and pushed before anything else changes.
-- [ ] **CP1** — GameMath wallSetSeed / wallVariantIndex / wallMipLevel; WallGroup, WallSlot, RegionWallSet,
+- [x] **CP1** — GameMath wallSetSeed / wallVariantIndex / wallMipLevel; WallGroup, WallSlot, RegionWallSet,
       RegionWallSetRegistry, RegionWallSets.bootstrap() (A real from the manifest ids, B-E alias A); the slot table in
       TilesetConstants. DONE WHEN: they exist and the mirror build is green.
 - [ ] **CP2** — LevelFinisher exists, every generator's final Level goes through it with family stamping + the region
@@ -67,4 +67,25 @@ Never `git add -A`.
 
 ## NOTES CARRIED FORWARD
 
-**CP0:** baseline c163c98.
+**CP0:** baseline c163c98. Baseline test run (mirror): 482 tests, 1 pre-existing failure `narrative.StoryBarkTest`
+(bark.depth.core.2) — not ours. R1 harness (throwaway, scratchpad only): `scratchpad/r1src/r1/R1Dump.java` + `r1.sh
+CLASSES_DIR OUT SEEDS` hashes (walls -> '#', every other char kept) + enemy/weapon spawns + heal/event stations +
+credit count per (generator, seed*7919+13, depth 1..25) for the 7 GeneratorIds plus 200 START rooms (35 200 cases,
+~2.5 min). Baseline classes copied to `scratchpad/baseline-classes`; baseline output `scratchpad/r1-baseline.txt`
+(deterministic: re-run identical). If the scratchpad is lost: `git worktree add --detach /tmp/base c163c98`, build it,
+use its core/build/classes/java/main.
+
+**CP1:** `GameMath.wallSetSeed(levelSeed)`, `wallVariantIndex(column,row,side,seed,count)` (side 0 W,1 E,2 S,3 N),
+`wallMipLevel(lineHeight, faceSize, bias, maxMip)`, plus `wallGlowDistanceAlpha` and `wallGlowFrameIndex` for CP5.
+tileset: `WallGroup` (idToken, baseVariantCount 3/2, slots), `WallSlot` (idToken, focal, fallback), `WallSlotTable`
+(parses `TilesetConstants.WALL_SLOT_TABLE`; `groupOf/slotOf/symbolFor/isWallSymbol/symbols()`), `RegionWallSet`
+(`of(id, letter, breachBase, breachStep)` builds the stable ids of guide 12; `alias(id, borrowsId)`; `resolve(group,
+slot)` = R3 fallback; `doorIdFor(char)`, `columnIds()`, file names), `RegionWallSetRegistry` (+`resolve` follows
+aliases), `RegionWallSets.bootstrap()/registry()/resolveOrDefault(id)` (A real, B-E alias A), `RegionPaletteBuilder
+.build(set, basePalette)` (walls -> slot sprite variant 0, 'P' -> first column, everything else copied),
+`LevelPalette.wallSetId()`. Placement constants `WALL_SET_*` in LevelGenConstants. DECISION (spec said "reading the
+shipped manifests' ids"): the headless registry DERIVES the ids from the stable naming convention (guide 12) — tileset
+cannot read assets headlessly (tests have no Gdx.files); the render-side RegionWallAtlas (CP4) cross-checks every id
+of the set against the manifest and falls back to set A on a mismatch (R7). DECISION: the column ('P') picture is
+chosen per FLOOR by the renderer (wallVariantIndex over the set's two columns), not per tile, so a row of columns
+reads as one architecture.

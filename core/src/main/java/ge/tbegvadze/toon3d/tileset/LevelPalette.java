@@ -36,10 +36,14 @@ public final class LevelPalette {
     private final Map<Character, TileCategory> categoryBySymbol;
     // char -> the stable EnvironmentSpriteDefinition id this level renders for the symbol.
     private final Map<Character, String> spriteIdBySymbol;
+    // The REAL region wall set (generated-wall-art order 2) whose faces the wall + column bindings name;
+    // null for a palette that binds no region set.
+    private final String wallSetId;
 
     private LevelPalette(Builder builder) {
         this.categoryBySymbol = Collections.unmodifiableMap(new HashMap<>(builder.categoryBySymbol));
         this.spriteIdBySymbol = Collections.unmodifiableMap(new HashMap<>(builder.spriteIdBySymbol));
+        this.wallSetId        = builder.wallSetId;
     }
 
     /**
@@ -76,6 +80,11 @@ public final class LevelPalette {
     }
 
     /** Starts a fresh palette builder. Package-private: only the allocator and {@link LevelPalettes}. */
+    /** The region wall set the wall + column bindings come from (order 2), or null. */
+    public String wallSetId() {
+        return wallSetId;
+    }
+
     static Builder builder() {
         return new Builder();
     }
@@ -88,6 +97,7 @@ public final class LevelPalette {
     static final class Builder {
         private final Map<Character, TileCategory> categoryBySymbol = new HashMap<>();
         private final Map<Character, String> spriteIdBySymbol = new HashMap<>();
+        private String wallSetId;
 
         private Builder() {}
 
@@ -102,6 +112,19 @@ public final class LevelPalette {
             Objects.requireNonNull(spriteId, "spriteId");
             categoryBySymbol.put(symbol, category);
             spriteIdBySymbol.put(symbol, spriteId);
+            return this;
+        }
+
+        /** Copies every binding of {@code source} (its wall set too), to be overridden per symbol. */
+        Builder copyOf(LevelPalette source) {
+            categoryBySymbol.putAll(source.categoryBySymbol);
+            spriteIdBySymbol.putAll(source.spriteIdBySymbol);
+            wallSetId = source.wallSetId;
+            return this;
+        }
+
+        Builder wallSetId(String value) {
+            this.wallSetId = value;
             return this;
         }
 

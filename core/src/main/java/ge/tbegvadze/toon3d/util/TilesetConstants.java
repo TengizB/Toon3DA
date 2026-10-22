@@ -94,4 +94,44 @@ public final class TilesetConstants {
      * allocator ships.
      */
     public static final long PALETTE_SEED_SALT = 0x7011_5E7_ADA_C0DEL;
+
+    // ── REGION WALL SETS (generated-wall-art order 2) ─────────────────────────────────────────────
+    // A wall symbol no longer names a picture: it names a SLOT (group + slot), and the floor's region
+    // wall set names the picture. The 21 wall symbols cover the slots exactly (guide section 6.4; the
+    // master idea's SYMBOL TABLE). One entry per symbol, ';'-separated: "<symbol> <WallGroup> <WallSlot>".
+    // Parsed once by tileset/WallSlotTable. Every symbol stays a WALL (Level.isWall) exactly as before.
+    public static final String WALL_SLOT_TABLE =
+            "x HALL BASE;k HALL STRUCTURE;S HALL LIGHT;c HALL SERVICE;' HALL VENT;h HALL MARKER;G HALL BREACH;"
+          + "M MEDICAL BASE;Q MEDICAL ACCENT;X SECURITY BASE;w SECURITY ACCENT;"
+          + "Z CONTAINMENT BASE;N CONTAINMENT ACCENT;U MACHINERY BASE;j MACHINERY ACCENT;"
+          + "t RESEARCH BASE;D RESEARCH ACCENT;v STORAGE BASE;\" STORAGE ACCENT;"
+          + "F SIGNATURE BASE;` SIGNATURE ACCENT";
+
+    /** The column symbol; its pictures (round / square) come from the floor's region set. */
+    public static final char WALL_SET_COLUMN_SYMBOL = 'P';
+    /** The four door symbols, in the order of {@link #WALL_SET_DOOR_KIND_TOKENS}. */
+    public static final String WALL_SET_DOOR_SYMBOLS = "dRYB";
+    /** Door id tokens (door_&lt;letter&gt;_&lt;token&gt;, guide section 12), one per door symbol. */
+    public static final String WALL_SET_DOOR_KIND_TOKENS = "plain,red,yellow,blue";
+    /** Column id tokens (column_&lt;letter&gt;_&lt;token&gt;), in registry order. */
+    public static final String WALL_SET_COLUMN_KIND_TOKENS = "round,square";
+
+    // Region wall set ids = the manifest's "region" value and the file stem under
+    // assets/textures/walls/generated/ (<id>.walls.json / .walls.png / .glow.png / .floor.png / .ceiling.png).
+    public static final String WALL_SET_OUTER_FACILITY = "outer_facility";
+    public static final String WALL_SET_RESEARCH_WING  = "research_wing";
+    public static final String WALL_SET_REACTOR_DEPTHS = "reactor_depths";
+    public static final String WALL_SET_THE_BREACH     = "the_breach";
+    public static final String WALL_SET_THE_CORE       = "the_core";
+    /** The set every floor falls back to (start room, hand-made levels, a set that fails to load: R7). */
+    public static final String WALL_SET_DEFAULT        = WALL_SET_OUTER_FACILITY;
+
+    /** Where the shipped region set files live (internal asset path, trailing slash). */
+    public static final String WALL_SET_ASSET_DIRECTORY = "textures/walls/generated/";
+
+    /**
+     * Salt of the level finisher's own random stream (GameMath.wallSetSeed): the placement rules P1-P9
+     * never draw from the generator's java.util.Random, so layout, spawns and supply stay untouched (R1).
+     */
+    public static final long WALL_SET_SEED_SALT = 0x3A11_5E75_EED5_A17EL;
 }
