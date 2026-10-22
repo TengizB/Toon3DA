@@ -45,8 +45,6 @@ public final class RegionWallAtlas implements Disposable {
     private final String  setId;
     private final Texture atlasTexture;
     private final Texture glowTexture;
-    private final String  floorFileName;
-    private final String  ceilingFileName;
     private final Map<String, Integer> faceIndexById;
     private final int[][]   sourceX;          // [mip][face]
     private final int[][]   sourceY;          // [mip][face]
@@ -57,13 +55,10 @@ public final class RegionWallAtlas implements Disposable {
     private final float[][] glowFrameSeconds;
     private final float[]   glowCycleSeconds;  // sum of a face's frame durations
 
-    private RegionWallAtlas(String setId, Texture atlasTexture, Texture glowTexture, String floorFileName,
-                            String ceilingFileName, List<FaceEntry> faces) {
+    private RegionWallAtlas(String setId, Texture atlasTexture, Texture glowTexture, List<FaceEntry> faces) {
         this.setId           = setId;
         this.atlasTexture    = atlasTexture;
         this.glowTexture     = glowTexture;
-        this.floorFileName   = floorFileName;
-        this.ceilingFileName = ceilingFileName;
         int faceCount = faces.size();
         int mipCount  = RenderConstants.WALL_MAX_MIP + 1;
         faceIndexById    = new HashMap<>();
@@ -138,7 +133,15 @@ public final class RegionWallAtlas implements Disposable {
         for (String id : required) {
             if (!present.containsKey(id)) throw new IllegalStateException("manifest lacks " + id);
         }
+        // The floor/ceiling are drawn by SurfaceMaterials from the set's own file names; the manifest must agree,
+        // and is checked before any texture is loaded so a bad manifest can never leak one (R7).
         JsonValue surfaces = manifest.get("surfaces");
+        if (surfaces == null
+                || !set.floorFileName().equals(surfaces.getString("floor", null))
+                || !set.ceilingFileName().equals(surfaces.getString("ceiling", null))) {
+            throw new IllegalStateException("manifest surfaces do not match " + set.floorFileName() + " / "
+                    + set.ceilingFileName());
+        }
         Texture atlas = loadNearest(directory + manifest.getString("atlas"));
         Texture glow;
         try {
@@ -150,8 +153,7 @@ public final class RegionWallAtlas implements Disposable {
         if (Gdx.app != null) {
             Gdx.app.log(LOG_TAG, "loaded region wall set '" + set.id() + "': " + faces.size() + " faces");
         }
-        return new RegionWallAtlas(set.id(), atlas, glow, surfaces.getString("floor"), surfaces.getString("ceiling"),
-                faces);
+        return new RegionWallAtlas(set.id(), atlas, glow, faces);
     }
 
     private static Texture loadNearest(String path) {
@@ -179,15 +181,6 @@ public final class RegionWallAtlas implements Disposable {
         return glowTexture;
     }
 
-    /** Internal asset path of the set's 64x64 floor surface (art-direction section 6). */
-    public String floorPath() {
-        return TilesetConstants.WALL_SET_ASSET_DIRECTORY + floorFileName;
-    }
-
-    /** Internal asset path of the set's 64x64 ceiling surface. */
-    public String ceilingPath() {
-        return TilesetConstants.WALL_SET_ASSET_DIRECTORY + ceilingFileName;
-    }
 
     /** The dense face index of a manifest id, or -1. Resolve once per level, never per frame. */
     public int faceIndex(String id) {

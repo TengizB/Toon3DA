@@ -175,7 +175,7 @@ public final class RoomBlueprints {
 
         // --- SIGNATURE rooms (fixed identity; declare the sprites they claim) ---
 
-        // SERVER_ROOM: data vault — terminal walls 't', rack rows of terminals/lockers, oil + a barrel.
+        // SERVER_ROOM: data vault — RESEARCH wall family, rack rows of terminals/lockers, oil + a barrel.
         registry.register(new LambdaRoomBlueprint(ID_SERVER_ROOM, RoomKind.SIGNATURE, WallGroup.RESEARCH,
                 RoomSupplyStance.SUPPLY_NEUTRAL,
                 RoomSymbolDemand.of(demand(
@@ -191,7 +191,7 @@ public final class RoomBlueprints {
                     context.placeServerRoomProps();
                 }));
 
-        // MEDICAL_BAY: medical 'M' walls + bio 'Q' accents, clinical props. EQUAL-CHANCE: shares the
+        // MEDICAL_BAY: MEDICAL wall family, clinical props. EQUAL-CHANCE: shares the
         // common special-room weight and carries no per-level cap (a floor may roll more than one).
         registry.register(new LambdaRoomBlueprint(ID_MEDICAL_BAY, RoomKind.SIGNATURE, WallGroup.MEDICAL,
                 RoomSupplyStance.SUPPLY_NEUTRAL,
@@ -211,7 +211,7 @@ public final class RoomBlueprints {
                     context.placeMedicalBayProps();
                 }));
 
-        // ARMORY: last-stand room; blast-scarred 'X' walls, weapon racks, cameras, aftermath decals.
+        // ARMORY: last-stand room; SECURITY wall family, weapon racks, cameras, aftermath decals.
         registry.register(new LambdaRoomBlueprint(ID_ARMORY, RoomKind.SIGNATURE, WallGroup.SECURITY,
                 RoomSupplyStance.SUPPLY_NEUTRAL,
                 RoomSymbolDemand.of(demand(
@@ -228,7 +228,7 @@ public final class RoomBlueprints {
                     context.placeArmoryProps();
                 }));
 
-        // CRYO_CHAMBER: cryogenic bay; frost 'Z' walls + glass 'N' accents, bio-pod rows.
+        // CRYO_CHAMBER: cryogenic bay; CONTAINMENT wall family, bio-pod rows.
         registry.register(new LambdaRoomBlueprint(ID_CRYO_CHAMBER, RoomKind.SIGNATURE, WallGroup.CONTAINMENT,
                 RoomSupplyStance.SUPPLY_NEUTRAL,
                 RoomSymbolDemand.of(demand(
@@ -245,7 +245,7 @@ public final class RoomBlueprints {
                     context.placeCryoChamberProps();
                 }));
 
-        // POWER_PLANT: reactor core (LARGE-class); radiation 'U' walls + emergency 'S' strips, generators.
+        // POWER_PLANT: reactor core (LARGE-class); MACHINERY wall family, generators.
         registry.register(new LambdaRoomBlueprint(ID_POWER_PLANT, RoomKind.SIGNATURE, WallGroup.MACHINERY,
                 RoomSupplyStance.SUPPLY_NEUTRAL,
                 RoomSymbolDemand.of(demand(
@@ -262,7 +262,7 @@ public final class RoomBlueprints {
                     context.placePowerPlantProps();
                 }));
 
-        // COMMAND_CENTER: control room (LARGE-class); glass 'N' walls + emergency 'S' strips, terminals.
+        // COMMAND_CENTER: control room (LARGE-class); SECURITY wall family, terminals.
         registry.register(new LambdaRoomBlueprint(ID_COMMAND_CENTER, RoomKind.SIGNATURE, WallGroup.SECURITY,
                 RoomSupplyStance.SUPPLY_NEUTRAL,
                 RoomSymbolDemand.of(demand(
@@ -280,7 +280,7 @@ public final class RoomBlueprints {
                     context.placeCommandCenterProps();
                 }));
 
-        // CONTAINMENT_BLOCK: cell block; glass 'N' cell fronts + quarantine 'Q' walls, bio-pods, dread.
+        // CONTAINMENT_BLOCK: cell block; CONTAINMENT wall family, bio-pods, dread.
         registry.register(new LambdaRoomBlueprint(ID_CONTAINMENT_BLOCK, RoomKind.SIGNATURE, WallGroup.CONTAINMENT,
                 RoomSupplyStance.SUPPLY_NEUTRAL,
                 RoomSymbolDemand.of(demand(
@@ -299,7 +299,7 @@ public final class RoomBlueprints {
                     context.placeContainmentBlockProps();
                 }));
 
-        // RESEARCH_LAB: sci-fi set-piece; holo-data 'D' + force-field 'F' walls, specimen tanks, AI core.
+        // RESEARCH_LAB: sci-fi set-piece; RESEARCH wall family, specimen tanks, AI core.
         registry.register(new LambdaRoomBlueprint(ID_RESEARCH_LAB, RoomKind.SIGNATURE, WallGroup.RESEARCH,
                 RoomSupplyStance.SUPPLY_NEUTRAL,
                 RoomSymbolDemand.of(demand(
@@ -375,16 +375,15 @@ public final class RoomBlueprints {
                 }));
 
         // ATMOSPHERIC_PLANT: an industrial "hazardous-materials" set-piece — the facility's volatile
-        // air/coolant scrubbing hub, built from WALLS + ENVIRONMENT DECALS + reused props only (no new
-        // symbol, no new sprite). It PINS the currently-unclaimed hazard wall 'h' (yellow-black striped
-        // bulkhead) + vent wall 'v' (ventilation grille) so the allocator reserves its exact face; the
+        // air/coolant scrubbing hub, built from ENVIRONMENT DECALS + reused props only (no new
+        // symbol, no new sprite); its walls are the MACHINERY family, dressed by the LevelFinisher. The
         // scrubber pumps '%', live gas cylinders 'E', coolant drums 'g', coolant slick 'O' and thermal
         // scorch 'e' all claim the SAME legacy sprite the sibling rooms use (no clash — same-symbol/
         // same-sprite is a no-op for the allocator). DEPTH/SIZE-gated (>=2 deep, min interior) and capped at
         // LEVEL_GEN_ATMO_PLANT_MAX (1) per level so it stays a landmark. Carries the above-baseline SET-PIECE
         // selection weight (see section 14): at the old flat 1.0 the depth gate made it invisible on the early
-        // floors most players see. Its build() composes floor lighting + a DEDICATED
-        // hazard/vent wall pass (guaranteed vent midpoints) + a bespoke machinery-and-leak prop pass. The
+        // floors most players see. Its build() composes floor lighting + the RETIRED
+        // hazard/vent wall pass (its draws kept for R1, its writes gone) + a bespoke machinery-and-leak prop pass. The
         // 'E' cluster becomes live explosive barrels at load, making the room the game's chain-reaction arena.
         registry.register(new LambdaRoomBlueprint(ID_ATMOSPHERIC_PLANT, RoomKind.SIGNATURE, WallGroup.MACHINERY,
                 RoomSupplyStance.SUPPLY_NEUTRAL,
@@ -401,7 +400,7 @@ public final class RoomBlueprints {
                 context -> LevelGenConstants.LEVEL_GEN_SETPIECE_ROOM_SELECTION_WEIGHT,
                 context -> {
                     context.assignFloorLighting();
-                    context.retiredAtmosphericPlantWallRolls(); // dedicated hazard 'h' + guaranteed vent 'v' pass
+                    context.retiredAtmosphericPlantWallRolls(); // the old hazard/vent pass: draws kept (R1), no writes
                     context.placeAtmosphericPlantProps();
                 }));
     }

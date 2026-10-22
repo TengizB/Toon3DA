@@ -62,17 +62,19 @@ import java.util.Random;
  * tree; the exit sits furthest in and the anchor group guards the far end.
  *
  * Room types:
+ *   (Wall pictures come from the floor's region wall set: every generator writes 'x' and the
+ *   LevelFinisher dresses each room's walls with its WallGroup — see docs/procedural-level-generation.txt.)
  *   ENTRANCE          — player spawn room; fully lit, no hazards.
  *   STANDARD          — baseline UAC lab room; existing decoration logic.
- *   SERVER_ROOM       — data vault; terminal walls 't', rack rows of T/L props, dark atmosphere.
- *   MEDICAL_BAY       — guaranteed once per level; medical-tile 'M' walls, medkit/stim pickups.
- *   ARMORY            — last-stand room; blast-scarred 'X' walls, weapon racks '=', corpses.
- *   CRYO_CHAMBER      — cryogenic bay; frost 'Z' walls, bio-pod '&' rows, dim lighting.
- *   POWER_PLANT       — reactor core; radiation 'U' walls, generator '%' cluster.
- *   COMMAND_CENTER    — control room; glass 'N' walls, terminal 'T' rows.
- *   CONTAINMENT_BLOCK — cell block; glass 'N' cell fronts, quarantine 'Q' walls, high enemy den.
- *   RESEARCH_LAB      — sci-fi set-piece; holo-data 'D' walls, specimen tanks 'I', AI core 'J',
- *                        force-field barrier 'F', energy scorch 'e' decals. At most 1 per level.
+ *   SERVER_ROOM       — data vault; RESEARCH walls, rack rows of T/L props, dark atmosphere.
+ *   MEDICAL_BAY       — guaranteed once per level; MEDICAL walls, medkit/stim pickups.
+ *   ARMORY            — last-stand room; SECURITY walls, weapon racks '=', corpses.
+ *   CRYO_CHAMBER      — cryogenic bay; CONTAINMENT walls, bio-pod '&' rows, dim lighting.
+ *   POWER_PLANT       — reactor core; MACHINERY walls, generator '%' cluster.
+ *   COMMAND_CENTER    — control room; SECURITY walls, terminal 'T' rows.
+ *   CONTAINMENT_BLOCK — cell block; CONTAINMENT walls, high enemy den.
+ *   RESEARCH_LAB      — sci-fi set-piece; RESEARCH walls, specimen tanks 'I', AI core 'J',
+ *                        energy scorch 'e' decals. At most 1 per level.
  *
  * Wide hallways: 2-3 MST edges widened to 3 tiles (centre lit, ribs normal) with evenly
  * spaced 'P' columns along the centre spine. The width-3 invariant guarantees at least one

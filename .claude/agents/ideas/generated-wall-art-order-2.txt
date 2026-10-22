@@ -1,9 +1,15 @@
-STATUS: NOT IMPLEMENTED
+STATUS: IMPLEMENTED
 CATEGORY: Visual
 TITLE: Wall art order 2 - the switch: region sets live, old walls gone
 CREATED: 2026-10-22
-IMPLEMENTED: -
+IMPLEMENTED: 2026-10-22
 ---
+
+IMPLEMENTATION NOTE (2026-10-22, reviewer PASS WITH FIXES, fixes applied in CP8b):
+  Built as specified; live state and every measurement are in .claude/checkpoints/generated-wall-art-order-2.md.
+  Measured: R1 35 200 / 35 200 cases identical (7 generators x 200 seeds x depths 1-25 + 200 start rooms);
+  wall pass +5.4% (0.826 -> 0.871 ms), wall draw calls 4 -> 2; 20 floor transitions without texture growth;
+  exposed-wall mix ~72% BASE, STRUCTURE 16-18%. The divergences are listed under DECISIONS.
 
 THE WALL KNOWLEDGE DOCUMENT IS docs/wall-art-creation-guide.txt - how walls, doors, columns, floors
 and ceilings must be created: the format, tiling, trim lines, the region set, the placement rules, the
@@ -224,7 +230,23 @@ ASSUMPTIONS
 
 DECISIONS
 ---------
-  (none yet)
+  D1 Set ids are DERIVED headlessly from the guide-12 naming convention (RegionWallSet: wall_<letter>_<group>_<slot>,
+     door_<letter>_<kind>, column_<letter>_<kind>, <id>.walls.json / .floor.png / .ceiling.png), not read from the
+     shipped manifests, so the tileset package stays headless. RegionWallAtlas cross-checks every derived id and the
+     surface file names against the manifest at load; a mismatch is an R7 fallback, checked before any texture loads.
+  D2 The column picture (round / square) is chosen once PER FLOOR from the floor seed, not per tile.
+  D3 GameBalance PALETTE_* knobs are kept: none was used only by walls (the prop/decal allocator still reads them).
+  D4 STRUCTURE share measured at 16-18% of exposed walls, above the guide's rough "~10%"; recorded in guide 7, not tuned.
+  D5 ArtDirection.MATERIAL_ID_* and the old SurfaceMaterials rows were deleted early (CP6, not CP7): floors and
+     ceilings come from the set's own surfaces from CP6 on.
+  D6 R1 is held by a DRAW LEDGER: the retired generator wall passes (retired*Rolls, level/RetiredWallDressing, the
+     RETIRED_* constants in LevelGenConstants) still make every RNG draw they made and write nothing, so the
+     generator's java.util.Random sequence, and therefore layout, spawns and supply, is unchanged. The finisher
+     draws from its own stream (GameMath.wallSetSeed).
+  D7 A9 says the docs change "in the same commits"; the idea's own CHECKPOINTS put docs at CP8, so every doc landed
+     in CP8a. Between CP2/CP3 and CP8a the route-map and tileset docs still described the old wall model.
+  D8 GameMath.wallMipLevel counts halvings instead of calling Math.log per screen column (taken during the A8
+     probe: +6.8% -> +5.4%); same floor(log2) result.
 
 
 OPEN QUESTIONS

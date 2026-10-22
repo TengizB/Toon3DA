@@ -904,10 +904,8 @@ public class WallRenderer implements Renderable, Disposable {
                 float clampedPanelTop      = doorDrawTop;
 
                 if (clampedPanelTop > clampedPanelBottom) {
-                    // O(1) array lookup for door texture variant (plain/red/yellow/blue).
-                    // Each variant may have its own resolution (the keycard doors are generated
-                    // independently of the file-loaded plain door), so clip against the SELECTED
-                    // texture's own dimensions rather than a shared plain-door size.
+                    // O(1) array lookup for the door face (plain/red/yellow/blue) in the region atlas;
+                    // every face is WALL_FACE_SIZE >> mip, clipped against the selected mip's size.
                     int     doorFace              = doorFaceByChar[doorHitCell & 0x7F];
                     int     doorMip               = wallMipLevel(doorLineHeight);
                     int     selectedDoorTexWidth  = wallFaceSize >> doorMip;

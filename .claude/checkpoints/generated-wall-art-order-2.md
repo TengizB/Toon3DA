@@ -62,7 +62,7 @@ Never `git add -A`.
 - [x] **CP8a** — docs (A9): wall-art guide 6.4/7/13/15/17, art-direction 5/6/7/17, environment-tileset §15 +
       superseded notes, tile-symbols, wall-renderer-guide, procedural-level-generation, route-map-system, CLAUDE.md;
       run-game `textures` step; leak check done.
-- [ ] **CP8b** — probe (A8) recorded; R1 re-run on the final code; both balance gates; reviewer; STATUS IMPLEMENTED.
+- [x] **CP8b** — probe (A8) recorded; R1 re-run on the final code; both balance gates; reviewer; STATUS IMPLEMENTED.
 
 ## UPDATED TESTS (W10)
 
@@ -211,4 +211,13 @@ an A8 gate. Fix taken during the probe: `GameMath.wallMipLevel` counts halvings 
 column (+6.8% -> +5.4%; same floor(log2) result, no log call
 per column). R1 re-run on the final code (after CP7's SymbolCategories change): 35 200 / 35 200 identical to
 r1-baseline.txt. `:core:test`: 481 tests, the one baseline failure (StoryBarkTest bark.depth.core.2) only.
-`:core:balanceSim`: BalanceSimTest 18 tests, 0 failures (run 2026-10-22 on 9e17e42).
+`:core:balanceSim`: Gradle exit 0, BalanceSimTest 18 tests, 0 failures (run 2026-10-22 on 9e17e42); summary.txt
+has no FAIL lines (the T8/SIM_FAIR out-of-band lines are the existing order-7 waivers).
+REVIEWER: PASS WITH FIXES, nothing blocking. Required fixes done: GameMath change committed with its note (9e17e42),
+DECISIONS D1-D8 + IMPLEMENTATION NOTE written into the idea file, balanceSim exit status quoted. Non-blocking fixes
+also taken: RegionWallAtlas checks the manifest's surfaces against the set's file names BEFORE loading any texture
+(no leak on a bad manifest) and its dead floorPath()/ceilingPath() are gone; stale wall-letter comments rewritten in
+RoomBlueprints, LevelGenerator and WallRenderer. Not taken (nits): SurfaceMaterials' `| 0xFF` literal,
+RegionWallAtlas.MANIFEST_VERSION placement, World import order, the float modulo in wallGlowFrameIndex (cosmetic
+after hours of play). Verified after the fixes: mirror compile green, run-game start room loads set A (36 faces).
+STATUS IMPLEMENTED 2026-10-22. ORDER 2 IS DONE; order 3 was not started.
