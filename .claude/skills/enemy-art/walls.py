@@ -17,8 +17,10 @@ cropped (kit.tile_copies; guide section 4). Surfaces do the same on a 3x3 canvas
 A REGION is one row of REGIONS: its letter, its trim lines, its breach base/step, its walls (group, slot,
 variant, builder), doors, columns and the two surface builders. A region's builders live in
 <region>_walls.py (outer_facility_walls.py, ...), the way a creature's rig lives in <name>_rig.py.
-Every builder is `builder(glow) -> Face`: `glow` scales the face's emissive light (1 = rest), so an
-animated face is baked once per glow frame and only that frame's glow image is kept.
+Every builder is `builder(glow) -> Face`. The bake always calls it with glow = 1.0; an animated face's glow
+frames are made by baking that same Face again with every emissive / translucent shape's light scaled to
+the frame's level (_scale_glow), keeping only the frame's glow image. Do not key a builder's SHAPES off
+`glow`: the argument is 1.0 in every shipped bake.
 """
 import json
 import math

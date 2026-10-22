@@ -141,3 +141,8 @@ STATUS IMPLEMENTED. Do NOT start order 2.
 
 **CP6:** owner APPROVED the set as shown (2026-10-22) -> D1 in the idea file. Next: reviewer gate, then STATUS
 IMPLEMENTED + IMPLEMENTATION NOTE. Order 2 is NOT started.
+
+**CLOSED:** reviewer PASS (no blocking findings); STATUS IMPLEMENTED 2026-10-22 + IMPLEMENTATION NOTE. NB2 fixed (the
+walls.py docstring now says the bake scales glow, builders always get 1.0). Left for order 3's author (reviewer nits):
+doors/columns pass no `focal=` (no edge warning for a drifting lock panel); unused imports in walls.py; hall_breach's
+needless inner build(); glow-frame slots cost three 256 slots in the RGB atlas. The ceiling sits 0.003 inside its band.
