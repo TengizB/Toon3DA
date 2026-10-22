@@ -54,7 +54,7 @@ file's tick in the same commit as the work**. Never more than one checkpoint unc
       helper, cloth lag. DONE WHEN: every earlier creature + fx set regenerates byte-identical.
 - [x] **CP2a** — five rigs at rest pose (concept stills, owner override applied); family sheet + one image per enemy
       SENT. DONE WHEN: `--stills` renders all five with no edge warning and the images are sent.
-- [ ] **CP2b** — the owner's concept read recorded in DECISIONS (A1); requested changes applied. STOP until it is.
+- [x] **CP2b** — the owner's concept read recorded in DECISIONS (A1); requested changes applied. STOP until it is.
 - [ ] **CP3** — all clips + ability clips (DEBUFF_PLAYER, SUMMON) + the `undead` effect set; clip GIFs + in-engine burst
       GIFs (default + one mood) SENT. DONE WHEN: sent; build green.
 - [ ] **CP4** — owner approval of all five recorded (stop until it is).
@@ -94,3 +94,6 @@ before animations") replaces the idea's Ghoul-alone early read; all five concept
 device, not a copy). `ghoul_rig.py`: SNOUT_END = 30 (head space): a ribbed rubber snout (6 raised rings) to a gunmetal filter
 canister, the hose now leaves the canister; taped cuffs (darkmetal rings) at glove and boot tops; badge moved to cy+24.
 Revised Ghoul + family sheet sent. Still WAITING for the concept approval (CP2b).
+
+**CP2b:** owner approved all five concepts (D4). Next: CP3 clips. The rest poses ARE the approved stills - a clip may move
+them but the defaults must not change.

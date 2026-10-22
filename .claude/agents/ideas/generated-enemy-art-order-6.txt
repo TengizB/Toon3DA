@@ -170,6 +170,9 @@ DECISIONS
       do not make the in-game enemy look too similar to it. Built as a long ribbed rubber respirator snout hanging to
       the chest, ending in a filter canister, plus taped glove and boot cuffs; the slate suit, the single visor, the red
       eyes and the long limbs stay ours.
+  D4  CONCEPTS APPROVED (owner, 2026-10-22: "Approved, now continue working on idea"): the five concept stills - the
+      Ghoul with the long mask (75aa234), Crawler, Revenant, Vortex Eye, Blight Corruptor (3b1bc07) - are approved.
+      Animation, effects and the clip gate follow (A1 met: the concepts were read before any clip was built).
 
 
 OPEN QUESTIONS
