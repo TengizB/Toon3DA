@@ -25,8 +25,7 @@ SCOPE
 -----
 IN
   - B1: the chain-alert queue never overflows, however many enemies the floor gains after it starts.
-  - B2: confirm whether '}' in a hand-made level should spawn a Spiresower; make LevelLoader match
-    the answer (add '}' to the list, or document why it is absent).
+  - B2: '}' in a hand-made level spawns a Verdant Spiresower (D1): add '}' to LevelLoader's list.
   - B3: EncounterPlacer never puts more than GROUP_ROOM_MAX_SAME_TYPE of one archetype in one room,
     on every generator, including linear_corridor.
   - B4: no splash burst is drawn on a closed-door tile.
@@ -47,7 +46,7 @@ No gameplay changes. After the fixes:
   1. B1: a Blight Corruptor summons, the HUNTED trail hunter arrives, or a boss summons minions;
      several of those new enemies wake on the same turn -> they alert and chain-alert normally, and
      the game does not crash.
-  2. B2: a hand-made level containing '}' spawns a Verdant Spiresower (if that is the decision).
+  2. B2: a hand-made level containing '}' spawns a Verdant Spiresower.
   3. B3: every generated room holds at most three of one archetype.
   4. B4: a wretch dies beside a closed door -> bursts on the floor tiles only, none on the door.
 
@@ -197,7 +196,6 @@ RISKS AND UNKNOWNS
 ------------------
   - B3's root cause is not yet confirmed; the fix may be in the corridor generator's region split
     rather than in EncounterPlacer.
-  - B2 may be intentional (see OPEN QUESTIONS).
 
 
 CHECKPOINTS
@@ -221,14 +219,19 @@ ASSUMPTIONS
 
 DECISIONS
 ---------
-(none yet)
+  D1  (B2, owner delegated the call to the agent, 2026-10-22) YES: '}' in a HAND-MADE level spawns a
+      Verdant Spiresower. Reasons: docs/tile-symbols.txt already lists '}' as its spawn marker,
+      EnemyManager already maps '}' -> VERDANT_SPIRESOWER, and every other spawn marker works in hand
+      levels, so the omission is an inconsistency rather than a design. Generated floors are
+      unaffected: the planner keeps the Spiresower out of SPAWN_POOL ("placed by its own systems"),
+      so this changes nothing about how often it appears in normal runs. Fix = add '}' to
+      LevelLoader's spawn test and its comment; no doc change needed beyond confirming the
+      tile-symbols row.
 
 
 OPEN QUESTIONS
 --------------
-  Q1  (B2) Should '}' in a HAND-MADE level spawn a Verdant Spiresower? The default answer if the owner
-      has no preference: YES, because docs/tile-symbols.txt already lists '}' as a spawn marker and
-      EnemyManager already maps it. Answer this before CP3; B1 and B3 do not depend on it.
+None.
 
 
 RELATED
