@@ -154,3 +154,5 @@ leg ~10%, arm ~7% of its height). `ghoul_rig.py`: BULK/LEG_BULK replaced by ARM_
 skeleton pelvis y 128, spine 71, shoulder_half 22, hip_half 11, arms 47/45, legs 50/51; a boxy bevelled trunk slab + core
 capsule; boots 8.4/9.6; fingers 27 long, r 1.6, palm 4.6. Owner features kept (single visor, red eyes, long mask, long arms
 and fingers). Still + side-by-side with the reference sent; awaiting approval; UNBAKED.
+Owner: the reference-matched version "looks fat" -> REVERTED to the previous variant (ghoul_rig.py as at e84f5de: BULK 1.6,
+LEG_BULK 1.8, spine 65, arms 50/47). Awaiting approval; UNBAKED.
