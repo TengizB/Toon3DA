@@ -128,3 +128,13 @@ the OUTER planes (the profile is concave). Guide 11.2 / 15.17 still describe it 
 byte-identical on a second bake. The in-engine preview hack (TextureGeneratorRegistry.previewFace + WallRenderer door
 lines, env TOON3D_WALL_PREVIEW=<faces dir> TOON3D_WALL_PREVIEW_MODE=hall|medical|security) is in the WORKING TREE
 ONLY - `git restore` both Java files before any commit.
+
+**CP6 (in progress - WAITING FOR THE OWNER):** gate package sent 2026-10-22 (contact sheets per group, doors/columns,
+floor+ceiling 3x3, runs / base x6 / focal-alone strips, LIGHT flicker GIF, in-engine captures under cool_steel).
+Captures: seed 7, first route node, enemies killed with kill:0, the preview hack's modes hall / medical (every old
+wall id -> medical set) / door (wall_plain* ids -> the four door faces on wall tiles: doors are not wired until order
+2, so the door capture shows the FACE at wall scale, not a placed door). The hack only remaps whole old sprite ids, so
+no capture shows the P1-P9 placement (order 2). Not seen in-engine: the glow layer (no runtime yet), mips/LOD,
+containment/security/research/storage/signature rooms. The Java hack is reverted (tree clean). NEXT: record the
+owner's verdict in the idea file's DECISIONS (D1...), apply requested changes + re-show, then tick CP6, reviewer,
+STATUS IMPLEMENTED. Do NOT start order 2.
