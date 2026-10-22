@@ -57,6 +57,8 @@ file's tick in the same commit as the work**. Never more than one checkpoint unc
 - [x] **CP2b** — the owner's concept read recorded in DECISIONS (A1); requested changes applied. STOP until it is.
 - [x] **CP3** — all clips + ability clips (DEBUFF_PLAYER, SUMMON) + the `undead` effect set; clip GIFs + in-engine burst
       GIFs (default + one mood) SENT. DONE WHEN: sent; build green.
+- [x] **CP3b** — the Revenant redesigned after the owner's clip-gate feedback (D5: no club; riot shield + shield bash);
+      re-baked, in-engine re-checked, clip + in-engine GIFs sent. DONE WHEN: sent; others byte-identical.
 - [ ] **CP4** — owner approval of all five recorded (stop until it is).
 - [ ] **CP5** — five registry rows + SUMMON clip row wired; A3-A5 verified in-engine; build green.
 - [ ] **CP6** — docs (guide, art-direction 16, SKILL.md, enemy-system, CLAUDE.md row); reviewer PASS; STATUS: IMPLEMENTED.
@@ -120,3 +122,18 @@ Revenant real WIND_UP (its lunge); Vortex Eye real ABILITY (DEBUFF_PLAYER) + bol
 arrive with ALERTED). A4 line-up at 3 tiles in default / corrupted_violet / core_white_violet; A5 soul reads cold white.
 Tools (scratchpad, not committed): tools/gen.py, runall.sh, runmood.sh, lineup.py, assemble.py, clipgif.py.
 Sent: labelled clip GIFs, in-engine GIFs default + corrupted_violet, the 3-tile line-up. WAITING for owner approval (CP4).
+
+**CP3b (owner D5):** the baton is gone. First attempt kept it and fixed the arm (rigid grip, `r_upper_fore`, `baton_fore`,
+a solid `_fist`) - rejected: "the right hand is cursed", no club. LESSON (12.21 for the guide): an articulated hand gripping
+a long held object at this resolution breaks - fingers lump on a turned wrist, and an independent prop angle spins through
+the fist between keys; and shortening a WHOLE arm toward the camera crushes it into a stub. Give a humanoid a weapon that
+is a rigid plate moved with the body (a shield), or none.
+Now: `revenant_rig.py` - `_shield(p)` (chamfered smoked-polycarbonate plate in a gunmetal rim, brace + boss, scars, RIOT
+stencil) moved as ONE part by shield_x / shield_y / shield_scale (toward the viewer) / shield_tilt, SHIELD_REST (48,146),
+SHIELD_HALF (20,37); the left hand solved to sit behind the shield's centre in every key; right hand = `_fist` (one closed
+gauntlet, never articulated). Keys _BRACED / _DRAWN / _SLAMMED; the S-07 chest stencil is dropped while the shield covers
+the chest (12.12). Kit: Humanoid gains `l_upper_fore` / `r_upper_fore` (0 default - no earlier output changes; unused by
+the shield design, kept as a documented skeleton option). effects.py: CHARGE_BATON removed, the Revenant's charge = the
+family motes at the shield. Revenant 62 frames, atlas 1024x2048, no edge warnings. Re-bake: only revenant.* and
+undead.fx.json changed. In-engine (temporary row, removed): real WIND_UP (braced), real ATTACKs (the bash), hurt, wounded,
+burning, death - default + corrupted_violet. WAITING for owner approval (CP4).

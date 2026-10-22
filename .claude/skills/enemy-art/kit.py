@@ -342,7 +342,9 @@ class Humanoid:
       - `torso` leans the whole upper body about the pelvis (+ = its top to the screen-right, clockwise); `chest`
         bends the upper spine on top of it; `neck` and `head` likewise;
       - foreshortening: `<limb>_fore` (0..1) shortens a segment pointing toward or away from the viewer (a reach at
-        the camera, a knee lifted in a step): length x (1 - fore x 0.75).
+        the camera, a knee lifted in a step): length x (1 - fore x 0.75). `<side>_upper_fore` shortens the UPPER ARM
+        only (the elbow brought forward at the camera), so a fist raised straight up the front keeps a full-length
+        forearm and a full-size hand - shortening the whole arm crushes it into a stub (lesson 12.21).
     joints(p, prefix="") reads pose parameters prefix + name from the pose `p`, with 0 for any it does not find, and
     returns a dict of named canvas points: pelvis, chest, neck, head (the head CENTRE), l_shoulder, l_elbow, l_wrist,
     l_hand (the end of the hand), l_hip, l_knee, l_ankle, l_toe (and r_...), plus the absolute angle of every hand
@@ -350,7 +352,7 @@ class Humanoid:
 
     PARAMS = ("bx", "by", "torso", "chest", "neck", "head",
               "l_sh", "l_el", "l_wr", "r_sh", "r_el", "r_wr", "l_hip", "l_knee", "l_ank", "r_hip", "r_knee", "r_ank",
-              "l_arm_fore", "r_arm_fore", "l_leg_fore", "r_leg_fore", "squat")
+              "l_arm_fore", "r_arm_fore", "l_leg_fore", "r_leg_fore", "squat", "l_upper_fore", "r_upper_fore")
 
     def __init__(self, pelvis=(80.0, 120.0), spine=50.0, neck=10.0, head=10.0, shoulder_half=16.0, hip_half=8.0,
                  upper_arm=34.0, fore_arm=32.0, hand=14.0, thigh=50.0, shin=50.0, foot=10.0,
@@ -403,7 +405,8 @@ class Humanoid:
             a1 = base + self.arm_rest + g(f"{side}_sh")
             fore = 1 - 0.75 * g(f"{side}_arm_fore")
             d = self._dir(a1, s)
-            el = (sh[0] + d[0] * self.upper_arm * fore, sh[1] + d[1] * self.upper_arm * fore)
+            upper = self.upper_arm * fore * (1 - 0.75 * g(f"{side}_upper_fore"))
+            el = (sh[0] + d[0] * upper, sh[1] + d[1] * upper)
             a2 = a1 + g(f"{side}_el")
             d = self._dir(a2, s)
             wr = (el[0] + d[0] * self.fore_arm * fore, el[1] + d[1] * self.fore_arm * fore)

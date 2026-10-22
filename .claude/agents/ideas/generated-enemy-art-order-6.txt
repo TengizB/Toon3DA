@@ -173,6 +173,11 @@ DECISIONS
   D4  CONCEPTS APPROVED (owner, 2026-10-22: "Approved, now continue working on idea"): the five concept stills - the
       Ghoul with the long mask (75aa234), Crawler, Revenant, Vortex Eye, Blight Corruptor (3b1bc07) - are approved.
       Animation, effects and the clip gate follow (A1 met: the concepts were read before any clip was built).
+  D5  REVENANT WEAPON (owner, 2026-10-22, at the clip gate): the baton hand "is cursed" - it deformed and moved in
+      impossible ways - and the owner does not want this enemy to hold a club. Redesigned: a tall RIOT SHIELD on the left
+      arm replaces the baton, the right hand is a plain closed gauntlet that is never articulated, and the attack is a
+      SHIELD BASH (braced -> drawn back -> the shield driven at the viewer). WIND_UP = crouched behind the raised shield.
+      VISUAL DESIGN's "shock baton" and "overhead smash" are superseded.
 
 
 OPEN QUESTIONS

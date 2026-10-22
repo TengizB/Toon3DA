@@ -763,7 +763,7 @@ SETS = {
     # ---------------------------------------------------------------------------------------- UNDEAD
     # order 6: the facility's own staff. The family ink is SOUL (pale, cold, low saturation - AS1); what comes off them
     # is soul light and torn suit cloth, never blood (R3: the light leaks only from eyes, mouths and the wounds it re-
-    # entered by). The Ghoul's red ember, the Revenant's armour spark, the Vortex Eye's bolt and the Corruptor's spores
+    # entered by). The Ghoul's red ember, the Revenant's armour spark (its shield), the Vortex Eye's bolt and the Corruptor's spores
     # are creature-only bursts taken through overrides (the order 4 idiom).
     "undead": dict(
         sprites=[
@@ -816,8 +816,6 @@ SETS = {
                                 interval=(0.35, 0.90)),
             "RESIST_ARMOUR": burst(emitter("ARMOUR_SPARK", (1, 1), (0.16, 0.22), (0, 0), toward=(40, 40)),
                                    emitter("ARMOUR_FLECK", (1, 2), (0.40, 0.55), (60, 110), angle=70, spread=80, gravity=520)),
-            "CHARGE_BATON": burst(emitter("MOTE", (1, 2), (0.12, 0.20), (20, 60), spread=360, radius=2),
-                                  interval=(0.06, 0.12)),
             "SOUL_BOLT": burst(emitter("SOUL_BOLT", (1, 1), (0.30, 0.30), (0, 0))),
             "BOLT_TRAIL": burst(emitter("BOLT_TRAIL", (1, 1), (0.22, 0.34), (5, 15), angle=90, spread=60, gravity=-120),
                                 interval=(0.025, 0.04)),
@@ -850,11 +848,12 @@ SETS = {
             "crawler": dict(leak=placement("hit_centre", (0, -22), 3), burn=placement("hit_centre", (0, -14), 26),
                             charge=placement("hit_centre", (0, -8), 14), stun=placement("eye", (0, -22), 14),
                             poison=placement("hit_centre", (0, -6), 24), body=placement("hit_centre", (0, -4), 22)),
-            # the leak is the breach in the chest plate; the baton tip crackles on the wind-up; hits ring off the armour
+            # the leak is the breach in the chest plate; soul motes rise off the braced shield on the wind-up; resisted
+            # hits ring off the armour and the shield
             "revenant": dict(leak=placement("hit_centre", (9, -8), 1.5), burn=placement("hit_centre", (0, -6), 24),
-                             charge=placement("emitter", (0, 0), 2), stun=placement("eye", (0, -26), 16),
+                             charge=placement("emitter", (0, -20), 12), stun=placement("eye", (0, -26), 16),
                              poison=placement("hit_centre", (0, -10), 20), body=placement("hit_centre", (0, -4), 18),
-                             bursts={"RESIST": "RESIST_ARMOUR", "CHARGE": "CHARGE_BATON"}),
+                             bursts={"RESIST": "RESIST_ARMOUR"}),
             # the only shooter of the family: its bolt is its own (overrides); the leak is the light thinning from the ports
             "vortex_eye": dict(leak=placement("eye", (0, 6), 4), burn=placement("hit_centre", (0, -8), 20),
                                charge=placement("emitter", (0, 0), 6), stun=placement("eye", (0, -28), 14),
