@@ -48,7 +48,7 @@ One commit per checkpoint, pushed immediately, prefixed `sump-wretch-acid-death/
 - [x] **CP3** — GameMath.deathSplashThreatPoints + baseThreatPoints term + DEATH_SPLASH_ADJACENT_SHARE + the one
       BalanceAuditTest method. DONE WHEN: test green, A12 + A13.
 - [x] **CP4** — registry row + AcidSplash seam -> ACID_SPLASH bursts; A1, A2-A8, A15 verified in-engine.
-- [ ] **CP5** — balanceSim green (A14).
+- [x] **CP5** — balanceSim green (A14).
 - [ ] **CP6** — docs; reviewer PASS; STATUS IMPLEMENTED.
 
 ## NOTES CARRIED FORWARD
@@ -109,3 +109,11 @@ to you - next to its friends." (needs the ABERRATION family line spent first —
 only MIRE_WRAITH -> mire_wraith. A8 not staged (no barrel spawner): by construction the splash only touches the
 player + the enemy list, and the hook runs on every death cause including a barrel kill.
 Pre-existing chainAlertQueue overflow hit again when two dormant spawns woke on one turn (workaround: alert by index).
+
+**CP5:** `:core:balanceSim` rc=0 (green) with DEATH_SPLASH_ADJACENT_SHARE 0.4 — no further tuning. Vs the pre-change
+baseline: median depth per policy unchanged (NAIVE 2 / TACTICAL 3), every ROUND SUMMARY row moved by noise only
+(e.g. floors 1-3 bodies 15.31 -> 15.26, TACTICAL exit health 0.90 -> 0.89); the OUT set is the same pre-existing one
+(BULLETS moved IN; SLUGS/first-boss clears are tiny samples and were OUT before). A14's "FLOOR REPORT shows wretches"
+cannot be read from the summary (it has no per-archetype column), so it was checked from the planner directly with a
+scratch class (scratchpad/probe/CountWretch.java, not committed): depth 1-5 = 326/329/383/321/447 wretches over 200
+planned floors each (12-14% of bodies, on 121-155 of 200 floors).
