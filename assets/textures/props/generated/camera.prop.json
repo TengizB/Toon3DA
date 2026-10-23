@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "id": "camera",
+  "frameWidth": 128,
+  "frameHeight": 256,
+  "frameCount": 48,
+  "columns": 16,
+  "frameSeconds": 0.1
+}

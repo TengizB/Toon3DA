@@ -1032,9 +1032,143 @@ def make_toxic():
     return Prop("toxic", TOXIC_W, TOXIC_H, TOXIC_FRAMES, TOXIC_FRAME_SECONDS, frame)
 
 
+# ---------------------------------------------------------------------------------------------------
+# SECURITY CAMERA ('#') - the Organization's eye, HANGING FROM THE CEILING (order 5): the first ceiling-mounted
+# prop. Full-height canvas (R1): the top row is the ceiling line, the camera is painted in the top rows and
+# everything below it is fully transparent (so it casts no floor shadow and does not occlude below itself).
+# ---------------------------------------------------------------------------------------------------
+CAM_W, CAM_H = 128, 256
+CAM_FRAMES, CAM_FRAME_SECONDS = 48, 0.1
+CAM_CX = 64
+CAM_PIVOT_Y = 40                              # the yoke's pivot under the drop arm
+CAM_HEAD_Y = 58                               # the housing's centre line
+
+
+def camera_mount():
+    """The static steel: a riveted ceiling plate flush with the top row, a drop arm with a clamp collar."""
+    plate = [slab(chamfer_rect(38, -3, 90, 8, 2), "gunmetal", bevel=3, slope=0.9)]
+    for rx in (43, 85):
+        plate.append(blob(rx, 4, 1.6, 1.6, "darkmetal", op="add"))
+    arm = [limb(CAM_CX, 6, CAM_CX, CAM_PIVOT_Y - 4, 3.6, 3.6, "darkmetal"),
+           slab(chamfer_rect(CAM_CX - 7, 18, CAM_CX + 7, 26, 2), "gunmetal", bevel=2, slope=0.9),
+           limb(CAM_CX - 7, 22, CAM_CX + 7, 22, 0.8, 0.8, "darkmetal", op="add")]
+    return [plate, arm]
+
+
+def camera_pose(yaw):
+    """The head at pan pose yaw (-1 = looking left, 1 = looking right): geometry shared by the render and the
+    per-frame paint. Sideways the housing shows its length; facing the viewer it foreshortens to its front."""
+    side = 1.0 if yaw >= 0 else -1.0
+    turn = abs(yaw)
+    length = 24 + 34 * turn
+    cx = CAM_CX + yaw * 7
+    drop = 7 * turn                                     # the lens end tips down: it watches the floor
+    x_back, x_front = cx - side * length / 2, cx + side * length / 2
+    lens_r = 9.5 * (1 - 0.55 * turn)
+    lens_x = cx + yaw * (length / 2 - 3)
+    lens_y = CAM_HEAD_Y + 2 + drop
+    return dict(side=side, turn=turn, length=length, cx=cx, drop=drop, x_back=x_back, x_front=x_front,
+                lens_r=lens_r, lens_x=lens_x, lens_y=lens_y)
+
+
+def camera_head(yaw):
+    p = camera_pose(yaw)
+    side, turn, drop = p["side"], p["turn"], p["drop"]
+    xb, xf, cx = p["x_back"], p["x_front"], p["cx"]
+    top, bottom = CAM_HEAD_Y - 11, CAM_HEAD_Y + 11
+    # the cable loop: out of the housing's back, sagging, then up into the ceiling behind the plate
+    cable_x = xb - side * 2 if turn > 0.25 else CAM_CX + 16
+    cable = chain([(cable_x, CAM_HEAD_Y - 2), (cable_x - side * 10, CAM_HEAD_Y + 6), (CAM_CX + 24, 30),
+                   (CAM_CX + 20, 12), (CAM_CX + 18, 2)], 2.2, 2.0, "rubber")
+    yoke_w = 3 + 9 * (1 - turn)                          # the U-bracket turns with the head
+    yoke = [limb(CAM_CX - yoke_w, CAM_PIVOT_Y - 3, CAM_CX + yoke_w, CAM_PIVOT_Y - 3, 2.4, 2.4, "gunmetal"),
+            limb(CAM_CX - yoke_w, CAM_PIVOT_Y - 3, CAM_CX - yoke_w, top + 3, 2.2, 2.2, "gunmetal"),
+            limb(CAM_CX + yoke_w, CAM_PIVOT_Y - 3, CAM_CX + yoke_w, top + 3, 2.2, 2.2, "gunmetal"),
+            blob(CAM_CX, CAM_PIVOT_Y - 4, 4, 4, "darkmetal", depth=3)]
+    lo, hi = (xb, xf) if side > 0 else (xf, xb)
+    dl = 0 if side > 0 else drop                          # the end that tips down is the lens end
+    dr = drop if side > 0 else 0
+    housing = [slab([(lo, top + dl), (hi, top + dr), (hi, bottom + dr), (lo, bottom + dl)], "livery_dk",
+                    bevel=5, slope=0.9),
+               slab([(lo + 2, bottom + dl - 5), (hi - 2, bottom + dr - 5), (hi - 2, bottom + dr - 3),
+                     (lo + 2, bottom + dl - 3)], "darkmetal", bevel=1, slope=0.9, op="add", depth=0.8)]
+    # the sun hood over the lens: a lip across the top of the front, reaching past it when seen side-on
+    hood_len = 10 + 8 * turn
+    h0, h1 = sorted((xf - side * hood_len, xf + side * 5 * turn))
+    h0, h1 = (min(h0, cx - 13), max(h1, cx + 13)) if turn < 0.35 else (h0, h1)
+    hood = [slab([(h0, top + drop - 3), (h1, top + drop - 3), (h1, top + drop + 3), (h0, top + drop + 3)],
+                 "gunmetal", bevel=2, slope=0.9)]
+    lx, ly, lr = p["lens_x"], p["lens_y"], p["lens_r"]
+    lens = [blob(lx, ly, lr + 2.5, 11.5, "gunmetal", depth=4),
+            blob(lx, ly, lr, 9.0, "pupil", op="carve", depth=2),
+            blob(lx, ly, lr * 0.8, 7.2, "pupil", op="add", depth=0.5)]
+    rec_x = cx - yaw * (p["length"] * 0.28) if turn > 0.2 else cx + 9
+    rec = [blob(rec_x, top + (dl + dr) / 2 + 6, 2.6, 2.6, "darkmetal", op="add", depth=1.0)]
+    return [[*cable], yoke, housing + rec, hood, lens], p
+
+
+def make_camera():
+    mount = bake(camera_mount(), CAM_W, CAM_H, seed=1301)
+    yy, xx = np.mgrid[0:CAM_H, 0:CAM_W].astype(float)
+    heads = {}
+
+    def head(yaw):
+        key = round(yaw, 4)
+        if key not in heads:
+            layers, pose = camera_head(yaw)
+            heads[key] = (bake(layers, CAM_W, CAM_H, seed=1303), pose)
+        return heads[key]
+
+    def frame(k):
+        t = 2 * math.pi * k / CAM_FRAMES
+        yaw = math.sin(t)                                                       # seamless: one sweep per loop
+        (hb, hg), p = head(yaw)
+        body, glow = mount[0].copy(), mount[1].copy()
+        over(body, hb)
+        glow[..., 3] *= (1 - hb[..., 3] / 255.0)
+        over(glow, hg)
+        lx, ly, lr = p["lens_x"], p["lens_y"], p["lens_r"]
+        # the lens: a neon cyan iris ring in the dark glass, a white glint
+        ex, ey = (xx - lx) / max(lr * 0.8, 1e-3), (yy - ly) / 7.2
+        rr = np.hypot(ex, ey)
+        ring = np.exp(-((rr - 0.62) / 0.13) ** 2) * (rr < 1)
+        paint(body, glow, np.clip(ring * 1.2, 0, 1), tuple(ink("neon_cyan", 0.62)))
+        core = np.exp(-(rr / 0.22) ** 2)
+        paint(body, glow, np.clip(core * 0.8, 0, 1), tuple(ink("neon_cyan", 0.85)))
+        glint = np.exp(-((xx - (lx - lr * 0.35)) ** 2 + (yy - (ly - 3)) ** 2) / 1.1)
+        paint(body, glow, np.clip(glint * 1.4, 0, 1), (250, 252, 255))
+        # the REC lamp: hot iron, blinking - on for 6 frames, off for 6
+        rec_x = p["cx"] - yaw * (p["length"] * 0.28) if p["turn"] > 0.2 else p["cx"] + 9
+        rec_y = CAM_HEAD_Y - 11 + p["drop"] / 2 + 6
+        rec_on = (k // 6) % 2 == 0
+        lamp = np.exp(-((xx - rec_x) ** 2 + (yy - rec_y) ** 2) / 2.2)
+        paint(body, glow, np.clip(lamp * (1.7 if rec_on else 0.6), 0, 1),
+              tuple(ink("hot_iron", 0.85 if rec_on else 0.3)), glow_too=rec_on)
+        img = finish(body)
+        kit.stencil(img, "SEC-02", 52, 1, (150, 156, 164))
+        body = np.asarray(img, float).copy()
+        bloom(glow, 3, 1.3, cap=0.5)
+        # the SCAN: a faint cyan cone fanning down from the lens, sweeping with the pan (glow only, low alpha)
+        aim = math.pi / 2 - yaw * 0.32                                          # straight down, swung by the pan
+        ang = np.arctan2(yy - ly, xx - lx)
+        dist = np.hypot(xx - lx, yy - ly)
+        off = np.abs((ang - aim + math.pi) % (2 * math.pi) - math.pi)
+        cone = np.clip(1 - off / 0.30, 0, 1) ** 1.5 * np.clip((dist - lr) / 10, 0, 1) * np.clip(1 - dist / 120, 0, 1)
+        cone *= np.clip(np.minimum(xx, CAM_W - 1 - xx) / 14.0, 0, 1)                # never cut by the canvas edge
+        cone *= 0.22 * (1 - body[..., 3] / 255.0)
+        col = ink("neon_cyan", 0.55)
+        ga = glow[..., 3] / 255.0
+        add = cone > ga
+        glow[add, :3] = col
+        glow[add, 3] = cone[add] * 255
+        return body, glow
+
+    return Prop("camera", CAM_W, CAM_H, CAM_FRAMES, CAM_FRAME_SECONDS, frame)
+
+
 PROPS = {"terminal": make_terminal, "bio_pod": make_pod, "portal": make_portal, "ai_core": make_ai_core, "generator": make_generator,
          "explosive_barrel": make_explosive_barrel, "radioactive_barrel": make_radioactive_barrel,
-         "fire": make_fire, "toxic": make_toxic}
+         "fire": make_fire, "toxic": make_toxic, "camera": make_camera}
 
 
 # ---------------------------------------------------------------------------------------------------
