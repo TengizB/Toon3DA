@@ -12,7 +12,7 @@ Implement the idea file identified by **$ARGUMENTS** (in `.claude/agents/ideas/`
    Then: **one commit per checkpoint, pushed immediately, with the tick in the same commit as the work**, prefixed `<idea>/CPn:`, never `git add -A`, never more than one checkpoint uncommitted, each closed with a handover note.
 3. Set `STATUS: IN PROGRESS`.
 4. Treat the file as the spec: ACCEPTANCE CRITERIA define done, SCOPE OUT is binding, the IMPLEMENTATION PLAN is the starting point (adjust where reality disagrees, and say so).
-5. Dispatch only the spokes the work needs — `java-architect`, `math-expert`, `libgdx-specialist`, `weapon-creator`, `game-level-designer` — each with an exact contract. `weapon-creator-fable` only if I asked for Fable by name.
+5. Dispatch only the spokes the work needs — `java-architect`, `math-expert`, `libgdx-specialist`, `weapon-creator`, `level-generation-engineer` — each with an exact contract. `weapon-creator-fable` only if I asked for Fable by name.
 6. Tests per the CLAUDE.md Testing Policy only: balance-bearing → extend `BalanceAuditTest` / `BalanceSimTest`; everything else → no new tests, and say so.
 7. Run `./gradlew build` and `./gradlew test` yourself (plus `./gradlew balanceSim` for any balance change). Quote only failing lines and pass the result to `reviewer`.
 8. Gate on `reviewer`; loop findings back to the owning spoke until PASS.

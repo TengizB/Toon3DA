@@ -117,7 +117,7 @@ Order, subsystems, and which spoke builds each step. Name real classes.
   1. DATA / CONSTANTS  (java-architect)       enums, registry rows, constants
   2. LOGIC             (java-architect / math-expert)
   3. RENDER            (libgdx-specialist)    renderers, procedural sprites
-  4. CONTENT           (game-level-designer / weapon-creator / ...)
+  4. CONTENT           (level-generation-engineer / weapon-creator / ...)
   5. TESTS             per the CLAUDE.md Testing Policy - ONE of:
                          - "None. Not balance-bearing; verified by build + run."
                          - "Balance-bearing: extend BalanceAuditTest/BalanceSimTest

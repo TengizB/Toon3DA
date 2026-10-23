@@ -360,7 +360,7 @@ Checkpoints lower no other bar: the build, the Testing Policy, the `docs/` updat
 | `math-expert` | sonnet | Any equation, geometry, physics, interpolation, Bezier, collision, synthesis or balance formula → `GameMath`. |
 | `weapon-creator` | opus | Any weapon end-to-end: constants, Weapon subclass, marchShot, FrameBuffer sprite, World wiring. See `docs/weapon-creation-guide.txt`. |
 | `weapon-creator-fable` | fable | Identical to `weapon-creator`. **Never invoke on your own judgement** — only when the user explicitly asks for Fable (or names this agent). |
-| `game-level-designer` | opus | Creating or modifying level `.txt` files. **Always use when a new level file is needed.** |
+| `level-generation-engineer` | opus | ANY level-generation or level-file work: every generator in `level/`, room blueprints + size windows + prop kits, doorway / corridor / prop placement rules, the `LevelQualityAudit`, and hand-made level `.txt` files. **Always use for generator or level-file changes.** |
 | `code-reviewer` | haiku | Per-file lint after any `.java` write/edit — runs automatically via the PostToolUse hook. |
 | `reviewer` | opus | **The full-lane acceptance gate**: acceptance criteria, scope, game rules, Testing Policy, checkpoint discipline → PASS / PASS WITH FIXES / FAIL. |
 

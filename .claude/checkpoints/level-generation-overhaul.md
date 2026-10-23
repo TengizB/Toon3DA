@@ -47,7 +47,7 @@ into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
 ## STEP LEDGER
 
 - [x] **CP0** — this file, committed and pushed before anything else changes.
-- [ ] **CP1** — DONE WHEN: `.claude/agents/level-generation-engineer.md` exists with the TECHNICAL NOTES sections;
+- [x] **CP1** — DONE WHEN: `.claude/agents/level-generation-engineer.md` exists with the TECHNICAL NOTES sections;
       `game-level-designer.md` deleted; CLAUDE.md table, orchestrator.md, commands/implement.md, run-game SKILL.md,
       docs/level-design-context.txt, ideas/_TEMPLATE.txt name the new agent; A1 grep clean; no Java changed.
 - [ ] **CP2** — DONE WHEN: `level/LevelQualityAudit` runs headless on the UNCHANGED generators, writes
@@ -84,3 +84,8 @@ into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
 ## NOTES CARRIED FORWARD
 
 - CP0: idea STATUS set to IN PROGRESS in this commit.
+- CP0 baseline: mirror `:core:build` = 481 tests, 1 pre-existing failure `narrative.StoryBarkTest` (known,
+  bark.depth.core.2). Any OTHER failing test after this point is ours.
+- CP1: the new agent file is written, but agent definitions load at session start - a session that began before CP1
+  cannot dispatch `level-generation-engineer` by name; such a session dispatches `java-architect` (or works on the
+  main thread) with "follow .claude/agents/level-generation-engineer.md" in the contract.
