@@ -1012,6 +1012,9 @@ DECISIONS
       level-generation-engineer.  (2026-10-23)
   D4  How is quality verified without new tests?  ->  The dev-only LevelQualityAudit instrument, BEFORE and
       AFTER figures, the existing suite and both balance gates, plus run-game captures.  (2026-10-23)
+  D5  balanceSim S-RELIC SR3 ("rarity is felt", LEGENDARY / COMMON mean depth >= 1.00) read 0.99 after the ROOMS_MST
+      rebuild (3.17 vs 3.20 over 120 runs each; base 1.00 = 3.12 vs 3.12)?  ->  Owner: accept as sampling noise and
+      continue. No band and no balance number moves; SR3's value is reported at every later gate.  (2026-10-23)
 
 
 OPEN QUESTIONS

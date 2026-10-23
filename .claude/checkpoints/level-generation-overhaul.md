@@ -61,7 +61,7 @@ into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
       sizeWindow()/kit()/signatureSymbol() additively; unwired; build + test green.
 - [x] **CP5** — DONE WHEN: SpecialRoomPlanner + GameMath.specialRoomCountForFootprint exist; tileset palette-request
       helper adds kit demands + 'T'/'E' pins; unwired; build + test green.
-- [ ] **CP6** — (CP6a committed: layout done, audit + fast gate green; balanceSim SR3 red, see notes) DONE WHEN: ROOMS_MST runs pipeline A (G1); old selection/corridor/placeDoors/prop helpers/LARGE/
+- [x] **CP6** — (CP6a a08f413 + this tick; balanceSim SR3 0.99 accepted by the owner, idea D5) DONE WHEN: ROOMS_MST runs pipeline A (G1); old selection/corridor/placeDoors/prop helpers/LARGE/
       retired rolls gone from LevelGenerator; buildRoomForBridge re-pointed; symbolsStampedInIsolation re-pointed;
       snapshot test re-baselined (dated); RoomBlueprintBuildDemandTest updated; audit A3-A8 pass for ROOMS_MST;
       test + balanceSim green.
@@ -163,3 +163,5 @@ into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
   re-places the winning run on a clean room (an undo had left plugs). Streams use GameMath.mixSeed (consecutive
   seeds were correlated). LevelGenConfig.preferredRegularKit exists (profiles set it at CP14).
   Eligibility still exists for LINEAR's roulette until CP7, as "fits the window minimum" (no depth, no cap).
+- CP6 closed: owner decision D5 (idea file) — SR3 0.99 accepted as noise; report SR3 at every later gate. Every
+  other balanceSim band green at CP6 (S-NAVIGATION, S-TWIST, S-RELIC SR1/SR2/SR4 incl.).
