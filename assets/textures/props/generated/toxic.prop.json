@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "id": "toxic",
+  "frameWidth": 160,
+  "frameHeight": 48,
+  "frameCount": 16,
+  "columns": 12,
+  "frameSeconds": 0.1
+}

@@ -790,7 +790,251 @@ def make_generator():
     return Prop("generator", GEN_W, GEN_H, GEN_FRAMES, GEN_FRAME_SECONDS, frame)
 
 
-PROPS = {"terminal": make_terminal, "bio_pod": make_pod, "portal": make_portal, "ai_core": make_ai_core, "generator": make_generator}
+# ---------------------------------------------------------------------------------------------------
+# Shared for order 4: the drum, periodic noise, ink ramps
+# ---------------------------------------------------------------------------------------------------
+DRUM_W, DRUM_H = 112, 168
+DRUM_X0, DRUM_X1 = 14, 98                    # the drum's sides
+DRUM_TOP, DRUM_BOTTOM = 22, 164              # lid line, foot line
+DRUM_CX = (DRUM_X0 + DRUM_X1) / 2
+
+
+def ink(name, v):
+    """Any kit ink's ramp at intensity v (array or scalar 0-1), interpolated."""
+    r = kit.MATERIALS[name]["ramp"]
+    pos = np.clip(np.asarray(v, float), 0, 1) * (len(r) - 1)
+    lo = np.floor(pos).astype(int); hi = np.minimum(lo + 1, len(r) - 1); f = (pos - lo)[..., None]
+    return r[lo] * (1 - f) + r[hi] * f
+
+
+def periodic_noise(xx, yy, cell, period_x, period_y, seed):
+    """Smooth value noise that tiles every period_x / period_y CELLS - so a field scrolled by a whole period loops
+    seamlessly. Integer hash (kit._hash01), deterministic."""
+    u, v = xx / cell, yy / cell
+    ix, iy = np.floor(u).astype(int), np.floor(v).astype(int)
+    fx, fy = u - ix, v - iy
+    sx, sy = fx * fx * (3 - 2 * fx), fy * fy * (3 - 2 * fy)
+
+    def h(a, b):
+        return kit._hash01(np.mod(a, period_x), np.mod(b, period_y), seed)
+    top = h(ix, iy) * (1 - sx) + h(ix + 1, iy) * sx
+    bot = h(ix, iy + 1) * (1 - sx) + h(ix + 1, iy + 1) * sx
+    return top * (1 - sy) + bot * sy
+
+
+def drum_bake(paint_mat, rib_mat, extra_front, seed):
+    """A steel drum: the body as a tall ellipsoid cropped to the drum rows (pure cylinder shading), then lid, ribs
+    and foot rendered over it. -> (body, glow) arrays."""
+    rx = (DRUM_X1 - DRUM_X0) / 2
+    shell, shell_glow = bake([[blob(DRUM_CX, (DRUM_TOP + DRUM_BOTTOM) / 2, rx, 2000, paint_mat, depth=rx * 0.9)]],
+                             DRUM_W, DRUM_H, seed)
+    rows = np.zeros((DRUM_H, 1)); rows[DRUM_TOP + 4:DRUM_BOTTOM - 2] = 1
+    shell[..., 3] *= rows
+    lid = [blob(DRUM_CX, DRUM_TOP + 4, rx, 7, rib_mat, depth=4),
+           blob(DRUM_CX, DRUM_TOP + 3, rx - 6, 4.5, "darkmetal", op="carve", depth=2),
+           blob(DRUM_CX - 22, DRUM_TOP + 3, 5, 2.5, "gunmetal", depth=2.5)]                   # the bung
+    ribs = []
+    for ry in (DRUM_TOP + 10, 70, 116, DRUM_BOTTOM - 8):
+        ribs.append(limb(DRUM_X0 + 1, ry, DRUM_X1 - 1, ry, 3.4, 3.4, rib_mat, k=0))
+    foot = [slab([(DRUM_X0 + 2, DRUM_BOTTOM - 4), (DRUM_X1 - 2, DRUM_BOTTOM - 4), (DRUM_X1 - 4, DRUM_BOTTOM + 3),
+                  (DRUM_X0 + 4, DRUM_BOTTOM + 3)], "darkmetal", bevel=2, slope=0.9)]
+    front, front_glow = bake([foot, ribs + lid, extra_front], DRUM_W, DRUM_H, seed + 1)
+    over(shell, front)
+    shell_glow[..., 3] *= (1 - front[..., 3] / 255.0)
+    over(shell_glow, front_glow)
+    return shell, shell_glow
+
+
+# ---------------------------------------------------------------------------------------------------
+# EXPLOSIVE BARREL ('E') - oxide-red hazard drum; hot-iron relief slots breathe: pressure building
+# ---------------------------------------------------------------------------------------------------
+BARREL_FRAMES, BARREL_FRAME_SECONDS = 16, 0.1
+EXPL_SLOTS = [(26, 92), (42, 94), (56, 95), (70, 94), (86, 92)]
+
+
+def make_explosive_barrel():
+    front = [slab(chamfer_rect(30, 128, 82, 146, 2), "livery_dk", bevel=2, slope=0.9, op="add", depth=1.0)]
+    base = drum_bake("paint_oxide", "darkmetal", front, seed=901)
+    yy, xx = np.mgrid[0:DRUM_H, 0:DRUM_W].astype(float)
+
+    def frame(k):
+        body, glow = base[0].copy(), base[1].copy()
+        t = 2 * math.pi * k / BARREL_FRAMES
+        breathe = 0.65 + 0.35 * (0.5 + 0.5 * math.sin(t))
+        for i, (sx, sy) in enumerate(EXPL_SLOTS):                                      # pressure-relief slots
+            slot = np.clip(1 - np.maximum(np.abs(xx - sx) / 3.0, np.abs(yy - sy) / 8.0), 0, 1) ** 0.5
+            heat = breathe * (0.85 + 0.15 * math.sin(t * 2 + i))
+            col = ink("hot_iron", np.clip(slot * heat, 0, 1))
+            m = (slot > 0.05).astype(float)[..., None]
+            body[..., :3] = body[..., :3] * (1 - m) + col * m
+            glow[..., :3] = glow[..., :3] * (1 - m) + col * m
+            glow[..., 3] = np.maximum(glow[..., 3], m[..., 0] * 255)
+        seam = np.exp(-((yy - (DRUM_TOP + 10)) / 1.2) ** 2) * ((xx > DRUM_X0 + 10) & (xx < DRUM_X1 - 10))
+        paint(body, glow, seam * 0.55 * breathe, tuple(ink("hot_iron", 0.75)))
+        lamp_on = (k // 4) % 2 == 0                                                     # warning lamp on the lid
+        lamp = np.exp(-(((xx - (DRUM_CX + 20)) ** 2) + (yy - (DRUM_TOP + 2)) ** 2) / 4.0)
+        paint(body, glow, np.clip(lamp * (1.6 if lamp_on else 0.4), 0, 1),
+              tuple(ink("hot_iron", 0.85 if lamp_on else 0.3)), glow_too=lamp_on)
+        img = finish(body)
+        kit.stencil(img, "VOLATILE", 30, 133, (200, 196, 186))
+        body = np.asarray(img, float).copy()
+        bloom(glow, 4, 1.3, cap=0.45)
+        return body, glow
+
+    return Prop("explosive_barrel", DRUM_W, DRUM_H, BARREL_FRAMES, BARREL_FRAME_SECONDS, frame)
+
+
+# ---------------------------------------------------------------------------------------------------
+# RADIOACTIVE BARREL ('g') - a lab-grey drum leaking rad-lime light
+# ---------------------------------------------------------------------------------------------------
+def trefoil_mask(xx, yy, cx, cy, r):
+    """The radiation trefoil: three 60-degree blades and a hub."""
+    d = np.hypot(xx - cx, yy - cy); a = np.arctan2(yy - cy, xx - cx)
+    blades = (np.cos(3 * (a + math.pi / 2)) > 0.5) & (d > r * 0.28) & (d < r)
+    hub = d < r * 0.18
+    return (blades | hub).astype(float)
+
+
+def make_radioactive_barrel():
+    band = [slab(chamfer_rect(DRUM_X0 + 1, 82, DRUM_X1 - 1, 110, 1), "rad", bevel=1.5, slope=0.9, glow=0.6)]
+    base = drum_bake("livery", "gunmetal", band, seed=905)
+    yy, xx = np.mgrid[0:DRUM_H, 0:DRUM_W].astype(float)
+    tref = trefoil_mask(xx, yy, DRUM_CX, 96, 10)
+
+    def frame(k):
+        body, glow = base[0].copy(), base[1].copy()
+        t = 2 * math.pi * k / BARREL_FRAMES
+        pulse = 0.75 + 0.25 * math.sin(t)
+        paint(body, glow, tref, (20, 26, 16), glow_too=False)
+        glow[..., 3] *= (1 - tref)
+        # glowing cracks at a dented seam just under the top rib
+        crack = np.zeros((DRUM_H, DRUM_W))
+        for (x0, y0, x1, y1) in ((60, 36, 66, 48), (66, 48, 63, 58), (66, 48, 74, 54)):
+            n = 12
+            for s_ in range(n + 1):
+                px = x0 + (x1 - x0) * s_ / n; py = y0 + (y1 - y0) * s_ / n
+                crack = np.maximum(crack, np.exp(-((xx - px) ** 2 + (yy - py) ** 2) / 0.9))
+        paint(body, glow, np.clip(crack * 1.4 * pulse, 0, 1), tuple(ink("rad", 0.8)))
+        # a glowing drip running down the flank once per loop, into a puddle at the foot
+        life = k / BARREL_FRAMES
+        dy = 58 + life * (DRUM_BOTTOM - 58)
+        trail = np.exp(-((xx - 66) / 1.2) ** 2) * ((yy > 58) & (yy < dy)) * 0.55
+        drop = np.exp(-((xx - 66) ** 2 / 2.0 + (yy - dy) ** 2 / 4.0))
+        paint(body, glow, np.clip(trail + drop * 1.3, 0, 1), tuple(ink("rad", 0.85)))
+        puddle = np.exp(-(((xx - 70) / 20) ** 2) - (((yy - (DRUM_BOTTOM + 1)) / 2.2) ** 2))
+        paint(body, glow, np.clip(puddle * 1.2 * pulse, 0, 1), tuple(ink("rad", 0.7)))
+        img = finish(body)
+        kit.stencil(img, "RAD-07", 44, 124, (70, 74, 82))
+        body = np.asarray(img, float).copy()
+        bloom(glow, 4, 1.4, cap=0.45)
+        return body, glow
+
+    return Prop("radioactive_barrel", DRUM_W, DRUM_H, BARREL_FRAMES, BARREL_FRAME_SECONDS, frame)
+
+
+# ---------------------------------------------------------------------------------------------------
+# FIRE ('i') - burning debris with flames from a seamless looping noise field (hot-iron ramp)
+# ---------------------------------------------------------------------------------------------------
+FIRE_W, FIRE_H = 160, 72
+FIRE_FRAMES, FIRE_FRAME_SECONDS = 16, 1.0 / 12
+
+
+def make_fire():
+    rnd = random.Random(1201)
+    debris = []
+    for i in range(9):
+        x = 14 + i * 16 + rnd.uniform(-4, 4)
+        debris.append(blob(x, 66 + rnd.uniform(-2, 2), rnd.uniform(9, 14), rnd.uniform(4, 6), "basalt",
+                           angle=rnd.uniform(-0.3, 0.3)))
+    bed, _ = bake([debris], FIRE_W, FIRE_H, seed=1203)
+    yy, xx = np.mgrid[0:FIRE_H, 0:FIRE_W].astype(float)
+    cell = 9.0
+    period_y = 8                                        # the field tiles every 8 cells = 72 px: one scroll per loop
+    bed_a = bed[..., 3] / 255.0
+    cracks = periodic_noise(xx, yy, 4.0, 64, 64, 1207)
+
+    def frame(k):
+        scroll = (k / FIRE_FRAMES) * period_y * cell
+        # tongues: the field is stretched vertically (sampled at half height) so flames read tall and licking
+        n1 = periodic_noise(xx, (yy + scroll) * 0.5, cell * 0.5, 64, period_y, 1211)
+        n2 = periodic_noise(xx * 1.7, (yy + scroll) * 0.85, cell * 0.85, 64, period_y, 1213)
+        rise = np.clip((FIRE_H - yy) / FIRE_H, 0, 1)                                    # 0 at the floor, 1 at top
+        columns = 0.5 + 0.5 * np.sin(xx * 0.11 + 0.7 * np.sin(xx * 0.037))
+        flame = (0.65 * n1 + 0.35 * n2) * (0.70 + 0.45 * columns) + 0.50 - 1.30 * rise ** 0.85
+        flame = np.clip(flame, 0, 1)
+        alpha = np.clip((flame - 0.12) / 0.10, 0, 1)
+        col = ink("hot_iron", np.clip(flame * 1.25, 0, 1))
+        body = np.zeros((FIRE_H, FIRE_W, 4)); body[..., :3] = col; body[..., 3] = alpha * 255
+        glow = body.copy()
+        # the debris bed sits in front of the flame roots, its cracks glowing
+        bedc = bed.copy()
+        glowing = (cracks > 0.62) * bed_a
+        bedc[..., :3] = bedc[..., :3] * (1 - glowing[..., None]) + ink("hot_iron", 0.7) * glowing[..., None]
+        over(body, bedc)
+        glow[..., 3] *= (1 - bed_a * (1 - glowing))
+        gc = np.zeros_like(glow); gc[..., :3] = ink("hot_iron", 0.7); gc[..., 3] = glowing * 255
+        over(glow, gc)
+        # sparks lifting (each a whole climb per loop)
+        rnd2 = random.Random(1217)
+        for e in range(10):
+            ex = rnd2.uniform(10, FIRE_W - 10); ph = rnd2.uniform(0, 1)
+            life = (ph + k / FIRE_FRAMES) % 1.0
+            ey = 58 - life * 56
+            sp = np.exp(-((xx - ex - 3 * math.sin(life * 7 + e)) ** 2 + (yy - ey) ** 2) / 0.8) * (1 - life)
+            paint(body, glow, np.clip(sp * 1.6, 0, 1), tuple(ink("hot_iron", 0.95)))
+        bloom(glow, 3, 1.2, cap=0.4)
+        return body, glow
+
+    return Prop("fire", FIRE_W, FIRE_H, FIRE_FRAMES, FIRE_FRAME_SECONDS, frame)
+
+
+# ---------------------------------------------------------------------------------------------------
+# TOXIC POOL ('q') - a low glowing toxin pool, crusted rim, bubbles, vapour
+# ---------------------------------------------------------------------------------------------------
+TOXIC_W, TOXIC_H = 160, 48
+TOXIC_FRAMES, TOXIC_FRAME_SECONDS = 16, 0.1
+
+
+def make_toxic():
+    yy, xx = np.mgrid[0:TOXIC_H, 0:TOXIC_W].astype(float)
+    cx, cy, rx, ry = 80, 39, 74, 8.5
+    q = np.sqrt(((xx - cx) / rx) ** 2 + ((yy - cy) / ry) ** 2)
+    edge_noise = periodic_noise(xx, yy, 6.0, 64, 64, 1301)
+    pool = (q < 0.88 + 0.12 * edge_noise).astype(float)
+    crust = ((q < 1.0 + 0.12 * edge_noise) & (pool < 0.5)).astype(float)
+
+    def frame(k):
+        t = 2 * math.pi * k / TOXIC_FRAMES
+        phase = k / TOXIC_FRAMES * 4 * 6.0                                               # caustics drift a whole period
+        ripple = periodic_noise(xx + phase, yy * 2.2, 6.0, 32, 64, 1303)
+        v = np.clip(0.45 + 0.35 * ripple + 0.25 * (1 - q) + 0.05 * math.sin(t), 0, 1)
+        col = ink("toxin", v * 0.95)
+        body = np.zeros((TOXIC_H, TOXIC_W, 4)); body[..., :3] = col; body[..., 3] = pool * 255
+        glow = body.copy()
+        paint(body, glow, crust, (24, 30, 20), glow_too=False)
+        rnd = random.Random(1307)
+        for b in range(7):                                                                 # bubbles swell and pop
+            bx = rnd.uniform(cx - rx * 0.7, cx + rx * 0.7); by = cy + rnd.uniform(-3, 3); ph = rnd.uniform(0, 1)
+            life = (ph + k / TOXIC_FRAMES) % 1.0
+            r = 1 + 3.5 * life
+            if life > 0.85:
+                continue                                                                   # popped
+            ring = np.clip(1 - np.abs(np.hypot(xx - bx, (yy - by) * 1.3) - r) / 0.9, 0, 1)
+            paint(body, glow, ring, tuple(ink("toxin", 0.97)))
+        for w in range(4):                                                                 # vapour lifting
+            wx = 30 + w * 34; life = ((w * 0.27) + k / TOXIC_FRAMES) % 1.0
+            wy = 34 - life * 30
+            wisp = np.exp(-(((xx - wx - 4 * math.sin(life * 5 + w)) / 5) ** 2) - (((yy - wy) / 3) ** 2)) * (1 - life)
+            paint(body, glow, np.clip(wisp * 0.45, 0, 1), tuple(ink("toxin", 0.75)))
+        bloom(glow, 3, 1.2, cap=0.4)
+        return body, glow
+
+    return Prop("toxic", TOXIC_W, TOXIC_H, TOXIC_FRAMES, TOXIC_FRAME_SECONDS, frame)
+
+
+PROPS = {"terminal": make_terminal, "bio_pod": make_pod, "portal": make_portal, "ai_core": make_ai_core, "generator": make_generator,
+         "explosive_barrel": make_explosive_barrel, "radioactive_barrel": make_radioactive_barrel,
+         "fire": make_fire, "toxic": make_toxic}
 
 
 # ---------------------------------------------------------------------------------------------------

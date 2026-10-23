@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "id": "explosive_barrel",
+  "frameWidth": 112,
+  "frameHeight": 168,
+  "frameCount": 16,
+  "columns": 16,
+  "frameSeconds": 0.1
+}

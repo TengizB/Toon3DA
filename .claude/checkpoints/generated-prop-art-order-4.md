@@ -38,9 +38,13 @@ same commit. Never `git add -A`.
 ## STEP LEDGER
 
 - [x] **CP0** — idea + this file committed and pushed.
-- [ ] **CP1** — four sheets baked; previews sent; earlier sheets unchanged.
+- [x] **CP1** — four sheets baked; previews sent; earlier sheets unchanged.
 - [ ] **CP2** — registry rows, dynamic pass on sheets, old generators + barrel_radioactive.png deleted; build green.
 - [ ] **CP3** — in-engine screenshots sent; docs updated.
 - [ ] **CP4** — owner approval in DECISIONS; STATUS IMPLEMENTED.
 
 ## NOTES CARRIED FORWARD
+- CP1: paint_oxide appended LAST to kit.MATERIALS; all earlier sheets re-bake cmp-identical. drum_bake(): the drum
+  body is a tall ellipsoid (ry 2000) cropped to the drum rows = pure cylinder shading; lid/ribs/foot rendered over.
+  Fire/toxic use periodic_noise() (tiles every N cells) so a scroll by one period loops seamlessly.
+  assets/assets.txt lists textures/lab/barrel_radioactive.png - update it when that file is deleted (CP2).
