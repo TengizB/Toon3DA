@@ -1,8 +1,8 @@
-STATUS: IN PROGRESS
+STATUS: IMPLEMENTED
 CATEGORY: Level Design
 TITLE: Level gen overhaul - designed props, real doors, specials
 CREATED: 2026-10-23
-IMPLEMENTED: -
+IMPLEMENTED: 2026-10-23
 ---
 IMPLEMENTATION NOTE (2026-10-23) — where the build diverged from the plan, each recorded in the checkpoint file:
   - LayoutRoom (+ DoorSocket / DoorwayRules) landed at CP3 with the doorway rules, not with CP6's rebuild.

@@ -79,7 +79,7 @@ into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
       constants gone (A9); full audit A3-A8 across ALL generators, AFTER figures recorded beside BEFORE; both gates
       green; A14 captures taken.
 - [x] **CP15** — DONE WHEN: docs listed in the idea's CP15 match the code; agent invariant list matches final rules.
-- [ ] **CP16** — DONE WHEN: reviewer PASS (or PASS WITH FIXES applied); STATUS: IMPLEMENTED + date.
+- [x] **CP16** — (reviewer PASS after CP16a 4b5c4a6) DONE WHEN: reviewer PASS (or PASS WITH FIXES applied); STATUS: IMPLEMENTED + date.
 
 ## NOTES CARRIED FORWARD
 
@@ -319,3 +319,7 @@ into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
   bespoke G4-G8, the layout report, R26 barrels, `--explain`, the CP14 audit baseline and the g/E ownership.
   `grep -rn game-level-designer` over .claude/ (minus ideas) and docs/ is empty.
   NEXT (CP16): reviewer gate.
+- CP16: reviewer first pass PASS WITH FIXES (B#1 two red bands without an owner decision -> D8; B#2 A14 captures
+  from the doorway -> a14/*_open_sheet.png; NB#1-4/6 + nit 1 fixed in CP16a 4b5c4a6). Re-review: PASS — A1-A15 met.
+  STATUS: IMPLEMENTED 2026-10-23. Optional short-lane follow-ups left: NB#5 (audit computes its own lane band) and
+  nit 2 (moved inline literals in RoomBuildContext floor lighting, LevelGenerator:502/547, LinearCorridor:152/239).
