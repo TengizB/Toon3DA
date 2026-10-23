@@ -1,4 +1,4 @@
-STATUS: NOT IMPLEMENTED
+STATUS: IN PROGRESS
 CATEGORY: Visual
 TITLE: Generated props 5 - security camera from the ceiling
 CREATED: 2026-10-23
