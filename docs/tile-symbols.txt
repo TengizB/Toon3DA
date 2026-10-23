@@ -95,7 +95,9 @@ P   Cylindrical column  Solid. Rendered as 3D cylinder (ray-circle intersection)
                         four-pillars / avenue / altar), spaced columns on 3-wide hall spines, cave FORMATIONS
                         (clusters of 1-3 in open ground), the start room's four framing columns — never in a door
                         clearance zone, never plugging a passage.
->   Portal / exit       Level exit. Full-height interdimensional rift portal. Exactly one per generated level.
+>   Portal / exit       Level exit. Full-height walk-in gate on a steel platform, its doorway a cyan field receding to a
+                        bright core, GENERATED + ANIMATED
+                        (generated-prop-art order 1). Exactly one per generated level.
 
 SOLID PROPS (block player movement; rendered as billboard sprites)
 ------------------------------------------------------------------
@@ -104,7 +106,8 @@ arena's cover / barrels or the shared supply pipeline — never a per-tile roll 
 clearance zone (Chebyshev 1 + 2 straight through) or a room's lane band. See docs/procedural-level-generation.txt.
 g   Radioactive barrel  Dark green hazard drum.                                0.65x wall height
 E   Explosive barrel    Crimson volatile drum: hazard hoops, stamped explosion burst, hot leaking seams. 0.65x wall height
-T   Computer terminal   Control console: monitor (cyan readout/waveform), keypad deck, indicator LEDs, hazard base. 0.75x wall height
+T   Computer terminal   Free-standing Organization console, GENERATED + ANIMATED (generated-prop-art order 1): phosphor-green
+                        scrolling text screen, backlit keys, blinking lamps. 0.80x wall height
                         GENERATED placement (R20): only in terminal kits (office, server room, research lab,
                         command centre, medical bay, containment block, the clinic / event / airlock rooms), flush
                         to a wall (a server room's racks excepted), never in a hall, a cave body or the entrance.
@@ -114,7 +117,8 @@ C   Crate               Reinforced olive-drab munitions box: steel corner bracke
 #   Security camera     Mounted surveillance device. GENERATED placement: a kit's CORNER / ENTRY_WALL row (flush),
                         the start room's STAGING_ARMORY corner.
 %   Generator           Power unit: glowing green reactor core, cooling fins, twin gauges, breaker bank, hazard base. 0.85x wall height
-&   Bio-pod             Cryo specimen pod: green fluid tube, curled specimen, bubbles, cyan rings, base readout panel. 0.90x wall height
+&   Bio-pod             Specimen tube, GENERATED + ANIMATED (generated-prop-art order 1): floor-to-ceiling column of neon
+                        cyan fluid, a drifting grown specimen, rising bubbles. 1.00x wall height (floor to ceiling)
 =   Weapon rack         Armory rack: three standing rifles, hung pistol, grenades, magazines, ammo crate on pegboard. 0.70x wall height
 @   Special equipment   Advanced machine: violet→cyan energy aperture (orbiting containment ring + core orb), twin tall plasma canisters, vented emitter housing, lower control panel (readout, keypad, gauge), hazard band. 0.88x wall height
 I   Specimen tank       Tall research cylinder: steel plinth (readout, vents), capped collar with cyan emitter ring, teal cryo-fluid with air gap + meniscus, glowing containment bands, curled bioluminescent specimen, glass sheen, rising bubbles, frost. 0.85x wall height

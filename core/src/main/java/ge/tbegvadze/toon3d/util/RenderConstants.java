@@ -142,7 +142,7 @@ public final class RenderConstants {
     // reference the SAME literal. Values unchanged.
     public static final float PROP_HEIGHT_RADIOACTIVE_BARREL   = 0.65f; // 'g' radioactive barrel
     public static final float PROP_HEIGHT_EXPLOSIVE_BARREL     = 0.65f; // 'E' explosive barrel
-    public static final float PROP_HEIGHT_TERMINAL             = 0.75f; // 'T' computer terminal
+    public static final float PROP_HEIGHT_TERMINAL             = 0.80f; // 'T' computer terminal (generated-prop-art order 1)
     public static final float PROP_HEIGHT_LOCKER               = 0.90f; // 'L' locker
     public static final float PROP_HEIGHT_CRATE                = 0.50f; // 'C' crate
     public static final float PROP_HEIGHT_CORPSE               = 0.35f; // 'm' corpse decal
@@ -156,7 +156,7 @@ public final class RenderConstants {
     // New prop height multipliers (relative to full wall stripe)
     public static final float PROP_CAMERA_HEIGHT               = 0.80f; // '#' security camera
     public static final float PROP_GENERATOR_HEIGHT            = 0.85f; // '%' power generator / reactor
-    public static final float PROP_BIOPOD_HEIGHT               = 0.90f; // '&' bio-pod / specimen tank
+    public static final float PROP_BIOPOD_HEIGHT               = 1.00f; // '&' bio-pod: a floor-to-ceiling specimen tube (generated-prop-art order 1)
     public static final float PROP_RACK_HEIGHT                 = 0.70f; // '=' weapon rack
     public static final float PROP_VENDOR_HEIGHT               = 0.88f; // '@' vending / supply dispenser
     public static final float PROP_HEIGHT_SPECIMEN_TANK        = 0.85f; // 'I' specimen tank
@@ -253,6 +253,22 @@ public final class RenderConstants {
     public static final char  STAIRS_DOWN_CHAR                   = '>';
     // Full-height billboard — stands exactly as tall as walls, a landmark visible down any corridor.
     public static final float PORTAL_SPRITE_HEIGHT               = 1.0f;
+
+    // -------------------------------------------------------------------------
+    // GENERATED PROPS (generated-prop-art order 1; docs/sprite-art-creation-guide.txt section 14). A migrated
+    // prop is drawn from its prop sheet (render/propvisual): body frames graded like every prop, then glow frames
+    // ungraded on top, faded with distance by the WALL_GLOW_FADE_* rule so walls and props glow alike.
+    // -------------------------------------------------------------------------
+    public static final String PROP_SHEET_DIRECTORY              = "textures/props/generated/";
+    public static final String PROP_SHEET_BODY_SUFFIX            = ".prop.png";
+    public static final String PROP_SHEET_GLOW_SUFFIX            = ".glow.png";
+    public static final String PROP_SHEET_MANIFEST_SUFFIX        = ".prop.json";
+    public static final int    PROP_SHEET_MANIFEST_VERSION       = 1;
+    /** A body pixel at or above this alpha (0-255) counts as opaque for the occluder record. */
+    public static final int    PROP_SHEET_OPAQUE_ALPHA_THRESHOLD = 128;
+    /** Per-tile animation phase: the loop is split into this many buckets, one picked per tile by hash. */
+    public static final int    PROP_SHEET_PHASE_BUCKETS          = 64;
+    public static final long   PROP_SHEET_PHASE_SEED             = 0x50524F50L;
     public static final float LEVEL_TRANSITION_FADE_OUT_SECONDS  = 0.30f;
     public static final float LEVEL_TRANSITION_FADE_IN_SECONDS   = 0.30f;
     public static final int   STARTING_DEPTH                     = 1;

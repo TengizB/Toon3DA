@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "id": "terminal",
+  "frameWidth": 160,
+  "frameHeight": 200,
+  "frameCount": 32,
+  "columns": 12,
+  "frameSeconds": 0.125
+}

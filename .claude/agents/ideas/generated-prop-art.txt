@@ -1,0 +1,81 @@
+STATUS: SPLIT INTO ORDER FILES
+CATEGORY: Visual
+TITLE: Environment object rework - props generated in code
+CREATED: 2026-10-23
+IMPLEMENTED: -
+---
+
+MASTER INDEX of the generated-prop-art series. The work lives in generated-prop-art-order-<n>.txt, built
+strictly in ascending order, each with its own STATUS and CHECKPOINTS. This file holds what every order
+shares: the need, the series rules and the owner's decisions. An order that contradicts this file is wrong;
+change this file first (with the owner).
+
+Written by the main thread directly with the owner (2026-10-23), like generated-wall-art, because the
+owner set the order boundaries ("order 1 = terminal, bio-pod, portal; the rest later").
+
+THE METHOD lives in docs/sprite-art-creation-guide.txt (the kit) and docs/wall-art-creation-guide.txt (the
+smooth bake). Props are made with THE SAME KIT as the generated enemies and walls (.claude/skills/enemy-art):
+one light rig, one material library, height-field shapes. The prop-specific part of the method (the prop
+canvas, neon accents, bloom, animated sheets, the runtime) is section 14 of docs/sprite-art-creation-guide.txt,
+written by order 1 and extended by every later order.
+
+
+OVERVIEW
+--------
+The environment objects (terminals, pods, crates, barrels, machines, the exit portal...) are the last layer
+still drawn by the old flat Java Pixmap programs in PropRenderer: hand-placed rectangles with a bevel, no
+shared light, no shared palette. Beside the generated enemies and walls they read as clip-art. This series
+replaces them one group at a time with sprites sculpted by the kit, and gives the ones that are alive
+(tubes, screens, cores, the portal) real animation.
+
+THE OWNER'S BRIEF (2026-10-23), binding on every order:
+  - REIMAGINE, never copy. The old prop textures are not reference material - not for shape, palette or
+    layout (same rule as N2 for enemies). A prop is designed from what it IS in the facility.
+  - WHAT IT SAYS IT IS, IT IS. A "computer terminal" is a terminal and nothing else; a crate is a crate.
+    The reimagining is of the look, never of the object's identity or its gameplay meaning.
+  - NEON ACCENTS. The levels are grey and blue-grey; props are where the bright colour lives. Every prop
+    pairs COLD LAB and STEEL TECHNICAL colours (the kit's livery / steel_lt / gunmetal / darkmetal / frost)
+    with a FEW bright, glowing NEON or RADIOACTIVE accents (screens, lamps, buttons, fluid, energy). Not a
+    rainbow: one or two accent inks per prop, used on its emissive parts only.
+  - SOME PROPS ANIMATE, SOME DO NOT. Stationary objects (crates, lockers, racks) are still images; living
+    or powered ones (specimen tubes, screens, cores, the portal) loop an animation.
+  - FULL HEIGHT WHERE IT MATTERS. A specimen tube runs floor to ceiling; the portal is full size.
+
+
+SERIES RULES (every order)
+--------------------------
+  PS1  Generated in code with the kit (N1). The game ships only the PNGs + JSON the bake writes, in
+       assets/textures/props/generated/. Deterministic: the same script writes byte-identical files.
+  PS2  The SMOOTH bake (kit.render smooth=2, as the walls since 62991f6): no dither, no grain speckle,
+       anti-aliased edges. Props are seen in the 3D view next to the walls, and the owner rejected grain there.
+  PS3  Neon accents are EMISSIVE kit materials (appended LAST to kit.MATERIALS so no enemy or wall changes)
+       and go to the prop's GLOW sheet, drawn ungraded over the body so no lighting mood greys them out.
+  PS4  A prop is one PROP SHEET: <id>.prop.png (body frames, RGBA), <id>.glow.png (the emissive layer + its
+       soft neon bloom, same frame grid) and <id>.prop.json (frame size, frame count, grid columns, frame
+       seconds). A still prop is a one-frame sheet. Atlas <= 2048 x 2048.
+  PS5  Wiring is ONE register() row in render/propvisual/GeneratedPropRegistry: an environment sprite id
+       (a tileset prop) or a FIXED prop char (the portal) -> a sheet name. No switch, no symbol change, no
+       change to where props are placed, what blocks movement, or any gameplay rule (V4).
+  PS6  The old Pixmap generator of a migrated prop is DELETED in the same order that migrates it (the
+       registry falls back to nothing - a migrated prop has no second picture).
+  PS7  Owner approval gate (N7): previews (contact sheet + GIFs) and in-engine screenshots go to the owner;
+       the order's STATUS reaches IMPLEMENTED only after the owner's yes is written into its DECISIONS.
+  PS8  No tests (CLAUDE.md Testing Policy). Verified by ./gradlew build + running the game (run-game skill).
+
+
+OWNER DECISIONS (series-wide)
+-----------------------------
+  D1  (2026-10-23) Neon / radioactive accents are WANTED on props, as emissive accents only. This is the
+      owner's exception to art-direction V5 for environment props: phosphor green on a terminal screen, a
+      neon cyan specimen fluid, a cyan walk-in portal, lime "radioactive" lamps. V5 still holds for the HUD,
+      telegraphs and combat effects, and no prop uses the exact keycard red / yellow / blue inks (those mean
+      "this door's key").
+  D2  (2026-10-23) Order 1 = computer terminal, bio-pod (the specimen tube), exit portal. Later orders are
+      added by the owner.
+  D3  (default, 2026-10-23) One prop set for every region in order 1. Region-specific prop variants (like the
+      region wall sets) are a later order's question, not assumed.
+
+
+ORDERS
+------
+  order 1  generated-prop-art-order-1.txt  the kit's prop bake + the runtime + terminal, bio-pod, portal

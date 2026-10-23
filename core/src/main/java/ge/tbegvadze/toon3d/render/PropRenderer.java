@@ -14,6 +14,9 @@ import ge.tbegvadze.toon3d.item.GroundItem;
 import ge.tbegvadze.toon3d.item.ItemType;
 import ge.tbegvadze.toon3d.level.Level;
 import ge.tbegvadze.toon3d.render.enemyvisual.RemainsRegistry;
+import ge.tbegvadze.toon3d.render.propvisual.GeneratedPropRegistry;
+import ge.tbegvadze.toon3d.render.propvisual.GeneratedPropSheet;
+import ge.tbegvadze.toon3d.render.propvisual.GeneratedPropSheets;
 import ge.tbegvadze.toon3d.render.tilesetgfx.EnvironmentTextureSet;
 import ge.tbegvadze.toon3d.render.tilesetgfx.TextureGeneratorRegistry;
 import ge.tbegvadze.toon3d.tileset.EnvironmentSpriteRegistry;
@@ -111,6 +114,8 @@ public class PropRenderer implements Renderable, Disposable {
     // Per-tier credit chip textures — procedurally generated, keyed by ItemType.
     private final Map<ItemType, Texture>  creditChipTextures;
     private final SpriteBatch             batch;
+    // generated-prop-art order 1: the generated prop sheets (terminal, bio-pod, portal, ...). Owned + disposed here.
+    private final GeneratedPropSheets     propSheets;
 
     // Weapon ground items (placed by LevelGenerator, consumed on player pickup).
     // Injected by World after level build; never null — starts empty.
@@ -178,6 +183,7 @@ public class PropRenderer implements Renderable, Disposable {
         this.genericWeaponFallbackTexture = generateWeaponPickupTexture();
         this.weaponPickupGlowTexture      = generateGlowTexture();
         this.creditChipTextures           = buildCreditChipTextures();
+        this.propSheets                   = new GeneratedPropSheets();
         this.hazardFireFrames             = buildHazardFireFrames();
         this.hazardToxicFrames            = buildHazardToxicFrames();
     }
@@ -384,6 +390,18 @@ public class PropRenderer implements Renderable, Disposable {
     private void drawMuzzleLightPass(Texture texture, int firstColumn, int lastColumn, int leftScreenColumn,
                                      int columnSpan, int textureWidth, int texSrcY, int texSrcHeight,
                                      float clampedBottom, float clampedTop, float depth, float columnWidth) {
+        drawMuzzleLightPass(texture, firstColumn, lastColumn, leftScreenColumn, columnSpan, textureWidth, 0,
+                texSrcY, texSrcHeight, clampedBottom, clampedTop, depth, columnWidth);
+    }
+
+    /**
+     * The muzzle-light pass for a sprite whose source is one frame of a larger sheet: {@code sourceOriginX} is
+     * the frame's left edge in the texture, {@code texSrcY} the absolute texture row (generated-prop-art order 1).
+     */
+    private void drawMuzzleLightPass(Texture texture, int firstColumn, int lastColumn, int leftScreenColumn,
+                                     int columnSpan, int textureWidth, int sourceOriginX, int texSrcY,
+                                     int texSrcHeight, float clampedBottom, float clampedTop, float depth,
+                                     float columnWidth) {
         if (bodyLightAddRed + bodyLightAddGreen + bodyLightAddBlue <= 0f) return;
         batch.setBlendFunction(GL20.GL_SRC_ALPHA, GL20.GL_ONE);
         batch.setColor(bodyLightAddRed, bodyLightAddGreen, bodyLightAddBlue, 1f);
@@ -395,10 +413,51 @@ public class PropRenderer implements Renderable, Disposable {
             batch.draw(texture,
                        screenColumn * columnWidth, clampedBottom,
                        columnWidth, clampedTop - clampedBottom,
-                       texSrcX, texSrcY, 1, texSrcHeight,
+                       sourceOriginX + texSrcX, texSrcY, 1, texSrcHeight,
                        false, false);
         }
         batch.setBlendFunction(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
+    }
+
+    /**
+     * The GLOW pass of a generated prop (generated-prop-art order 1, rule R4): the same column slices from the
+     * sheet's glow frame, NORMAL blend, white (ungraded and unshaded, so no mood greys the neon out), alpha = the
+     * wall glow's distance fade x the floor's light multiplier (BLACKOUT dims it). Same wall z-test and
+     * nearer-sprite test as the body. Allocation-free.
+     */
+    private void drawPropGlowPass(Texture glowTexture, int firstColumn, int lastColumn, int leftScreenColumn,
+                                  int columnSpan, int textureWidth, int sourceOriginX, int texSrcY,
+                                  int texSrcHeight, float clampedBottom, float clampedTop, float depth,
+                                  float columnWidth) {
+        float alpha = GameMath.wallGlowDistanceAlpha(depth, WALL_GLOW_FADE_START_TILES, WALL_GLOW_FADE_END_TILES,
+                WALL_GLOW_MIN_ALPHA) * clampUnit(level.getLightMultiplier());
+        if (alpha <= 0f) return;
+        batch.setColor(1f, 1f, 1f, alpha);
+        for (int screenColumn = firstColumn; screenColumn <= lastColumn; screenColumn++) {
+            if (depth >= wallRenderer.getZBufferUnchecked(screenColumn)) continue;
+            if (depth > occluderBuffer.getNearestDepth(screenColumn)) continue;
+            int texSrcX = (screenColumn - leftScreenColumn) * textureWidth / columnSpan;
+            texSrcX = MathUtils.clamp(texSrcX, 0, textureWidth - 1);
+            batch.draw(glowTexture,
+                       screenColumn * columnWidth, clampedBottom,
+                       columnWidth, clampedTop - clampedBottom,
+                       sourceOriginX + texSrcX, texSrcY, 1, texSrcHeight,
+                       false, false);
+        }
+    }
+
+    /** The generated sheet drawing this prop char on this level (by sprite id, else as a FIXED char), or null. */
+    private GeneratedPropSheet resolvePropSheet(char propChar) {
+        String spriteId = level.getPalette().spriteIdOf(propChar);
+        if (spriteId != null) return propSheets.sheetForSprite(spriteId);
+        return propSheets.sheetForFixedChar(propChar);
+    }
+
+    /** True when this prop char is a migrated generated prop on this level (whether or not its sheet loaded). */
+    private boolean isGeneratedProp(char propChar) {
+        String spriteId = level.getPalette().spriteIdOf(propChar);
+        if (spriteId != null) return GeneratedPropRegistry.isGeneratedSprite(spriteId);
+        return GeneratedPropRegistry.sheetForFixedChar(propChar) != null;
     }
 
     /**
@@ -480,8 +539,23 @@ public class PropRenderer implements Renderable, Disposable {
             float         depth     = sortedDepths[sortedPosition];
             PropPlacement prop      = propPlacements.get(propIndex);
 
-            Texture texture = resolvePropTexture(prop.propChar, prop.tileColumn, prop.tileRow);
-            if (texture == null) continue;
+            // generated-prop-art order 1: a migrated prop draws the current frame of its generated prop sheet.
+            GeneratedPropSheet sheet = resolvePropSheet(prop.propChar);
+            Texture texture;
+            int sheetFrame = 0;
+            if (sheet != null) {
+                texture    = sheet.bodyTexture();
+                sheetFrame = sheet.frameIndexAt(lightingTimeSeconds, prop.tileColumn, prop.tileRow);
+            } else if (isGeneratedProp(prop.propChar)) {
+                continue;   // R5: a migrated prop whose sheet failed to load is not drawn
+            } else {
+                texture = resolvePropTexture(prop.propChar, prop.tileColumn, prop.tileRow);
+                if (texture == null) continue;
+            }
+            int sourceWidth   = sheet != null ? sheet.frameWidth()  : texture.getWidth();
+            int sourceHeight  = sheet != null ? sheet.frameHeight() : texture.getHeight();
+            int sourceOriginX = sheet != null ? sheet.frameOriginX(sheetFrame) : 0;
+            int sourceOriginY = sheet != null ? sheet.frameOriginY(sheetFrame) : 0;
 
             float tileOffsetX = (prop.worldCenterX - playerWorldX) / CELL_SIZE;
             float tileOffsetY = (prop.worldCenterY - playerWorldY) / CELL_SIZE;
@@ -498,7 +572,7 @@ public class PropRenderer implements Renderable, Disposable {
                 // Hazards span the full tile footprint, decoupled from the source texture aspect.
                 spriteScreenWidth = fullWallLineHeight * HAZARD_CELL_WIDTH_FILL;
             } else {
-                float aspectRatio = (float) texture.getWidth() / texture.getHeight();
+                float aspectRatio = (float) sourceWidth / sourceHeight;
                 spriteScreenWidth = spriteScreenHeight * aspectRatio;
             }
 
@@ -530,8 +604,8 @@ public class PropRenderer implements Renderable, Disposable {
             if (clampedTop <= clampedBottom) continue;
 
             // Texture row clipping (same derivation as WallRenderer's wall stripe clipping).
-            int textureWidth  = texture.getWidth();
-            int textureHeight = texture.getHeight();
+            int textureWidth  = sourceWidth;
+            int textureHeight = sourceHeight;
             int texSrcY       = GameMath.wallTextureClipSrcY(
                                     drawTop, WALL_PROJECTION_SCREEN_HEIGHT,
                                     spriteScreenHeight, textureHeight);
@@ -621,7 +695,7 @@ public class PropRenderer implements Renderable, Disposable {
                 batch.draw(texture,
                            screenColumn * columnWidth, clampedBottom,
                            columnWidth, clampedTop - clampedBottom,
-                           texSrcX, texSrcY, 1, texSrcHeight,
+                           sourceOriginX + texSrcX, sourceOriginY + texSrcY, 1, texSrcHeight,
                            false, false);
 
                 // Elevated billboards (solid props + pickup items + stairs) are recorded so sprites
@@ -629,13 +703,27 @@ public class PropRenderer implements Renderable, Disposable {
                 // stains (corpse, blood, oil, energy scorch, dropped-shotgun decal) are excluded —
                 // enemies visually walk over those flat decals.
                 if (Level.isPropOccluder(prop.propChar)) {
-                    recordOccluderColumn(screenColumn, depth, texture, opacityMask,
-                            texSrcX, texSrcY, texSrcHeight, clampedBottom, clampedTop);
+                    if (sheet != null) {
+                        if (sheet.hasOpaqueRun(sheetFrame, texSrcX, texSrcY, texSrcHeight)) {
+                            occluderBuffer.record(screenColumn, depth, texture, sourceOriginX + texSrcX,
+                                    sourceOriginY + texSrcY, texSrcHeight, clampedBottom, clampedTop,
+                                    batch.getPackedColor());
+                        }
+                    } else {
+                        recordOccluderColumn(screenColumn, depth, texture, opacityMask,
+                                texSrcX, texSrcY, texSrcHeight, clampedBottom, clampedTop);
+                    }
                 }
             }
 
             drawMuzzleLightPass(texture, firstColumn, lastColumn, leftScreenColumn, columnSpan,
-                    textureWidth, texSrcY, texSrcHeight, clampedBottom, clampedTop, depth, columnWidth);
+                    textureWidth, sourceOriginX, sourceOriginY + texSrcY, texSrcHeight, clampedBottom, clampedTop,
+                    depth, columnWidth);
+            if (sheet != null) {
+                drawPropGlowPass(sheet.glowTexture(), firstColumn, lastColumn, leftScreenColumn, columnSpan,
+                        textureWidth, sourceOriginX, sourceOriginY + texSrcY, texSrcHeight, clampedBottom, clampedTop,
+                        depth, columnWidth);
+            }
         }
 
         // Ground items: weapon pickups and credit chips spawned by the level generator.
@@ -1016,6 +1104,7 @@ public class PropRenderer implements Renderable, Disposable {
     public void dispose() {
         batch.dispose();
         contactShadowTexture.dispose();
+        propSheets.dispose();
         disposeProp(genericWeaponFallbackTexture);
         disposeProp(weaponPickupGlowTexture);
         for (Texture texture : weaponPickupTextures.values()) {
@@ -1071,12 +1160,10 @@ public class PropRenderer implements Renderable, Disposable {
         registry.register("prop_radioactive_barrel",
                 () -> loadOrGenerate(PROP_BARREL_RADIOACTIVE_PATH, generateBarrelTexture(false)));
         registry.register("prop_explosive_barrel",   () -> generateBarrelTexture(true));
-        registry.register("prop_terminal",           PropRenderer::generateTerminalTexture);
         registry.register("prop_locker",             PropRenderer::generateLockerTexture);
         registry.register("prop_crate",              PropRenderer::generateCrateTexture);
         registry.register("prop_camera",             PropRenderer::generateCameraTexture);
         registry.register("prop_generator",          PropRenderer::generateGeneratorTexture);
-        registry.register("prop_biopod",             PropRenderer::generateBioPodTexture);
         registry.register("prop_weapon_rack",        PropRenderer::generateWeaponRackTexture);
         registry.register("prop_vendor",             PropRenderer::generateVendorTexture);
         registry.register("prop_specimen_tank",      PropRenderer::generateSpecimenTankTexture);
@@ -1139,7 +1226,7 @@ public class PropRenderer implements Renderable, Disposable {
         map.put('H', generateFieldMedkitTexture());
         map.put('a', generateArmourShardTexture());
         map.put('A', generateSecurityVestTexture());
-        map.put('>', generatePortalTexture());
+        // '>' (the exit portal) is a generated prop sheet (generated-prop-art order 1), not a texture here.
         map.put('6', generateBulletClipTexture());    // BULLETS — copper rifle cartridges in a clip
         map.put('7', generateShotgunShellsTexture());  // SHELLS  — red-hull shells on brass bases
         map.put('8', generatePlasmaCellTexture());     // CELLS   — glowing cyan energy canister
@@ -1499,88 +1586,6 @@ public class PropRenderer implements Renderable, Disposable {
             pixmap.setColor(0.12f, 0.40f, 0.12f, 1f);
             pixmap.fillRectangle(4, 59, 56, 3);
         }
-        return finalize(pixmap);
-    }
-
-    private static Texture generateTerminalTexture() {
-        Pixmap pixmap = new Pixmap(96, 96, Pixmap.Format.RGBA8888);
-        pixmap.setColor(0f, 0f, 0f, 0f);
-        pixmap.fill();
-
-        // ── Lower cabinet ───────────────────────────────────────────────────
-        beveledPanel(pixmap, 12, 40, 72, 54, 0.17f, 0.19f, 0.24f, 1.7f, 0.45f);
-        // Cooling vent slits.
-        pixmap.setColor(0.09f, 0.10f, 0.13f, 1f);
-        for (int ventRow = 66; ventRow <= 80; ventRow += 4) {
-            pixmap.fillRectangle(20, ventRow, 36, 2);
-        }
-        // ID label plate with fake engraved text.
-        pixmap.setColor(0.45f, 0.47f, 0.52f, 1f);
-        pixmap.fillRectangle(60, 66, 18, 14);
-        pixmap.setColor(0.16f, 0.17f, 0.20f, 1f);
-        pixmap.fillRectangle(62, 69, 14, 1);
-        pixmap.fillRectangle(62, 72, 11, 1);
-        pixmap.fillRectangle(62, 75, 14, 1);
-        // Cabinet bolts + hazard trim.
-        boltStud(pixmap, 16, 44); boltStud(pixmap, 80, 44);
-        boltStud(pixmap, 16, 86); boltStud(pixmap, 80, 86);
-        hazardStripeBand(pixmap, 12, 88, 72, 4, 0.86f, 0.72f, 0.10f);
-
-        // ── Monitor housing ─────────────────────────────────────────────────
-        beveledPanel(pixmap, 8, 6, 80, 40, 0.22f, 0.24f, 0.30f, 1.6f, 0.5f);
-        pixmap.setColor(0.07f, 0.08f, 0.10f, 1f);
-        pixmap.fillRectangle(14, 10, 68, 32);
-        // Screen — cyan-teal vertical gradient (brighter toward the top).
-        for (int screenRow = 12; screenRow < 40; screenRow++) {
-            float toBottom = (screenRow - 12) / 27f;
-            pixmap.setColor(0.06f + 0.06f * (1f - toBottom),
-                            0.34f + 0.16f * (1f - toBottom),
-                            0.40f + 0.18f * (1f - toBottom), 1f);
-            pixmap.fillRectangle(16, screenRow, 64, 1);
-        }
-        // Scanlines.
-        pixmap.setColor(0.04f, 0.20f, 0.24f, 0.5f);
-        for (int scanRow = 12; scanRow < 40; scanRow += 2) {
-            pixmap.fillRectangle(16, scanRow, 64, 1);
-        }
-        // Header bar + readout text rows of varied length.
-        pixmap.setColor(0.45f, 0.92f, 0.98f, 1f);
-        pixmap.fillRectangle(18, 13, 60, 2);
-        pixmap.setColor(0.30f, 0.80f, 0.86f, 1f);
-        int[] textRowY     = { 18, 22, 26, 30 };
-        int[] textRowWidth = { 40, 30, 52, 24 };
-        for (int textIndex = 0; textIndex < textRowY.length; textIndex++) {
-            pixmap.fillRectangle(18, textRowY[textIndex], textRowWidth[textIndex], 2);
-        }
-        // Waveform blips along the bottom of the screen.
-        pixmap.setColor(0.55f, 0.95f, 1.00f, 1f);
-        int[] waveHeight = { 2, 5, 3, 6, 2, 4, 7, 3 };
-        for (int waveIndex = 0; waveIndex < waveHeight.length; waveIndex++) {
-            pixmap.fillRectangle(18 + waveIndex * 5, 38 - waveHeight[waveIndex], 2, waveHeight[waveIndex]);
-        }
-        // Cursor block + glowing screen rim.
-        pixmap.setColor(0.60f, 1.00f, 1.00f, 1f);
-        pixmap.fillRectangle(44, 30, 5, 2);
-        pixmap.setColor(0.30f, 0.85f, 0.95f, 0.5f);
-        drawRectOutline(pixmap, 15, 11, 66, 30);
-        // Indicator LED stack on the housing's right edge.
-        pixmap.setColor(0.25f, 0.90f, 0.35f, 1f); pixmap.fillRectangle(83, 12, 3, 3);
-        pixmap.setColor(0.95f, 0.70f, 0.15f, 1f); pixmap.fillRectangle(83, 18, 3, 3);
-        pixmap.setColor(0.90f, 0.25f, 0.20f, 1f); pixmap.fillRectangle(83, 24, 3, 3);
-
-        // ── Control deck between monitor and cabinet ────────────────────────
-        pixmap.setColor(0.26f, 0.28f, 0.34f, 1f);
-        pixmap.fillRectangle(14, 48, 68, 12);
-        pixmap.setColor(0.14f, 0.15f, 0.19f, 1f);
-        for (int keyRow = 0; keyRow < 2; keyRow++) {
-            for (int keyColumn = 0; keyColumn < 10; keyColumn++) {
-                pixmap.fillRectangle(18 + keyColumn * 6, 50 + keyRow * 5, 4, 3);
-            }
-        }
-        // Function buttons (red / amber / green).
-        pixmap.setColor(0.90f, 0.25f, 0.20f, 1f); pixmap.fillRectangle(64, 50, 5, 4);
-        pixmap.setColor(0.95f, 0.70f, 0.15f, 1f); pixmap.fillRectangle(71, 50, 5, 4);
-        pixmap.setColor(0.25f, 0.90f, 0.35f, 1f); pixmap.fillRectangle(64, 55, 5, 4);
         return finalize(pixmap);
     }
 
@@ -2265,226 +2270,6 @@ public class PropRenderer implements Renderable, Disposable {
         return finalize(pixmap);
     }
 
-    // UAC Interdimensional Rift Portal ('>') — full-height gateway standing as tall as walls.
-    // High-resolution 192×256 render: gradient-bevelled steel frame with rivets and a recessed
-    // inner channel, a swirling 3-arm energy vortex (void-core → indigo → deep blue → electric
-    // blue → cyan → near-white edge flash) carved by an event-horizon dark ring and fine
-    // concentric shimmer rings, glowing corner energy nodes, segmented vertical conduits, a row of
-    // top discharge emitters, and diagonal UAC hazard chevrons at the base. Beacon visible from the
-    // far end of any corridor; the 3:4 aspect ratio matches the previous 48×64 sprite exactly.
-    private static Texture generatePortalTexture() {
-        int textureWidth  = 192;
-        int textureHeight = 256;
-        Pixmap pixmap = new Pixmap(textureWidth, textureHeight, Pixmap.Format.RGBA8888);
-
-        // --- Steel frame base with a diagonal brushed gradient (lighter top-left) ---
-        for (int pixelRow = 0; pixelRow < textureHeight; pixelRow++) {
-            for (int pixelColumn = 0; pixelColumn < textureWidth; pixelColumn++) {
-                float diagonal = (pixelColumn + pixelRow) / (float)(textureWidth + textureHeight);
-                float brushNoise = (portalNoise(pixelColumn, pixelRow) - 0.5f) * 0.04f;
-                float shade = 0.30f - diagonal * 0.16f + brushNoise;
-                pixmap.setColor(shade * 0.92f, shade * 0.98f, shade * 1.15f, 1f);
-                pixmap.drawPixel(pixelColumn, pixelRow);
-            }
-        }
-
-        // Bevel highlight: top and left edges lighter (4 px)
-        pixmap.setColor(0.34f, 0.36f, 0.42f, 1f);
-        pixmap.fillRectangle(0, 0, textureWidth, 4);
-        pixmap.fillRectangle(0, 0, 4, textureHeight);
-        // Bevel shadow: bottom and right edges darker (4 px)
-        pixmap.setColor(0.07f, 0.07f, 0.09f, 1f);
-        pixmap.fillRectangle(0, textureHeight - 4, textureWidth, 4);
-        pixmap.fillRectangle(textureWidth - 4, 0, 4, textureHeight);
-
-        // --- Frame rivets — bolt heads with a highlight dot, set into the visible steel bands
-        // (left edge, right edge, top lintel) so the energy field never paints over them ---
-        int[][] rivetPositions = {
-                // top lintel
-                { 8, 8 }, { 64, 8 }, { 96, 8 }, { 128, 8 }, { 184, 8 },
-                // left edge
-                { 8, 56 }, { 8, 112 }, { 8, 168 }, { 8, 218 },
-                // right edge
-                { 184, 56 }, { 184, 112 }, { 184, 168 }, { 184, 218 }
-        };
-        for (int[] rivet : rivetPositions) {
-            pixmap.setColor(0.06f, 0.06f, 0.08f, 1f);
-            pixmap.fillCircle(rivet[0], rivet[1], 4);
-            pixmap.setColor(0.40f, 0.42f, 0.48f, 1f);
-            pixmap.fillCircle(rivet[0], rivet[1], 2);
-            pixmap.setColor(0.62f, 0.64f, 0.70f, 1f);
-            pixmap.drawPixel(rivet[0] - 1, rivet[1] - 1);
-        }
-
-        // --- Portal opening bounds (inside the steel frame) ---
-        int portalLeft   = 16;
-        int portalTop    = 16;
-        int portalRight  = 176;  // exclusive — columns 176..191 are the right frame
-        int portalBottom = 228;  // exclusive — rows 228..255 are the hazard base
-        int portalWidth  = portalRight  - portalLeft;   // 160
-        int portalHeight = portalBottom - portalTop;    // 212
-
-        // Recessed inner channel: a dark groove framing the opening
-        pixmap.setColor(0.05f, 0.05f, 0.07f, 1f);
-        pixmap.fillRectangle(portalLeft - 3, portalTop - 3, portalWidth + 6, 3);
-        pixmap.fillRectangle(portalLeft - 3, portalBottom,    portalWidth + 6, 3);
-        pixmap.fillRectangle(portalLeft - 3, portalTop - 3, 3, portalHeight + 6);
-        pixmap.fillRectangle(portalRight,    portalTop - 3, 3, portalHeight + 6);
-
-        float centerX = portalLeft + portalWidth  / 2f - 0.5f;
-        float centerY = portalTop  + portalHeight / 2f - 0.5f;
-        float halfWidth  = portalWidth  / 2f;
-        float halfHeight = portalHeight / 2f;
-
-        // --- Energy field: pixel-by-pixel swirling vortex ---
-        for (int pixelRow = portalTop; pixelRow < portalBottom; pixelRow++) {
-            for (int pixelColumn = portalLeft; pixelColumn < portalRight; pixelColumn++) {
-                float normalizedX = (pixelColumn - centerX) / halfWidth;
-                float normalizedY = (pixelRow    - centerY) / halfHeight;
-                float distanceFromCenter =
-                        (float) Math.sqrt(normalizedX * normalizedX + normalizedY * normalizedY);
-                float angleRadians = (float) Math.atan2(normalizedY, normalizedX);
-
-                float red, green, blue;
-                if (distanceFromCenter < 0.10f) {
-                    // Void core
-                    red = 0.01f; green = 0.005f; blue = 0.05f;
-                } else if (distanceFromCenter < 0.28f) {
-                    float interpolationFactor = (distanceFromCenter - 0.10f) / 0.18f;
-                    red   = 0.01f  + interpolationFactor * 0.17f;
-                    green = 0.005f + interpolationFactor * 0.035f;
-                    blue  = 0.05f  + interpolationFactor * 0.55f;
-                } else if (distanceFromCenter < 0.48f) {
-                    float interpolationFactor = (distanceFromCenter - 0.28f) / 0.20f;
-                    red   = 0.18f + interpolationFactor * (-0.10f);
-                    green = 0.04f + interpolationFactor * 0.11f;
-                    blue  = 0.60f + interpolationFactor * 0.30f;
-                } else if (distanceFromCenter < 0.66f) {
-                    float interpolationFactor = (distanceFromCenter - 0.48f) / 0.18f;
-                    red   = 0.08f + interpolationFactor * (-0.03f);
-                    green = 0.15f + interpolationFactor * 0.40f;
-                    blue  = 0.90f + interpolationFactor * 0.08f;
-                } else if (distanceFromCenter < 0.84f) {
-                    float interpolationFactor = (distanceFromCenter - 0.66f) / 0.18f;
-                    red   = 0.05f + interpolationFactor * 0.35f;
-                    green = 0.55f + interpolationFactor * 0.30f;
-                    blue  = 0.98f + interpolationFactor * 0.02f;
-                } else if (distanceFromCenter <= 1.0f) {
-                    float interpolationFactor = (distanceFromCenter - 0.84f) / 0.16f;
-                    red   = 0.40f + interpolationFactor * 0.55f;
-                    green = 0.85f + interpolationFactor * 0.13f;
-                    blue  = 1.00f;
-                } else {
-                    // Corner pixels (outside ellipse but inside rectangle) — recessed groove
-                    red = 0.05f; green = 0.05f; blue = 0.07f;
-                }
-
-                if (distanceFromCenter <= 1.0f) {
-                    // Swirling spiral arms: 3 arms wound by distance into a vortex
-                    float spiralPhase = angleRadians * 3f + distanceFromCenter * 11f;
-                    float spiralArm   = (float) Math.cos(spiralPhase) * 0.5f + 0.5f;
-                    float armStrength = 0.30f * (1.0f - distanceFromCenter * 0.4f);
-                    float spiralFactor = 1.0f - armStrength + spiralArm * armStrength * 2f;
-
-                    // Fine concentric shimmer rings layered on top of the swirl
-                    float ringShimmer = (float) Math.cos(distanceFromCenter * Math.PI * 16) * 0.5f + 0.5f;
-                    float ringStrength = 0.12f * (1.0f - distanceFromCenter);
-                    float ringFactor = 1.0f - ringStrength + ringShimmer * ringStrength * 2f;
-
-                    // Per-pixel plasma grain
-                    float grain = 0.94f + portalNoise(pixelColumn, pixelRow) * 0.12f;
-
-                    float factor = spiralFactor * ringFactor * grain;
-                    red   = Math.min(1f, red   * factor);
-                    green = Math.min(1f, green * factor);
-                    blue  = Math.min(1f, blue  * factor);
-
-                    // Event-horizon dark ring: dims a thin band so the core reads as a throat
-                    float horizon = Math.abs(distanceFromCenter - 0.40f);
-                    if (horizon < 0.05f) {
-                        float dim = 0.45f + horizon / 0.05f * 0.55f;
-                        red *= dim; green *= dim; blue *= dim;
-                    }
-                }
-
-                pixmap.setColor(red, green, blue, 1f);
-                pixmap.drawPixel(pixelColumn, pixelRow);
-            }
-        }
-
-        // --- Bright cyan energy border around the portal opening (2 px) ---
-        pixmap.setColor(0.55f, 0.88f, 1.00f, 1f);
-        pixmap.fillRectangle(portalLeft, portalTop, portalWidth, 2);                 // top
-        pixmap.fillRectangle(portalLeft, portalBottom - 2, portalWidth, 2);          // bottom
-        pixmap.fillRectangle(portalLeft, portalTop, 2, portalHeight);                // left
-        pixmap.fillRectangle(portalRight - 2, portalTop, 2, portalHeight);           // right
-
-        // --- Corner energy nodes (bright glowing discs at portal mouth corners) ---
-        int[][] cornerNodes = {
-                { portalLeft,  portalTop    },
-                { portalRight, portalTop    },
-                { portalLeft,  portalBottom },
-                { portalRight, portalBottom }
-        };
-        for (int[] node : cornerNodes) {
-            pixmap.setColor(0.40f, 0.80f, 1.00f, 1f);
-            pixmap.fillCircle(node[0], node[1], 6);
-            pixmap.setColor(0.95f, 0.99f, 1.00f, 1f);
-            pixmap.fillCircle(node[0], node[1], 3);
-        }
-
-        // --- Segmented vertical energy conduits on the inner frame edges ---
-        for (int conduitRow = portalTop; conduitRow < portalBottom; conduitRow += 16) {
-            boolean bright = ((conduitRow - portalTop) / 16) % 2 == 0;
-            pixmap.setColor(bright ? 0.45f : 0.20f, bright ? 0.85f : 0.55f, 1.00f, 1f);
-            pixmap.fillRectangle(7,                  conduitRow, 3, 12);  // left conduit
-            pixmap.fillRectangle(textureWidth - 10,  conduitRow, 3, 12);  // right conduit
-        }
-
-        // --- Top arch energy emitters (row of discharge ports across the lintel) ---
-        for (int emitterIndex = 0; emitterIndex < 5; emitterIndex++) {
-            int emitterX = 28 + emitterIndex * 32;
-            boolean center = emitterIndex == 2;
-            pixmap.setColor(center ? 0.85f : 0.60f, center ? 0.96f : 0.90f, 1.00f, 1f);
-            pixmap.fillRectangle(emitterX, 0, center ? 24 : 18, center ? 10 : 8);
-            // Discharge glow bleeding down into the frame
-            pixmap.setColor(0.30f, 0.60f, 0.95f, 1f);
-            pixmap.fillRectangle(emitterX + 4, center ? 10 : 8, center ? 16 : 10, 4);
-        }
-
-        // --- Diagonal UAC hazard chevrons at the base (yellow / black) ---
-        int hazardCenterColumn = textureWidth / 2;
-        for (int hazardRow = portalBottom; hazardRow < textureHeight - 4; hazardRow++) {
-            for (int hazardColumn = 4; hazardColumn < textureWidth - 4; hazardColumn++) {
-                int mirrored = Math.abs(hazardColumn - hazardCenterColumn);
-                boolean isYellow = (((mirrored + hazardRow) / 12) % 2) == 0;
-                pixmap.setColor(isYellow ? 0.92f : 0.07f,
-                                isYellow ? 0.78f : 0.07f,
-                                isYellow ? 0.03f : 0.06f,
-                                1f);
-                pixmap.drawPixel(hazardColumn, hazardRow);
-            }
-        }
-        // Bright divider line at the portal-base boundary
-        pixmap.setColor(0.55f, 0.88f, 1.00f, 1f);
-        pixmap.fillRectangle(0, portalBottom, textureWidth, 2);
-
-        // --- Energy spark accents scattered near the portal border ---
-        int[][] sparks = {
-                { 28, 32 }, { 162, 32 }, { 28, 200 }, { 162, 200 },
-                { 20, 96 }, { 170, 96 }, { 20, 150 }, { 170, 150 },
-                { 96, 24 }, { 96, 214 }
-        };
-        for (int[] spark : sparks) {
-            pixmap.setColor(0.80f, 0.95f, 1.00f, 1f);
-            pixmap.fillCircle(spark[0], spark[1], 2);
-            pixmap.setColor(1.00f, 1.00f, 1.00f, 1f);
-            pixmap.drawPixel(spark[0], spark[1]);
-        }
-
-        return finalize(pixmap);
-    }
-
     // Deterministic value noise in [0,1] for procedural texture grain. Pure function of (x, y) so
     // the portal sprite is identical on every run; uses an integer hash to avoid object allocation.
     private static float portalNoise(int x, int y) {
@@ -2605,85 +2390,6 @@ public class PropRenderer implements Renderable, Disposable {
         }
         // Hazard chevron at the base.
         hazardStripeBand(pixmap, 12, 84, 72, 6, 0.85f, 0.72f, 0.18f);
-        return finalize(pixmap);
-    }
-
-    private static Texture generateBioPodTexture() {
-        Pixmap pixmap = new Pixmap(96, 144, Pixmap.Format.RGBA8888);
-        pixmap.setColor(0f, 0f, 0f, 0f);
-        pixmap.fill();
-
-        final int glassLeft = 20, glassRight = 76, glassTop = 22, glassBottom = 124;
-
-        // ── Base pedestal with control panel ────────────────────────────────
-        beveledPanel(pixmap, 10, 124, 76, 20, 0.24f, 0.26f, 0.30f, 1.5f, 0.5f);
-        pixmap.setColor(0.08f, 0.20f, 0.24f, 1f);
-        pixmap.fillRectangle(16, 128, 30, 12);            // readout screen
-        pixmap.setColor(0.30f, 0.85f, 0.92f, 1f);
-        pixmap.fillRectangle(18, 130, 24, 2);
-        pixmap.fillRectangle(18, 133, 16, 2);
-        pixmap.fillRectangle(18, 136, 20, 2);
-        pixmap.setColor(0.30f, 0.95f, 0.40f, 1f); pixmap.fillRectangle(52, 129, 4, 4);
-        pixmap.setColor(0.95f, 0.70f, 0.20f, 1f); pixmap.fillRectangle(60, 129, 4, 4);
-        pixmap.setColor(0.90f, 0.25f, 0.20f, 1f); pixmap.fillRectangle(68, 129, 4, 4);
-        pixmap.setColor(0.40f, 0.42f, 0.48f, 1f); pixmap.fillRectangle(52, 135, 20, 4);
-        boltStud(pixmap, 14, 128); boltStud(pixmap, 82, 128);
-
-        // ── Top cap dome with valve + emitter strip ─────────────────────────
-        beveledPanel(pixmap, 14, 4, 68, 18, 0.26f, 0.28f, 0.32f, 1.5f, 0.5f);
-        pixmap.setColor(0.36f, 0.38f, 0.44f, 1f);
-        pixmap.fillRectangle(22, 6, 52, 4);
-        pixmap.setColor(0.30f, 0.32f, 0.36f, 1f);
-        pixmap.fillRectangle(40, 0, 16, 6);
-        pixmap.setColor(0.55f, 0.90f, 0.95f, 1f);
-        pixmap.fillRectangle(34, 17, 28, 3);
-        boltStud(pixmap, 18, 8); boltStud(pixmap, 78, 8);
-
-        // ── Vertical frame struts joining the caps ──────────────────────────
-        pixmap.setColor(0.22f, 0.24f, 0.28f, 1f);
-        pixmap.fillRectangle(glassLeft - 4, glassTop, 4, glassBottom - glassTop);
-        pixmap.fillRectangle(glassRight,    glassTop, 4, glassBottom - glassTop);
-
-        // ── Glass tube fluid (cylindrical green shading) ────────────────────
-        for (int column = glassLeft; column < glassRight; column++) {
-            float across = (column - glassLeft) / (float) (glassRight - glassLeft - 1);
-            float curve  = 1f - Math.min(1f, Math.abs(across - 0.40f) * 1.9f);
-            pixmap.setColor(0.10f + 0.16f * curve, 0.34f + 0.34f * curve, 0.28f + 0.26f * curve, 1f);
-            pixmap.fillRectangle(column, glassTop, 1, glassBottom - glassTop);
-        }
-        // Cyan containment glow rings around the glass.
-        pixmap.setColor(0.40f, 0.90f, 0.95f, 0.8f);
-        for (int ringY = glassTop + 14; ringY < glassBottom - 8; ringY += 28) {
-            pixmap.fillRectangle(glassLeft, ringY, glassRight - glassLeft, 2);
-        }
-        // Curled specimen silhouette with a faint internal glow.
-        int specimenX = 48, specimenY = 78;
-        pixmap.setColor(0.07f, 0.16f, 0.12f, 1f);
-        pixmap.fillCircle(specimenX, specimenY, 16);
-        pixmap.fillCircle(specimenX + 8, specimenY - 12, 8);
-        pixmap.fillTriangle(specimenX - 14, specimenY + 2, specimenX - 2, specimenY + 6, specimenX - 6, specimenY + 18);
-        pixmap.fillTriangle(specimenX + 10, specimenY + 8, specimenX + 18, specimenY + 4, specimenX + 18, specimenY + 20);
-        pixmap.setColor(0.20f, 0.45f, 0.32f, 1f);
-        pixmap.fillCircle(specimenX + 2, specimenY - 2, 6);
-        pixmap.setColor(0.85f, 0.40f, 0.45f, 1f);
-        pixmap.drawPixel(specimenX + 9, specimenY - 13);
-        // Glass highlight streaks (strong left, faint right).
-        pixmap.setColor(0.80f, 0.95f, 0.92f, 0.7f);
-        pixmap.fillRectangle(glassLeft + 3, glassTop + 2, 3, glassBottom - glassTop - 6);
-        pixmap.setColor(0.60f, 0.80f, 0.78f, 0.4f);
-        pixmap.fillRectangle(glassRight - 6, glassTop + 6, 1, glassBottom - glassTop - 14);
-        // Rising bubbles of varied size.
-        pixmap.setColor(0.80f, 0.95f, 0.90f, 1f);
-        int[] bubbleColumns = { 34, 60, 44, 30, 64, 50, 38 };
-        int[] bubbleRows    = { 110, 100, 90, 70, 64, 48, 36 };
-        int[] bubbleRadii   = { 2, 1, 2, 1, 2, 1, 2 };
-        for (int bubbleIndex = 0; bubbleIndex < bubbleColumns.length; bubbleIndex++) {
-            pixmap.fillCircle(bubbleColumns[bubbleIndex], bubbleRows[bubbleIndex], bubbleRadii[bubbleIndex]);
-        }
-        // Condensation frost patches near the top of the glass.
-        pixmap.setColor(0.70f, 0.85f, 0.88f, 0.5f);
-        pixmap.fillRectangle(glassLeft + 2, glassTop + 2, 10, 6);
-        pixmap.fillRectangle(glassRight - 14, glassTop + 4, 10, 5);
         return finalize(pixmap);
     }
 

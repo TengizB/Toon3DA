@@ -1,6 +1,7 @@
 package ge.tbegvadze.toon3d.render.tilesetgfx;
 
 import ge.tbegvadze.toon3d.render.PropRenderer;
+import ge.tbegvadze.toon3d.render.propvisual.GeneratedPropRegistry;
 import ge.tbegvadze.toon3d.tileset.TilesetRegistries;
 
 import java.util.Set;
@@ -70,10 +71,11 @@ public final class TilesetGfxBootstrap {
     /**
      * Fails loudly if the generator id set and the sprite-catalog id set differ in either direction. Keeps
      * the render-side companion honest: every {@code EnvironmentSpriteDefinition} must have a matching
-     * texture generator and vice-versa.
+     * texture generator and vice-versa - except a sprite drawn from a generated prop sheet
+     * ({@link GeneratedPropRegistry}, generated-prop-art order 1), which has no Pixmap generator by design (PS6).
      */
     static void assertGeneratorsMatchCatalog(TextureGeneratorRegistry registry) {
-        Set<String> catalogIds   = TilesetRegistries.sprites().ids();
+        Set<String> catalogIds   = expectedGeneratorIds();
         Set<String> generatorIds = registry.ids();
         if (!catalogIds.equals(generatorIds)) {
             Set<String> spritesWithoutGenerator = new TreeSet<>(catalogIds);
@@ -85,5 +87,12 @@ public final class TilesetGfxBootstrap {
                             + "Sprites missing a generator: " + spritesWithoutGenerator + "; "
                             + "generators missing a sprite: " + generatorsWithoutSprite);
         }
+    }
+
+    /** The sprite ids that must have a Pixmap generator: the catalog minus the generated prop sheets. */
+    static Set<String> expectedGeneratorIds() {
+        Set<String> ids = new TreeSet<>(TilesetRegistries.sprites().ids());
+        ids.removeIf(GeneratedPropRegistry::isGeneratedSprite);
+        return ids;
     }
 }

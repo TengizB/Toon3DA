@@ -31,6 +31,7 @@ CONTENTS
   11. Verification and the owner approval gate
   12. Lessons already paid for
   13. Recipes (add a sprite / a clip / a material / other content)
+  14. Props: environment objects                              [shipped: generated-prop-art order 1]
 
 
 ====================================================================================================
@@ -737,8 +738,106 @@ WALLS, DOORS, COLUMNS, FLOORS, CEILINGS
   Made with this kit, but their method lives in docs/wall-art-creation-guide.txt (tiling, trim lines,
   region sets, placement, the no-focal-point and no-figure rules). Read that guide, not this section.
 
-OTHER CONTENT (props, pickups, effect particles, room dressing)
+ADD A PROP (environment object) -> section 14 ADD A PROP.
+
+OTHER CONTENT (pickups, effect particles, room dressing)
   The same kit and the same rules apply. A new kind of content gets its own builder file beside
-  bestiary.py (e.g. props.py), its own output folder under assets/, and its own section here.
+  bestiary.py (like props.py), its own output folder under assets/, and its own section here.
   WALLS, DOORS, COLUMNS, FLOORS, CEILINGS: walls.py + <region>_walls.py -> assets/textures/walls/generated/;
   THE METHOD for them lives in docs/wall-art-creation-guide.txt (not here).
+
+
+====================================================================================================
+14. PROPS: ENVIRONMENT OBJECTS (generated-prop-art series)
+====================================================================================================
+The environment objects - terminals, tubes, machines, crates, the exit portal - made with this kit. The series
+is .claude/agents/ideas/generated-prop-art.txt (+ -order-<n>); its brief and rules PS1-PS8 are binding.
+
+14.1 THE OWNER'S BRIEF (2026-10-23)
+  - Reimagine, never copy: the old Pixmap props in PropRenderer are not reference material (N2).
+  - What it says it is, it is: a terminal is a terminal. The look changes, never the object or its gameplay.
+  - NEON ACCENTS: the levels are grey / blue-grey, so props carry the bright colour - cold lab and steel bodies
+    (livery, livery_dk, steel_lt, gunmetal, darkmetal, frost) with one or two glowing NEON or RADIOACTIVE accents
+    on their emissive parts only (screens, lamps, keys, fluid, energy). This is the owner's exception to N4 / V5
+    for props (generated-prop-art.txt D1). Never the keycard inks; never on an enemy.
+  - Living or powered things animate (tubes, screens, cores, the portal); stationary things are stills.
+  - A specimen tube runs floor to ceiling; the portal is full size.
+
+14.2 THE NEON INKS (kit.MATERIALS, appended last)
+  phosphor     CRT green: terminal text and status lamps
+  neon_cyan    specimen fluid, ring lights, backlit keys (brighter and more saturated than the facility cyan)
+  rad          radioactive lime: hazard lamps, warning strips, emitter studs
+  Big glowing areas (a fluid column, a vortex, a screen's text) are PAINTED with numpy into the frame after the
+  kit render, from these inks' ramps - the kit's translucent materials wash out to a pale tint at that size.
+
+14.3 THE CANVAS
+  The bottom row is the FLOOR (the engine stands the frame on the floor line). A full-height prop (height 1.0 in
+  RenderConstants) also has its top row on the CEILING: build conduits and clamps running off the top edge.
+  The frame's aspect is the billboard's aspect (width = height x frameWidth / frameHeight). One wall tile is 256
+  texels tall, so a full-height prop is 256 px tall and a 0.80 prop about 200. Leave air at the sides for the bloom.
+  Order 1: terminal 160x200 (0.80), bio_pod 112x256 (1.0), portal 224x256 (1.0).
+
+14.4 THE BAKE (props.py)
+  - SMOOTH (kit.render smooth=2), as the walls: no dither, no grain speckle, anti-aliased edges (PS2).
+  - One function per prop returns frame(k) -> (body RGBA, glow RGBA). Parts that do not change are rendered once
+    and cached by state (the terminal's lamps, the portal's lamp chase), then the moving content is painted.
+  - Layering by separate renders + alpha compositing when a part must sit BEHIND glass (the specimen behind the
+    fluid). Rule: wherever an opaque front part covers a glowing back part, cut the back part out of the glow
+    (glow alpha *= 1 - front alpha) - the glow is drawn on top in game and would shine through the steel.
+  - BLOOM: props.bloom() puts a soft halo in each ink's own colour around every glowing pixel, INTO the glow image
+    (alpha <= cap). That is the neon. Keep the cap <= 0.55 or the body under it washes out.
+  - Loops are seamless: every motion is periodic in the frame count (a scroll that wraps its text stream, bubbles
+    travelling whole laps, a spiral turned by exactly one arm spacing).
+  - One Organization stencil per prop (kit.stencil), like an enemy's serial (N6).
+
+14.5 THE OUTPUT (PS4) - assets/textures/props/generated/
+  <id>.prop.png   body frames in a grid (frame k at column k % columns, row k // columns), RGBA
+  <id>.glow.png   the glow frames on the same grid: emissive pixels + bloom
+  <id>.prop.json  {"version": 1, "id", "frameWidth", "frameHeight", "frameCount", "columns", "frameSeconds"}
+  Sheet <= 2048x2048. Deterministic: two bakes are cmp-identical. After a kit change, enemies and walls must still
+  regenerate byte-identical.
+    cd .claude/skills/enemy-art
+    python3 props.py ../../../assets/textures/props/generated                  # ship every prop
+    python3 props.py /tmp/p --preview /tmp/p/preview terminal                  # + GIF + still + sheet.png
+
+14.6 THE RUNTIME (render/propvisual + PropRenderer)
+  - GeneratedPropRegistry.bootstrap() is THE CATALOG: registerSprite(spriteId, sheetId) for a tileset prop (the
+    binding follows the SPRITE, since the symbol is chosen per level by the palette) or registerFixedChar(char,
+    sheetId) for a fixed gameplay prop (the portal '>'). One row per prop; no switch (PS5).
+  - GeneratedPropSheets loads every registered sheet per PropRenderer (per floor) and disposes them with it. A
+    sheet that fails to load is logged and its prop is simply not drawn (R5).
+  - Frame = GameMath.wallGlowFrameIndex(time, per-tile phase, ...) - neighbouring copies never pulse together.
+  - BODY pass = the ordinary prop pass on the frame's rect (shade x tile brightness x mood grade, red alert, muzzle
+    light, contact shadow, occluder record of the frame's opaque columns). The portal's body stays ungraded.
+  - GLOW pass = the glow frame, NORMAL blend, white, alpha = the wall glow's distance fade (WALL_GLOW_FADE_*) x
+    the floor's light multiplier: walls and props glow alike, BLACKOUT dims both.
+  - A migrated sprite has no Pixmap generator (TilesetGfxBootstrap.expectedGeneratorIds() excludes it, PS6).
+  - Heights stay in RenderConstants (PROP_HEIGHT_TERMINAL 0.80, PROP_BIOPOD_HEIGHT 1.0, PORTAL_SPRITE_HEIGHT 1.0).
+
+14.7 THE ORDER-1 PROPS
+  terminal  a free-standing console: darkmetal pedestal with a stencilled panel and a rad status strip, a sloped
+            keyboard deck with a few neon_cyan / rad backlit keys, a deep steel CRT housing; the screen shows
+            pseudo-text in phosphor green (stencil-font letters in random words, an "ORG LOG" header bar,
+            scanlines) scrolling one line every two frames with a blinking block cursor; three indicator lamps
+            blink. 32 frames @ 0.125 s.
+  bio_pod   a floor-to-ceiling specimen tube: conduits into the ceiling, a steel collar, neon_cyan ring lights, a
+            painted column of neon cyan fluid (deep at the glass, hot down the middle, drifting caustics), a
+            hunched faceless grown specimen on a feeding line plugged into a harvest port on its back (the story
+            detail), backlit to a dark teal silhouette, bubbles rising in whole laps, two glass highlights, a
+            steel plinth with a rad hazard strip. 24 frames @ 0.125 s.
+  portal    (recreated at the owner's request: rectangular, walk-in, cyan) a gate on a raised steel platform: two
+            steel pillars, a header beam into the ceiling with chasing cyan emitter lamps, a person-sized doorway
+            outlined by neon_cyan strips and filled with a painted cyan field of rectangles receding to a bright
+            vanishing core at eye height (they slide inward one spacing per loop), a hot rim, motes rising, its
+            light pooling on the platform. The owner rejected a round ring-gate: an exit must read as a DOOR. 16
+            frames @ 1/12 s. [first design, removed: a ring with a violet vortex]
+
+ADD A PROP
+  [ ] brief from the master (14.1): what it IS, its cold body materials, its one or two neon accents, still or
+      animated, its height
+  [ ] a make_<prop>() in props.py + one PROPS row; new inks appended last to kit.MATERIALS if needed
+  [ ] bake + preview; deterministic; enemies + walls byte-identical after any kit change
+  [ ] one GeneratedPropRegistry row; its height constant in RenderConstants
+  [ ] its old Pixmap generator and TextureGeneratorRegistry row deleted (PS6)
+  [ ] in-engine screenshots (run-game: lookat:SYMBOL:0:2), default mood + one other; owner approval (PS7)
+  [ ] docs: 14.7 here, the prop's row in docs/tile-symbols.txt
