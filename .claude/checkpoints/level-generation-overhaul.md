@@ -70,7 +70,7 @@ into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
       LEVEL_GEN_PROP_CHANCE + GRANDFATHERED entry deleted (CHANGELOG); audit passes LINEAR; both gates green.
 - [x] **CP8** — (balanceSim: S-HEAVY 0.30+ under D6, SR3 0.97 under D5) DONE WHEN: CAVERN runs G3; audit passes CAVERN; both gates green.
 - [x] **CP9** — DONE WHEN: BOSS_ARENA conforms to G4; audit passes; BossArenaGeneratorTest + fast gate green.
-- [ ] **CP10** — DONE WHEN: MED_BAY conforms to G5; audit passes; fast gate green.
+- [x] **CP10** — DONE WHEN: MED_BAY conforms to G5; audit passes; fast gate green.
 - [ ] **CP11** — DONE WHEN: EVENT_ROOM conforms to G6; audit passes; fast gate green.
 - [ ] **CP12** — DONE WHEN: GATE_AIRLOCK conforms to G7; audit passes; fast gate green.
 - [ ] **CP13** — DONE WHEN: StartGameLevelGenerator conforms to G8; audit start-room row passes; fast gate green.
@@ -236,3 +236,13 @@ into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
   NEXT (CP10): MED_BAY per G5 — approach ends at a DOOR socket in the ward's left wall; each pod alcove opens through
   one OPEN socket; fixed flush CLINIC kit ('&' beds SPACED on alcove far walls, 'I' in two ward corners, 'T' flush on
   ward top + bottom walls, '%' flush in one corner); 'W' auto-doc = CENTRE feature, lane routed around it; zero enemies.
+- CP10 (MED_BAY, G5): the ward and its pod bays are LayoutRooms. The approach now ends at wardLeft - 2, so the ward's
+  left shell column survives and the clinic entrance is a DOOR socket at (wardLeft - 1, centerRow). Each bay ("clinic_pods",
+  role SPECIAL so its 2 beds fit the 0.22 cap on a 4x4 bay) opens through ONE open socket centred on it in the wall row
+  it shares with the ward (both rooms hold the socket). The auto-doc 'W' is `ward.claimCentre`, so the dresser's lanes
+  end on the ring around it. `MedBayGenerator.clinicKit()` ("clinic": 'T' SIDE_WALL x2 — the ward's top/bottom walls,
+  'I' CORNER x2, '%' CORNER x1, 'm' ANY_WALL x1) and `clinicPodsKit()` ('&' BACK_WALL SPACED x2) go through the shared
+  RoomDresser. The only random draws (alcove side, second bay) are unchanged. Zero enemies. Layout report attached.
+  Audit 200 x 6: every counter 0 (ward fill 0.038, bays <= 0.125). Fast gate green (only the baseline StoryBarkTest).
+  NEXT (CP11): EVENT_ROOM per G6 — approach ends at a DOOR socket into the room; 'W' station = CENTRE feature; 'T' and
+  '%' flush to walls; corpse/oil decals optional.
