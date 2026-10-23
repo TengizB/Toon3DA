@@ -16,12 +16,22 @@ import java.util.Random;
  * soft-lock), then a threshold room where {@code World} announces the new region ("ENTERING: …"), with
  * the exit just past it.
  *
+ * <p>Since level-generation-overhaul G7 the bulkhead IS the threshold room's single entrance socket, set in its
+ * left wall where the approach ends, and the fixed AIRLOCK kit ({@link #airlockKit}) is placed flush by the
+ * {@link RoomDresser}.
+ *
  * <p>It is a PACING BREATH — almost no combat. Accordingly it emits ZERO enemy spawn points and no
  * weapon spawns ({@code GateProfile} also applies a near-zero budget). Deterministic from the floor
  * seed. Every tile is from {@code docs/tile-symbols.txt}. Grid convention: (0,0) = bottom-left, Y-up.
  * No LibGDX imports.
  */
 public class GateAirlockGenerator implements ILevelGenerator {
+
+    /** The blue keycard bulkhead (docs/tile-symbols.txt). */
+    private static final char BULKHEAD_DOOR_TILE = 'B';
+    /** The kit id (the audit's terminal rooms include it) and the layout report's room id. */
+    static final String AIRLOCK_KIT_ID    = "airlock";
+    private static final String THRESHOLD_ROOM_ID = "airlock_threshold";
 
     private final Random random;
     // Raw floor seed: the LevelFinisher's own wall-dressing stream derives from it (independent of
@@ -72,18 +82,21 @@ public class GateAirlockGenerator implements ILevelGenerator {
         int roomTop    = roomBottom + roomHeight - 1;
         carveFloor(grid, roomLeft, roomBottom, roomRight, roomTop);
 
-        // --- Approach corridor (3-tile-wide, running left into the threshold room) ---
+        // --- Approach corridor (3 tiles wide), running up to the threshold room's left wall (G7) ---
         int approachHalf  = LevelGenConstants.GATE_APPROACH_HALF_WIDTH;
-        int approachRight = roomLeft - 1;
+        int approachRight = roomLeft - 2;
         int approachLeft  = approachRight - LevelGenConstants.GATE_APPROACH_LENGTH + 1;
         carveFloor(grid, approachLeft, centerRow - approachHalf, approachRight, centerRow + approachHalf);
 
-        // --- The bulkhead: a 1-tile chokepoint holding the 'B' blue-door, mid-approach ---
-        int doorColumn = approachRight - 1;
-        // Wall off the flanking rows at the door column so the door is a genuine 1-wide airlock seam.
-        grid[centerRow - approachHalf][doorColumn] = 'x';
-        grid[centerRow + approachHalf][doorColumn] = 'x';
-        grid[centerRow][doorColumn] = 'B'; // blue keycard door
+        // --- The bulkhead: the 'B' blue-door IS the threshold room's single entrance socket, sitting in its left
+        //     wall and flanked by shell walls (R14) ---
+        LayoutRoom room = new LayoutRoom(roomLeft - 1, roomBottom - 1, roomRight + 1, roomTop + 1,
+                LevelLayoutReport.Role.REGULAR, THRESHOLD_ROOM_ID);
+        List<LayoutRoom> rooms = new ArrayList<>();
+        rooms.add(room);
+        DoorSocket bulkhead = DoorwayRules.openSocket(grid, room, roomLeft - 1, centerRow);
+        bulkhead.setLeaf(DoorSocket.Leaf.DOOR);
+        grid[centerRow][roomLeft - 1] = BULKHEAD_DOOR_TILE; // blue keycard door
 
         // --- The blue keycard 'b' on the approach, BEFORE the door, so it always opens ---
         int keycardColumn = approachLeft + 2;
@@ -97,12 +110,12 @@ public class GateAirlockGenerator implements ILevelGenerator {
         int startColumn = approachLeft;
         grid[centerRow][startColumn] = 'p';
 
-        // --- Sparse ceremonial dressing (solid props / decals, never over p / > / b / B) ---
-        placeProp(grid, roomRight - 2, roomBottom + 1, 'T');    // a threshold monitoring terminal
-        placeProp(grid, roomLeft + 1, roomTop - 1, '%');        // a humming generator by the seam
+        // --- Sparse ceremonial dressing: the fixed AIRLOCK kit, flush (G7); an optional flickering strip light ---
+        new RoomDresser(grid, rooms, seed).dress(room, airlockKit(), null);
         if (random.nextBoolean()) {
             placeDecal(grid, roomLeft + 2, centerRow - 2, 'f'); // a flickering strip light
         }
+        DoorwayRules.Validation validation = DoorwayRules.validate(grid, rooms);
 
         List<EnemySpawnPoint>  enemySpawnPoints  = new ArrayList<>(); // ZERO enemies — a pacing breath.
         List<WeaponSpawnPoint> weaponSpawnPoints = new ArrayList<>();
@@ -113,10 +126,20 @@ public class GateAirlockGenerator implements ILevelGenerator {
                         LevelGenConstants.SPECIAL_ROOM_SUPPLY_POCKET_SIZE),
                 enemySpawnPoints, new FloorPopulator.EncounterFacts(-1, 0f, 0f, 0, 0), config,
                 FloorPopulator.specOf(config, ge.tbegvadze.toon3d.route.RouteNodeType.REGION_GATE), dungeonDepth, seed);
-        return populated.attachTo(new Level(grid, populated.spawnPoints, populated.weaponSpawnPoints,
+        Level level = populated.attachTo(new Level(grid, populated.spawnPoints, populated.weaponSpawnPoints,
                          LevelFinisher.request(grid, seed).config(config)
                                  .floorGroup(ge.tbegvadze.toon3d.tileset.WallGroup.SECURITY)
                                  .basePalette(LevelPalettes.legacy()).finish()));
+        level.attachLayoutReport(LayoutSupport.report(rooms, null, 0, validation));
+        return level;
+    }
+
+    /** The threshold room's fixed AIRLOCK kit (G7): a monitoring 'T' and a '%' generator, both flush. */
+    static PropKit airlockKit() {
+        return PropKit.plain(AIRLOCK_KIT_ID)
+                .row(PropKitRow.place('T').at(PropAnchor.SIDE_WALL).count(1))
+                .row(PropKitRow.place('%').at(PropAnchor.CORNER).count(1))
+                .build();
     }
 
     /** Carves an inclusive rectangle of lit floor 'l'. */
@@ -130,16 +153,11 @@ public class GateAirlockGenerator implements ILevelGenerator {
         }
     }
 
-    /** Places a solid prop only on open lit floor, so it never overwrites the start/exit/door/keycard. */
-    private void placeProp(char[][] grid, int tileColumn, int tileRow, char prop) {
-        if (inBounds(grid, tileColumn, tileRow) && grid[tileRow][tileColumn] == 'l') {
-            grid[tileRow][tileColumn] = prop;
-        }
-    }
-
-    /** Places a walkable decal only on open lit floor (same guard as {@link #placeProp}). */
+    /** Places a floor light only on open lit floor, so it never overwrites p / > / b / B or a prop. */
     private void placeDecal(char[][] grid, int tileColumn, int tileRow, char decal) {
-        placeProp(grid, tileColumn, tileRow, decal);
+        if (inBounds(grid, tileColumn, tileRow) && grid[tileRow][tileColumn] == 'l') {
+            grid[tileRow][tileColumn] = decal;
+        }
     }
 
     private boolean inBounds(char[][] grid, int tileColumn, int tileRow) {

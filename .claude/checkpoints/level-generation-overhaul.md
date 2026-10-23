@@ -72,7 +72,7 @@ into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
 - [x] **CP9** — DONE WHEN: BOSS_ARENA conforms to G4; audit passes; BossArenaGeneratorTest + fast gate green.
 - [x] **CP10** — DONE WHEN: MED_BAY conforms to G5; audit passes; fast gate green.
 - [x] **CP11** — DONE WHEN: EVENT_ROOM conforms to G6; audit passes; fast gate green.
-- [ ] **CP12** — DONE WHEN: GATE_AIRLOCK conforms to G7; audit passes; fast gate green.
+- [x] **CP12** — DONE WHEN: GATE_AIRLOCK conforms to G7; audit passes; fast gate green.
 - [ ] **CP13** — DONE WHEN: StartGameLevelGenerator conforms to G8; audit start-room row passes; fast gate green.
 - [ ] **CP14** — DONE WHEN: RetiredWallDressing + retired rolls deleted; LevelGenConfig scatter flags /
       enableLargeRooms / enableServerRooms deleted, preferredRegularKit set by Cache/Elite profiles (R31); dead
@@ -253,3 +253,12 @@ into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
   6: every counter 0 (fill 0.028). Fast gate green (only the baseline StoryBarkTest).
   NEXT (CP12): GATE_AIRLOCK per G7 — 'B' is the threshold room's single entrance socket in its left wall, flanked by
   shell; the 3-wide approach runs up to that wall; keycard 'b' stays on the approach; 'T' + '%' flush.
+- CP12 (GATE_AIRLOCK, G7): the threshold room is a LayoutRoom ("airlock_threshold"); the approach runs to roomLeft - 2
+  and the 'B' bulkhead is the room's single entrance socket at (roomLeft - 1, centerRow), leaf DOOR, flanked by shell
+  (the old mid-approach seam walls are gone). Keycard 'b' unchanged on the approach. `GateAirlockGenerator.
+  airlockKit()` ("airlock": 'T' SIDE_WALL x1, '%' CORNER x1) through the RoomDresser; the optional strip light stays.
+  Audit 200 x 6: every counter 0 (fill 0.020). Fast gate green (only the baseline StoryBarkTest; GeneratorReachability
+  unchanged and green).
+  NEXT (CP13): StartGameLevelGenerator per G8 — STAGING_ARMORY: 2 '=' flush on the north wall >= 2 either side of the
+  portal column, 1-2 'L' flush on each side wall, 1 '#' in a corner; clear of the offer tiles and the lanes start ->
+  portal and start -> every offer; four framing columns, size, portal, offers, start unchanged.
