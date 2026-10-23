@@ -406,6 +406,8 @@ brightest moods (sprite guide 4.5).
   - Ids are STABLE (wall_<region letter>_<group>_<slot>[_<variant>], door_<letter>_<kind>,
     column_<letter>_<kind>) and never renamed once shipped.
   - Surfaces: <region>.floor.png and .ceiling.png, 64x64 RGB, no mips (the floor pipeline builds its own).
+    NOT USED BY THE ENGINE (2026-10-23, owner request): the floor and ceiling were reverted to the procedural
+    materials of render/SurfaceMaterials (docs/art-direction.txt section 6); the PNGs are still baked.
   - Deterministic: the same script writes byte-identical files (verify with a second bake and cmp).
 
 
