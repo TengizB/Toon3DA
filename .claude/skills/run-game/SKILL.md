@@ -72,6 +72,7 @@ count events with `grep -c Pause FILE`.
 | `ending:VARIANT` | reflection: `World.presentEndingCard(BootCardVariant.VARIANT)` — `ENDING_FREE` / `ENDING_KILL` give the terminal card with the RETURN plate (constant names, not FREE/KILL) |
 | `barkspeaker:SPEAKER` | reflection: puts the first registered bark of `AI` / `ORGANIZATION` / `PLANET` on screen through BarkSystem's own `deliver` (no SYSTEM barks exist) — another speaker's panel without reaching their region |
 | `spawn:TYPE:FORWARD:RIGHT` | reflection: a **DORMANT** enemy of `EnemyType` TYPE, FORWARD tiles ahead and RIGHT tiles to the player's right (negatives = behind / left), through `EnemyManager.spawnEnemy` (the visual seam is detached for the call, so no ALERT plays). Prints its list index; a blocked tile is refused and said so |
+| `hazard:KIND:FORWARD:RIGHT` | reflection: KIND `fire` or `toxic` — `HazardManager.igniteFire` / `igniteToxic` (999-turn lifetime) on the tile FORWARD ahead and RIGHT to the right; the real ignite path, so the tile becomes `i` / `q` and the dynamic prop pass draws it (generated-prop-art order 4) |
 | `alert:INDEX` | wakes enemy INDEX (list order; negative counts from the end, `-1` = last spawned) and reports the ALERTED visual moment, exactly as perception would |
 | `damage:INDEX:AMOUNT` | `EnemyManager.applyDamageTo` — the REAL player-hit path (multipliers, Block, shards, death); prints HP before/after |
 | `kill:INDEX` | the same path with an overwhelming amount (DEATH, corpse decal, XP) |

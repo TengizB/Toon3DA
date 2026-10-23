@@ -35,6 +35,15 @@ public final class GeneratedPropRegistry {
         registerSprite("prop_terminal", "terminal");
         registerSprite("prop_biopod",   "bio_pod");
         registerFixedChar(RenderConstants.STAIRS_DOWN_CHAR, "portal");
+        // generated-prop-art order 2
+        registerSprite("prop_ai_core",  "ai_core");
+        // generated-prop-art order 3
+        registerSprite("prop_generator", "generator");
+        // generated-prop-art order 4
+        registerSprite("prop_explosive_barrel",   "explosive_barrel");
+        registerSprite("prop_radioactive_barrel", "radioactive_barrel");
+        registerFixedChar(RenderConstants.HAZARD_FIRE_CHAR,  "fire");
+        registerFixedChar(RenderConstants.HAZARD_TOXIC_CHAR, "toxic");
         bootstrapped = true;
     }
 

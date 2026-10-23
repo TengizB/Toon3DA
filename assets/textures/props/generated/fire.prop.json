@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "id": "fire",
+  "frameWidth": 160,
+  "frameHeight": 72,
+  "frameCount": 16,
+  "columns": 12,
+  "frameSeconds": 0.0833
+}

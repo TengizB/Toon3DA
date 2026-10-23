@@ -104,8 +104,10 @@ SOLID PROPS (block player movement; rendered as billboard sprites)
 On GENERATED floors every solid prop comes from a room's PROP KIT, the cave's formation / debris rules, the boss
 arena's cover / barrels or the shared supply pipeline — never a per-tile roll — and never stands in a door's
 clearance zone (Chebyshev 1 + 2 straight through) or a room's lane band. See docs/procedural-level-generation.txt.
-g   Radioactive barrel  Dark green hazard drum.                                0.65x wall height
-E   Explosive barrel    Crimson volatile drum: hazard hoops, stamped explosion burst, hot leaking seams. 0.65x wall height
+g   Radioactive barrel  Lab-grey drum, GENERATED + ANIMATED (generated-prop-art order 4): rad-lime band + trefoil,
+                        glowing cracks, a glowing drip into a pulsing puddle. 0.65x wall height
+E   Explosive barrel    Oxide-red VOLATILE drum, GENERATED + ANIMATED (generated-prop-art order 4): hot-iron pressure
+                        slots breathing, a hot lid seam, a blinking warning lamp. 0.65x wall height
 T   Computer terminal   Free-standing Organization console, GENERATED + ANIMATED (generated-prop-art order 1): phosphor-green
                         scrolling text screen, backlit keys, blinking lamps. 0.80x wall height
                         GENERATED placement (R20): only in terminal kits (office, server room, research lab,
@@ -116,14 +118,17 @@ L   Locker              Equipment storage cabinet (steel blue-gray).           0
 C   Crate               Reinforced olive-drab munitions box: steel corner brackets, ribs, hazard band, UAC stencil. 0.50x wall height
 #   Security camera     Mounted surveillance device. GENERATED placement: a kit's CORNER / ENTRY_WALL row (flush),
                         the start room's STAGING_ARMORY corner.
-%   Generator           Power unit: glowing green reactor core, cooling fins, twin gauges, breaker bank, hazard base. 0.85x wall height
+%   Generator           Heavy power unit, GENERATED + ANIMATED (generated-prop-art order 3): a coil bay glowing HOT IRON
+                        red behind guard bars, a hot turbine fan, glowing exhaust stacks with embers. 0.85x wall height
 &   Bio-pod             Specimen tube, GENERATED + ANIMATED (generated-prop-art order 1): floor-to-ceiling column of neon
                         cyan fluid, a drifting grown specimen, rising bubbles. 1.00x wall height (floor to ceiling)
 =   Weapon rack         Armory rack: three standing rifles, hung pistol, grenades, magazines, ammo crate on pegboard. 0.70x wall height
 @   Special equipment   Advanced machine: violet→cyan energy aperture (orbiting containment ring + core orb), twin tall plasma canisters, vented emitter housing, lower control panel (readout, keypad, gauge), hazard band. 0.88x wall height
 I   Specimen tank       Tall research cylinder: steel plinth (readout, vents), capped collar with cyan emitter ring, teal cryo-fluid with air gap + meniscus, glowing containment bands, curled bioluminescent specimen, glass sheen, rising bubbles, frost. 0.85x wall height
 W   Holo-workstation    Low console (keypad deck, live waveform screen, status LEDs) with a holo-emitter disc projecting a translucent cyan wireframe globe: scan-lined volume, lat/long arcs, fanning beams, floating data glyphs. 0.70x wall height
-J   AI core node        Tall server tower: chassis with edge cooling fins, crown cyan-white core glow orb, glowing vertical data spine threading a stack of translucent processing slabs (internal glow, bright seam, edge LEDs), base readout. 0.95x wall height
+J   AI core node        The PATTERN ARCHIVE, GENERATED + ANIMATED (generated-prop-art order 2): a floor-to-ceiling steel
+                        compute column; behind its glass, cyan memory wafers on a data spine around a pulsing rad-lime
+                        core; blinking rail LEDs. 1.00x wall height (floor to ceiling)
 ;   Gravity well core    CENTERPIECE. Floating anti-grav generator: dark emitter hub over a pedestal, encircled by a spinning pale-blue containment ring with orbiting debris chunks. STELLAR_OBSERVATORY room only, exactly one at the centroid tile. 0.98x wall height
 \   Floating cargo crate Magnetically tethered supply crate hanging off the deck, tilted ~20deg, cyan tether-beam to a deck clamp. STELLAR_OBSERVATORY room only. 0.55x wall height
 |   Docking strut pylon  Tapered titanium support strut with a clamp collar and a vertical ladder of status LEDs. STELLAR_OBSERVATORY room only. 0.92x wall height
@@ -146,11 +151,13 @@ i   Fire hazard         Burning floor (idea 4, Pillar 3). DYNAMIC — spawned/sp
                         runtime by HazardManager; ticks BURNING on any host standing on it
                         (player AND enemies), spreads along spreadable floor/stain tiles, and
                         chain-detonates explosive barrels. May also be hand-placed in a level
-                        file to seed a fire room. Walkable. 0.30x wall height.
+                        file to seed a fire room. Walkable. 0.30x wall height. Picture: a GENERATED animated sheet
+                        (generated-prop-art order 4) - hot-iron flames over burning debris, sparks.
 q   Toxic hazard        Acid/toxic pool (idea 4, Pillar 3). DYNAMIC — area-denial pool that
                         ticks POISONED on any host standing on it; a Plague Hulk leaves one
                         where it dies. Creeps slowly; may be hand-placed to seed a toxic room.
-                        Walkable. 0.16x wall height.
+                        Walkable. 0.16x wall height. Picture: a GENERATED animated sheet (generated-prop-art
+                        order 4) - a glowing toxin-green pool, crusted rim, bubbles, vapour.
 ?   Magnetic deck plating Raised mag-deck grating marking the catwalk ring / walking lanes.
                         STELLAR_OBSERVATORY room only. Walkable. 0.18x wall height.
 ]   Zero-g debris scatter Tiny weightless-looking debris (bolts, shards, a data-slate) with

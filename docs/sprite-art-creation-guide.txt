@@ -767,6 +767,10 @@ is .claude/agents/ideas/generated-prop-art.txt (+ -order-<n>); its brief and rul
   phosphor     CRT green: terminal text and status lamps
   neon_cyan    specimen fluid, ring lights, backlit keys (brighter and more saturated than the facility cyan)
   rad          radioactive lime: hazard lamps, warning strips, emitter studs
+  hot_iron     (order 3, owner D4) heated metal: deep red -> orange -> white-hot. Heat sources only (coils,
+               exhausts, warning lamps); it always ramps through orange, so it never reads as the keycard red
+  (order 4 adds the body paint paint_oxide - a hazard drum's brick-brown, never a saturated red - and uses the
+  existing toxin ink, V5's POISONED green, for the toxic pool: the right semantic colour for once)
   Big glowing areas (a fluid column, a vortex, a screen's text) are PAINTED with numpy into the frame after the
   kit render, from these inks' ramps - the kit's translucent materials wash out to a pale tint at that size.
 
@@ -831,6 +835,31 @@ is .claude/agents/ideas/generated-prop-art.txt (+ -order-<n>); its brief and rul
             vanishing core at eye height (they slide inward one spacing per loop), a hot rim, motes rising, its
             light pooling on the platform. The owner rejected a round ring-gate: an exit must read as a DOOR. 16
             frames @ 1/12 s. [first design, removed: a ring with a violet vortex]
+  ai_core   (order 2) the PATTERN ARCHIVE - where the reprint patterns are kept: a floor-to-ceiling steel column
+            (plinth with a rad strip and the PTN-ARC stencil, darkmetal chassis between gunmetal rails, a collar
+            with cables into the ceiling). Behind a tall glass window: a faint cyan haze, memory wafers with
+            edge-lit lips and flickering node dots, a data spine with pulses climbing a full window per loop, and
+            in the gap a rad-lime core - halo, three orbiting arcs (one third turn per loop), inner ring, white-hot
+            heart - the one warm accent. Rail LEDs step every two frames; a phosphor bar graph on the readout.
+            One static kit render + per-frame paint (~7 s bake). 24 frames @ 0.1 s.
+  generator (order 3) a heavy power unit on a skid (rad strip), gunmetal housing between darkmetal fin stacks,
+            and HEAT as the accent: a coil bay behind guard bars whose windings glow hot iron with a heat wave
+            rolling up (the bars are a second, bars-only render whose alpha masks the glow behind them), a round
+            turbine whose four dark blades turn a quarter turn per loop over a hot-iron disc, two exhaust stacks
+            with glowing lips and embers climbing and fading, and a control plate (trembling gauge needle, two
+            neon cyan lamps as the cold counterpoint, a blinking hot-iron warning lamp). 16 frames @ 0.1 s.
+  barrels   (order 4) drum_bake(): the drum body is a tall ellipsoid (ry 2000) cropped to the drum rows - pure
+            cylinder shading from one primitive - with lid, bung, ribs and foot rendered over it.
+            explosive_barrel: paint_oxide drum, five hot-iron pressure slots that breathe, a hot lid seam, a
+            blinking hot-iron lamp, stencil VOLATILE. radioactive_barrel: lab-grey drum, a rad band with a dark
+            trefoil, glowing rad cracks, a glowing drip running down once per loop into a pulsing puddle.
+            16 frames @ 0.1 s each.
+  hazards   (order 4) fire ('i') and toxic ('q') are FIXED-char rows; the prop renderer's DYNAMIC pass (runtime
+            tiles from HazardManager) draws sheets too. Both are fully painted from periodic_noise(), value noise
+            that tiles every N cells, so a scroll of exactly one period per loop is seamless. fire: flames from a
+            vertically stretched noise field in the hot-iron ramp over a charred debris bed with glowing cracks,
+            sparks. toxic: a low toxin pool with drifting caustics, a dark crust rim, bubbles that swell and pop,
+            vapour. Hazards are drawn full-tile wide, so their canvas aspect does not matter.
 
 ADD A PROP
   [ ] brief from the master (14.1): what it IS, its cold body materials, its one or two neon accents, still or

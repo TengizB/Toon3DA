@@ -498,7 +498,543 @@ def make_portal():
     return Prop("portal", PORTAL_W, PORTAL_H, PORTAL_FRAMES, PORTAL_FRAME_SECONDS, frame)
 
 
-PROPS = {"terminal": make_terminal, "bio_pod": make_pod, "portal": make_portal}
+# ---------------------------------------------------------------------------------------------------
+# AI CORE NODE ('J') - the PATTERN ARCHIVE: a floor-to-ceiling compute column storing the reprint patterns
+# ---------------------------------------------------------------------------------------------------
+CORE_W, CORE_H = 144, 256
+CORE_FRAMES, CORE_FRAME_SECONDS = 24, 0.1
+CORE_WINDOW = (42, 46, 102, 198)             # x0, y0, x1, y1: the glass down the front
+CORE_HEART = (72, 120)                       # the pulsing core in the middle of the wafer stack
+CORE_WAFERS = 9
+CORE_GLASS = (6, 12, 16)
+CORE_RAD_HOT = (235, 255, 150)
+LED_ON = {"phosphor": (110, 255, 130), "neon_cyan": (90, 240, 255), "rad": (215, 255, 90)}
+
+
+def ai_core_body():
+    """The static steel: plinth, chassis, side rails, collar, cables into the ceiling, readout plate."""
+    x0, y0, x1, y1 = CORE_WINDOW
+    plinth = [
+        slab([(10, 226), (134, 226), (138, 255), (6, 255)], "gunmetal", bevel=5, slope=0.9),
+        slab(chamfer_rect(40, 232, 104, 246, 2), "livery_dk", bevel=2, slope=0.9, op="add", depth=1.0),
+        slab(chamfer_rect(10, 249, 134, 252, 1), "rad", bevel=1.2, slope=0.9, op="add", depth=1.0, glow=1.1),
+    ]
+    for vx in (16, 22, 122, 128):
+        plinth.append(limb(vx, 232, vx, 245, 0.9, 0.9, "darkmetal", op="carve"))
+    chassis = [
+        slab(chamfer_rect(26, 22, 118, 228, 4), "darkmetal", bevel=5, slope=0.9),
+        slab(chamfer_rect(x0 - 6, y0 - 6, x1 + 6, y1 + 6, 4), "gunmetal", bevel=4, slope=0.9, op="add", depth=1.5),
+        slab(chamfer_rect(x0, y0, x1, y1, 3), "darkmetal", bevel=3, slope=0.9, op="carve"),
+        slab(chamfer_rect(x0 + 1, y0 + 1, x1 - 1, y1 - 1, 3), "pupil", bevel=1.0, slope=0.8, op="add", depth=0.4),
+        slab(chamfer_rect(46, 206, 98, 222, 2), "livery_dk", bevel=2, slope=0.9, op="add", depth=1.2),   # readout
+    ]
+    rails = []
+    for rx0, rx1 in ((14, 30), (114, 130)):
+        rails += [slab(chamfer_rect(rx0, 20, rx1, 230, 3), "gunmetal", bevel=4, slope=0.9),
+                  slab(chamfer_rect(rx0 + 4, 44, rx1 - 4, 204, 2), "darkmetal", bevel=1.5, slope=0.9, op="carve")]
+        for ry in (32, 214):
+            rails.append(blob((rx0 + rx1) / 2, ry, 1.8, 1.8, "darkmetal", op="add"))
+    collar = [
+        slab(chamfer_rect(8, 8, 136, 26, 4), "gunmetal", bevel=5, slope=0.9),
+        slab(chamfer_rect(20, 0, 124, 10, 2), "darkmetal", bevel=3, slope=0.9),
+        limb(44, 0, 44, 12, 5, 5, "rubber"), limb(72, 0, 72, 12, 6.5, 6.5, "rubber"), limb(100, 0, 100, 12, 5, 5, "rubber"),
+    ]
+    for rx in (14, 40, 72, 104, 130):
+        collar.append(blob(rx, 17, 1.6, 1.6, "darkmetal", op="add"))
+    return [plinth, chassis, rails, collar]
+
+
+def ai_core_window(body, glow, k, yy, xx):
+    """The archive inside the glass, painted: dark glass, cyan-edged memory wafers, the data spine with pulses
+    climbing it, and the rad-lime core breathing in the middle."""
+    x0, y0, x1, y1 = CORE_WINDOW
+    t = 2 * math.pi * k / CORE_FRAMES
+    win = ((xx >= x0 + 2) & (xx < x1 - 2) & (yy >= y0 + 2) & (yy < y1 - 2)).astype(float)
+    paint(body, glow, win, CORE_GLASS, glow_too=False)
+    hx, hy = CORE_HEART
+    # a faint cyan haze in the glass, strongest down the middle column
+    haze = np.exp(-((xx - hx) / 14.0) ** 2) * win
+    paint(body, glow, haze * 0.18, (40, 170, 190))
+    # memory wafers: plates seen a little from above - a dim top face, a bright edge-lit lip, node dots
+    spacing = (y1 - y0 - 8) / CORE_WAFERS
+    for i in range(CORE_WAFERS):
+        wy = y0 + 7 + i * spacing
+        if abs(wy + 2 - hy) < 22:
+            continue                                                                   # the heart's gap
+        shimmer = 0.75 + 0.25 * math.sin(t * 2 + i * 1.3)
+        inset = 2 * np.clip(1 - np.abs(yy - wy) / 4, 0, 1)                             # top face narrows
+        top = ((yy >= wy - 4) & (yy < wy) & (xx >= x0 + 6 + 4) & (xx < x1 - 6 - 4)).astype(float)
+        lip = ((yy >= wy) & (yy < wy + 2) & (xx >= x0 + 6) & (xx < x1 - 6)).astype(float)
+        under = ((yy >= wy + 2) & (yy < wy + 4) & (xx >= x0 + 7) & (xx < x1 - 7)).astype(float)
+        paint(body, glow, top * 0.45 * shimmer, (30, 110, 128))
+        paint(body, glow, lip * shimmer, (120, 245, 255))
+        paint(body, glow, under * 0.5, (8, 40, 48), glow_too=False)
+        for nx in range(x0 + 10, x1 - 8, 8):                                           # node dots on the lip
+            lit = random.Random(i * 97 + nx + (k // 3) * 13).random() < 0.5
+            if lit:
+                d = np.zeros(body.shape[:2]); d[int(wy) - 2:int(wy) - 1, nx:nx + 2] = 1
+                paint(body, glow, d, (200, 255, 255))
+    # the data spine and its pulses (they climb a whole window height per loop: seamless)
+    spine = np.exp(-((xx - hx) / 1.1) ** 2) * win
+    paint(body, glow, spine * 0.8, (110, 240, 255))
+    span = y1 - y0
+    for j in range(4):
+        py = y1 - ((j * span / 4 + span * k / CORE_FRAMES) % span)
+        pulse = np.exp(-((xx - hx) ** 2 / 2.5 + (yy - py) ** 2 / 10.0)) * win
+        paint(body, glow, np.clip(pulse * 1.4, 0, 1), (230, 255, 255))
+    # the core: a rad-lime halo, an outer ring with three arcs orbiting (one third turn per loop: seamless),
+    # an inner ring, and a white-hot heart, all breathing
+    breathe = 0.9 + 0.1 * math.sin(t)
+    r = np.hypot(xx - hx, yy - hy)
+    ang = np.arctan2(yy - hy, xx - hx)
+    halo = np.exp(-(r / (20 * breathe)) ** 2) * win
+    arcs = (np.cos(3 * (ang - t / 3)) > 0.35).astype(float)
+    outer = np.clip(1 - np.abs(r - 16) / 1.6, 0, 1) * arcs * win
+    inner = np.clip(1 - np.abs(r - 9 * breathe) / 2.2, 0, 1) * win
+    heart = np.exp(-(r / (5.5 * breathe)) ** 2) * win
+    paint(body, glow, halo * 0.55, (120, 190, 30))
+    paint(body, glow, outer, (190, 255, 70))
+    paint(body, glow, inner, (215, 255, 110))
+    paint(body, glow, heart, CORE_RAD_HOT)
+
+
+def ai_core_leds(body, glow, k):
+    """Status LEDs down both rail slots: a seeded pattern that steps every two frames (12 states per loop)."""
+    step = k // 2
+    for side, cx in enumerate((22, 122)):
+        for row in range(20):
+            y = 50 + row * 8
+            rnd = random.Random(side * 1000 + row * 31 + step * 7)
+            if rnd.random() < 0.45:
+                continue
+            ink = "rad" if rnd.random() < 0.12 else rnd.choice(("phosphor", "neon_cyan"))
+            m = np.zeros(body.shape[:2]); m[y:y + 2, cx - 1:cx + 2] = 1
+            paint(body, glow, m, LED_ON[ink])
+
+
+def ai_core_readout(body, glow, k):
+    """A small phosphor bar graph on the readout plate under the window."""
+    rnd = random.Random(55)
+    phases = [rnd.uniform(0, 2 * math.pi) for _ in range(10)]
+    t = 2 * math.pi * k / CORE_FRAMES
+    m = np.zeros(body.shape[:2])
+    for i, ph in enumerate(phases):
+        hgt = int(2 + 8 * (0.5 + 0.5 * math.sin(t * (1 + i % 3) + ph)))
+        x = 50 + i * 4.6
+        m[220 - hgt:220, int(x):int(x) + 3] = 1
+    paint(body, glow, m, (90, 240, 120))
+
+
+def make_ai_core():
+    base = bake(ai_core_body(), CORE_W, CORE_H, seed=709)
+    yy, xx = np.mgrid[0:CORE_H, 0:CORE_W].astype(float)
+
+    def frame(k):
+        body, glow = base[0].copy(), base[1].copy()
+        ai_core_window(body, glow, k, yy, xx)
+        ai_core_leds(body, glow, k)
+        ai_core_readout(body, glow, k)
+        # data pulses carried on up the centre cable into the ceiling
+        cable = ((xx >= 70) & (xx < 75) & (yy < 12)).astype(float)
+        cy = 12 - ((k * 3) % 12)
+        paint(body, glow, cable * np.exp(-((yy - cy) / 1.5) ** 2), (150, 245, 255))
+        img = finish(body)
+        kit.stencil(img, "PTN-ARC", 46, 236, (150, 156, 164))
+        body = np.asarray(img, float).copy()
+        bloom(glow, 4, 1.3, cap=0.45)
+        return body, glow
+
+    return Prop("ai_core", CORE_W, CORE_H, CORE_FRAMES, CORE_FRAME_SECONDS, frame)
+
+
+# ---------------------------------------------------------------------------------------------------
+# GENERATOR ('%') - a heavy power unit whose heat is the accent (the HOT IRON ink, owner D4)
+# ---------------------------------------------------------------------------------------------------
+GEN_W, GEN_H = 176, 216
+GEN_FRAMES, GEN_FRAME_SECONDS = 16, 0.1
+GEN_BAY = (46, 96, 130, 176)                 # x0, y0, x1, y1: the coil bay behind the guard bars
+GEN_FAN = (88, 50, 24)                       # centre x, centre y, radius of the turbine face
+GEN_STACKS = (34, 142)                       # exhaust stack centre x
+GEN_BARS = range(52, 128, 11)                # guard bar x positions
+
+
+def hot_iron(v):
+    """The hot-iron ramp at intensity v (0-1, array): the kit ink, interpolated."""
+    r = kit.MATERIALS["hot_iron"]["ramp"]
+    pos = np.clip(v, 0, 1) * (len(r) - 1)
+    lo = np.floor(pos).astype(int); hi = np.minimum(lo + 1, len(r) - 1); f = (pos - lo)[..., None]
+    return r[lo] * (1 - f) + r[hi] * f
+
+
+def generator_body():
+    """The static steel: skid, housing, coil bay with guard bars, fin stacks, turbine housing, exhaust stacks,
+    control plate."""
+    x0, y0, x1, y1 = GEN_BAY
+    fx, fy, fr = GEN_FAN
+    skid = [slab([(12, 198), (164, 198), (168, 215), (8, 215)], "darkmetal", bevel=4, slope=0.9),
+            slab(chamfer_rect(14, 206, 162, 209, 1), "rad", bevel=1.2, slope=0.9, op="add", depth=1.0, glow=1.0)]
+    for fxp in (16, 160):
+        skid.append(slab(chamfer_rect(fxp - 7, 210, fxp + 7, 215, 1), "gunmetal", bevel=2, slope=0.9))
+    fins = []
+    for side_x0, side_x1 in ((6, 24), (152, 170)):
+        fins.append(slab(chamfer_rect(side_x0, 82, side_x1, 198, 2), "darkmetal", bevel=2.5, slope=0.9))
+        for fy_ in range(86, 196, 6):
+            fins.append(slab([(side_x0 - 1, fy_), (side_x1 + 1, fy_), (side_x1 + 1, fy_ + 3), (side_x0 - 1, fy_ + 3)],
+                             "gunmetal", bevel=1.2, slope=0.9))
+    housing = [
+        slab(chamfer_rect(22, 70, 154, 200, 6), "gunmetal", bevel=6, slope=0.9),
+        slab(chamfer_rect(x0 - 5, y0 - 5, x1 + 5, y1 + 5, 3), "darkmetal", bevel=3, slope=0.9, op="add", depth=1.2),
+        slab(chamfer_rect(x0, y0, x1, y1, 2), "darkmetal", bevel=2, slope=0.9, op="carve"),
+        slab(chamfer_rect(x0 + 1, y0 + 1, x1 - 1, y1 - 1, 2), "pupil", bevel=1.0, slope=0.8, op="add", depth=0.4),
+        slab(chamfer_rect(56, 182, 120, 196, 2), "livery_dk", bevel=2, slope=0.9, op="add", depth=1.2),   # control plate
+    ]
+    for rx in (28, 148):
+        for ry in (76, 194):
+            housing.append(blob(rx, ry, 1.8, 1.8, "darkmetal", op="add"))
+    bars = [limb(bx, y0 - 2, bx, y1 + 2, 1.8, 1.8, "gunmetal") for bx in GEN_BARS]
+    bars += [limb(x0 - 2, (y0 + y1) / 2, x1 + 2, (y0 + y1) / 2, 1.6, 1.6, "gunmetal")]
+    turbine = [
+        slab(chamfer_rect(48, 22, 128, 78, 8), "gunmetal", bevel=5, slope=0.9),
+        blob(fx, fy, fr + 4, fr + 4, "darkmetal", depth=3),
+        blob(fx, fy, fr, fr, "pupil", op="carve", depth=2),
+        blob(fx, fy, 5, 5, "gunmetal", depth=3),                                       # hub
+    ]
+    stacks = []
+    for sx in GEN_STACKS:
+        stacks += [limb(sx, 12, sx, 72, 7, 7, "darkmetal"),
+                   slab(chamfer_rect(sx - 9, 8, sx + 9, 14, 2), "gunmetal", bevel=2, slope=0.9),
+                   slab(chamfer_rect(sx - 9, 40, sx + 9, 45, 1), "gunmetal", bevel=1.5, slope=0.9)]
+    return [skid, fins, stacks, housing, turbine, bars]
+
+
+def generator_frame(body, glow, k, steel_alpha, yy, xx):
+    t = 2 * math.pi * k / GEN_FRAMES
+    x0, y0, x1, y1 = GEN_BAY
+    open_bay = ((xx >= x0 + 2) & (xx < x1 - 2) & (yy >= y0 + 2) & (yy < y1 - 2)).astype(float)
+    behind = open_bay * (1 - steel_alpha)                        # only where no guard bar covers the bay
+    # the induction windings: horizontal bands, hottest in a band that rolls up the bay once per loop
+    band = np.sin((yy - y0) * 0.9) * 0.5 + 0.5                                         # individual windings
+    roll = ((y1 - yy) / (y1 - y0) - k / GEN_FRAMES) % 1.0
+    wave = np.exp(-((roll - 0.5) / 0.18) ** 2)
+    heat = np.clip(0.30 + 0.35 * band + 0.45 * wave + 0.06 * math.sin(t * 2), 0, 1)
+    edge = np.clip(np.minimum(xx - x0, x1 - xx) / 14.0, 0, 1)                           # cooler at the sides
+    v = heat * (0.45 + 0.55 * edge)
+    col = hot_iron(v)
+    paint(body, glow, behind * 0.98, (0, 0, 0), glow_too=False)
+    m = behind[..., None]
+    body[..., :3] = body[..., :3] * (1 - m) + col * m
+    ga = glow[..., 3:] / 255.0
+    glow[..., :3] = glow[..., :3] * (1 - m) + col * m
+    glow[..., 3:] = np.maximum(ga, behind[..., None]) * 255
+    # the turbine: a hot-iron glow behind four dark blades turning a quarter turn per loop (seamless)
+    fx, fy, fr = GEN_FAN
+    r = np.hypot(xx - fx, yy - fy); ang = np.arctan2(yy - fy, xx - fx)
+    disc = ((r < fr - 1) & (r > 5)).astype(float)
+    blades = (np.cos(4 * (ang - (math.pi / 2) * k / GEN_FRAMES) + r * 0.08) > 0.35).astype(float) * disc
+    disc_heat = hot_iron(0.55 + 0.25 * np.clip(1 - r / fr, 0, 1) + 0.05 * math.sin(t))
+    hot = disc * (1 - blades)
+    hm = hot[..., None]
+    body[..., :3] = body[..., :3] * (1 - hm) + disc_heat * hm
+    glow[..., :3] = glow[..., :3] * (1 - hm) + disc_heat * hm
+    glow[..., 3] = np.maximum(glow[..., 3], hot * 235)
+    paint(body, glow, blades, (22, 26, 32), glow_too=False)
+    glow[..., 3] *= (1 - blades)
+    # the exhaust lips glow, and embers drift up from them and fade (each ember one whole climb per loop)
+    rnd = random.Random(3307)
+    for sx in GEN_STACKS:
+        lip = np.exp(-(((xx - sx) / 6.0) ** 2) - (((yy - 9) / 2.2) ** 2))
+        paint(body, glow, np.clip(lip * 1.3, 0, 1), tuple(hot_iron(np.array(0.85 + 0.1 * math.sin(t + sx)))))
+        for e in range(5):
+            ex = sx + rnd.uniform(-5, 5); phase = rnd.uniform(0, 1)
+            life = (phase + k / GEN_FRAMES) % 1.0
+            ey = 6 - life * 34
+            if ey < 0.5:
+                continue
+            ember = np.exp(-((xx - ex - 2 * math.sin(life * 6 + e)) ** 2 + (yy - ey) ** 2) / 0.9) * (1 - life)
+            paint(body, glow, np.clip(ember * 1.5, 0, 1), tuple(hot_iron(np.array(0.95 - 0.5 * life))))
+    # the control plate: a gauge with a trembling needle, two cyan lamps, a blinking hot-iron warning lamp
+    gx, gy = 70, 189
+    dial = (np.hypot(xx - gx, yy - gy) < 5).astype(float)
+    paint(body, glow, dial, (200, 205, 200), glow_too=False)
+    needle_ang = -2.2 + 0.25 * math.sin(t * 3) + 0.08 * math.sin(t * 7)
+    for step in range(5):
+        px, py = gx + step * math.cos(needle_ang), gy + step * math.sin(needle_ang)
+        nd = np.zeros(body.shape[:2]); nd[int(round(py)), int(round(px))] = 1
+        paint(body, glow, nd, (230, 70, 20))
+    for i, lx in enumerate((88, 98)):
+        lamp = np.exp(-(((xx - lx) ** 2 + (yy - 189) ** 2) / 3.0))
+        paint(body, glow, np.clip(lamp * 1.5, 0, 1), (90, 240, 255))
+    warn_on = (k // 4) % 2 == 0
+    lamp = np.exp(-(((xx - 110) ** 2 + (yy - 189) ** 2) / 3.2))
+    paint(body, glow, np.clip(lamp * (1.6 if warn_on else 0.5), 0, 1),
+          tuple(hot_iron(np.array(0.8 if warn_on else 0.35))), glow_too=warn_on)
+
+
+def make_generator():
+    base = bake(generator_body(), GEN_W, GEN_H, seed=811)
+    bars_only = bake([[limb(bx, GEN_BAY[1] - 2, bx, GEN_BAY[3] + 2, 1.8, 1.8, "gunmetal") for bx in GEN_BARS]
+                      + [limb(GEN_BAY[0] - 2, (GEN_BAY[1] + GEN_BAY[3]) / 2, GEN_BAY[2] + 2,
+                              (GEN_BAY[1] + GEN_BAY[3]) / 2, 1.6, 1.6, "gunmetal")]], GEN_W, GEN_H, seed=811)
+    steel_alpha = bars_only[0][..., 3] / 255.0
+    yy, xx = np.mgrid[0:GEN_H, 0:GEN_W].astype(float)
+
+    def frame(k):
+        body, glow = base[0].copy(), base[1].copy()
+        generator_frame(body, glow, k, steel_alpha, yy, xx)
+        img = finish(body)
+        kit.stencil(img, "GEN-04", 64, 74, (150, 156, 164))
+        body = np.asarray(img, float).copy()
+        bloom(glow, 4, 1.4, cap=0.5)
+        return body, glow
+
+    return Prop("generator", GEN_W, GEN_H, GEN_FRAMES, GEN_FRAME_SECONDS, frame)
+
+
+# ---------------------------------------------------------------------------------------------------
+# Shared for order 4: the drum, periodic noise, ink ramps
+# ---------------------------------------------------------------------------------------------------
+DRUM_W, DRUM_H = 112, 168
+DRUM_X0, DRUM_X1 = 14, 98                    # the drum's sides
+DRUM_TOP, DRUM_BOTTOM = 22, 164              # lid line, foot line
+DRUM_CX = (DRUM_X0 + DRUM_X1) / 2
+
+
+def ink(name, v):
+    """Any kit ink's ramp at intensity v (array or scalar 0-1), interpolated."""
+    r = kit.MATERIALS[name]["ramp"]
+    pos = np.clip(np.asarray(v, float), 0, 1) * (len(r) - 1)
+    lo = np.floor(pos).astype(int); hi = np.minimum(lo + 1, len(r) - 1); f = (pos - lo)[..., None]
+    return r[lo] * (1 - f) + r[hi] * f
+
+
+def periodic_noise(xx, yy, cell, period_x, period_y, seed):
+    """Smooth value noise that tiles every period_x / period_y CELLS - so a field scrolled by a whole period loops
+    seamlessly. Integer hash (kit._hash01), deterministic."""
+    u, v = xx / cell, yy / cell
+    ix, iy = np.floor(u).astype(int), np.floor(v).astype(int)
+    fx, fy = u - ix, v - iy
+    sx, sy = fx * fx * (3 - 2 * fx), fy * fy * (3 - 2 * fy)
+
+    def h(a, b):
+        return kit._hash01(np.mod(a, period_x), np.mod(b, period_y), seed)
+    top = h(ix, iy) * (1 - sx) + h(ix + 1, iy) * sx
+    bot = h(ix, iy + 1) * (1 - sx) + h(ix + 1, iy + 1) * sx
+    return top * (1 - sy) + bot * sy
+
+
+def drum_bake(paint_mat, rib_mat, extra_front, seed):
+    """A steel drum: the body as a tall ellipsoid cropped to the drum rows (pure cylinder shading), then lid, ribs
+    and foot rendered over it. -> (body, glow) arrays."""
+    rx = (DRUM_X1 - DRUM_X0) / 2
+    shell, shell_glow = bake([[blob(DRUM_CX, (DRUM_TOP + DRUM_BOTTOM) / 2, rx, 2000, paint_mat, depth=rx * 0.9)]],
+                             DRUM_W, DRUM_H, seed)
+    rows = np.zeros((DRUM_H, 1)); rows[DRUM_TOP + 4:DRUM_BOTTOM - 2] = 1
+    shell[..., 3] *= rows
+    lid = [blob(DRUM_CX, DRUM_TOP + 4, rx, 7, rib_mat, depth=4),
+           blob(DRUM_CX, DRUM_TOP + 3, rx - 6, 4.5, "darkmetal", op="carve", depth=2),
+           blob(DRUM_CX - 22, DRUM_TOP + 3, 5, 2.5, "gunmetal", depth=2.5)]                   # the bung
+    ribs = []
+    for ry in (DRUM_TOP + 10, 70, 116, DRUM_BOTTOM - 8):
+        ribs.append(limb(DRUM_X0 + 1, ry, DRUM_X1 - 1, ry, 3.4, 3.4, rib_mat, k=0))
+    foot = [slab([(DRUM_X0 + 2, DRUM_BOTTOM - 4), (DRUM_X1 - 2, DRUM_BOTTOM - 4), (DRUM_X1 - 4, DRUM_BOTTOM + 3),
+                  (DRUM_X0 + 4, DRUM_BOTTOM + 3)], "darkmetal", bevel=2, slope=0.9)]
+    front, front_glow = bake([foot, ribs + lid, extra_front], DRUM_W, DRUM_H, seed + 1)
+    over(shell, front)
+    shell_glow[..., 3] *= (1 - front[..., 3] / 255.0)
+    over(shell_glow, front_glow)
+    return shell, shell_glow
+
+
+# ---------------------------------------------------------------------------------------------------
+# EXPLOSIVE BARREL ('E') - oxide-red hazard drum; hot-iron relief slots breathe: pressure building
+# ---------------------------------------------------------------------------------------------------
+BARREL_FRAMES, BARREL_FRAME_SECONDS = 16, 0.1
+EXPL_SLOTS = [(26, 92), (42, 94), (56, 95), (70, 94), (86, 92)]
+
+
+def make_explosive_barrel():
+    front = [slab(chamfer_rect(30, 128, 82, 146, 2), "livery_dk", bevel=2, slope=0.9, op="add", depth=1.0)]
+    base = drum_bake("paint_oxide", "darkmetal", front, seed=901)
+    yy, xx = np.mgrid[0:DRUM_H, 0:DRUM_W].astype(float)
+
+    def frame(k):
+        body, glow = base[0].copy(), base[1].copy()
+        t = 2 * math.pi * k / BARREL_FRAMES
+        breathe = 0.65 + 0.35 * (0.5 + 0.5 * math.sin(t))
+        for i, (sx, sy) in enumerate(EXPL_SLOTS):                                      # pressure-relief slots
+            slot = np.clip(1 - np.maximum(np.abs(xx - sx) / 3.0, np.abs(yy - sy) / 8.0), 0, 1) ** 0.5
+            heat = breathe * (0.85 + 0.15 * math.sin(t * 2 + i))
+            col = ink("hot_iron", np.clip(slot * heat, 0, 1))
+            m = (slot > 0.05).astype(float)[..., None]
+            body[..., :3] = body[..., :3] * (1 - m) + col * m
+            glow[..., :3] = glow[..., :3] * (1 - m) + col * m
+            glow[..., 3] = np.maximum(glow[..., 3], m[..., 0] * 255)
+        seam = np.exp(-((yy - (DRUM_TOP + 10)) / 1.2) ** 2) * ((xx > DRUM_X0 + 10) & (xx < DRUM_X1 - 10))
+        paint(body, glow, seam * 0.55 * breathe, tuple(ink("hot_iron", 0.75)))
+        lamp_on = (k // 4) % 2 == 0                                                     # warning lamp on the lid
+        lamp = np.exp(-(((xx - (DRUM_CX + 20)) ** 2) + (yy - (DRUM_TOP + 2)) ** 2) / 4.0)
+        paint(body, glow, np.clip(lamp * (1.6 if lamp_on else 0.4), 0, 1),
+              tuple(ink("hot_iron", 0.85 if lamp_on else 0.3)), glow_too=lamp_on)
+        img = finish(body)
+        kit.stencil(img, "VOLATILE", 30, 133, (200, 196, 186))
+        body = np.asarray(img, float).copy()
+        bloom(glow, 4, 1.3, cap=0.45)
+        return body, glow
+
+    return Prop("explosive_barrel", DRUM_W, DRUM_H, BARREL_FRAMES, BARREL_FRAME_SECONDS, frame)
+
+
+# ---------------------------------------------------------------------------------------------------
+# RADIOACTIVE BARREL ('g') - a lab-grey drum leaking rad-lime light
+# ---------------------------------------------------------------------------------------------------
+def trefoil_mask(xx, yy, cx, cy, r):
+    """The radiation trefoil: three 60-degree blades and a hub."""
+    d = np.hypot(xx - cx, yy - cy); a = np.arctan2(yy - cy, xx - cx)
+    blades = (np.cos(3 * (a + math.pi / 2)) > 0.5) & (d > r * 0.28) & (d < r)
+    hub = d < r * 0.18
+    return (blades | hub).astype(float)
+
+
+def make_radioactive_barrel():
+    band = [slab(chamfer_rect(DRUM_X0 + 1, 82, DRUM_X1 - 1, 110, 1), "rad", bevel=1.5, slope=0.9, glow=0.6)]
+    base = drum_bake("livery", "gunmetal", band, seed=905)
+    yy, xx = np.mgrid[0:DRUM_H, 0:DRUM_W].astype(float)
+    tref = trefoil_mask(xx, yy, DRUM_CX, 96, 10)
+
+    def frame(k):
+        body, glow = base[0].copy(), base[1].copy()
+        t = 2 * math.pi * k / BARREL_FRAMES
+        pulse = 0.75 + 0.25 * math.sin(t)
+        paint(body, glow, tref, (20, 26, 16), glow_too=False)
+        glow[..., 3] *= (1 - tref)
+        # glowing cracks at a dented seam just under the top rib
+        crack = np.zeros((DRUM_H, DRUM_W))
+        for (x0, y0, x1, y1) in ((60, 36, 66, 48), (66, 48, 63, 58), (66, 48, 74, 54)):
+            n = 12
+            for s_ in range(n + 1):
+                px = x0 + (x1 - x0) * s_ / n; py = y0 + (y1 - y0) * s_ / n
+                crack = np.maximum(crack, np.exp(-((xx - px) ** 2 + (yy - py) ** 2) / 0.9))
+        paint(body, glow, np.clip(crack * 1.4 * pulse, 0, 1), tuple(ink("rad", 0.8)))
+        # a glowing drip running down the flank once per loop, into a puddle at the foot
+        life = k / BARREL_FRAMES
+        dy = 58 + life * (DRUM_BOTTOM - 58)
+        trail = np.exp(-((xx - 66) / 1.2) ** 2) * ((yy > 58) & (yy < dy)) * 0.55
+        drop = np.exp(-((xx - 66) ** 2 / 2.0 + (yy - dy) ** 2 / 4.0))
+        paint(body, glow, np.clip(trail + drop * 1.3, 0, 1), tuple(ink("rad", 0.85)))
+        puddle = np.exp(-(((xx - 70) / 20) ** 2) - (((yy - (DRUM_BOTTOM + 1)) / 2.2) ** 2))
+        paint(body, glow, np.clip(puddle * 1.2 * pulse, 0, 1), tuple(ink("rad", 0.7)))
+        img = finish(body)
+        kit.stencil(img, "RAD-07", 44, 124, (70, 74, 82))
+        body = np.asarray(img, float).copy()
+        bloom(glow, 4, 1.4, cap=0.45)
+        return body, glow
+
+    return Prop("radioactive_barrel", DRUM_W, DRUM_H, BARREL_FRAMES, BARREL_FRAME_SECONDS, frame)
+
+
+# ---------------------------------------------------------------------------------------------------
+# FIRE ('i') - burning debris with flames from a seamless looping noise field (hot-iron ramp)
+# ---------------------------------------------------------------------------------------------------
+FIRE_W, FIRE_H = 160, 72
+FIRE_FRAMES, FIRE_FRAME_SECONDS = 16, 1.0 / 12
+
+
+def make_fire():
+    rnd = random.Random(1201)
+    debris = []
+    for i in range(9):
+        x = 14 + i * 16 + rnd.uniform(-4, 4)
+        debris.append(blob(x, 66 + rnd.uniform(-2, 2), rnd.uniform(9, 14), rnd.uniform(4, 6), "basalt",
+                           angle=rnd.uniform(-0.3, 0.3)))
+    bed, _ = bake([debris], FIRE_W, FIRE_H, seed=1203)
+    yy, xx = np.mgrid[0:FIRE_H, 0:FIRE_W].astype(float)
+    cell = 9.0
+    period_y = 8                                        # the field tiles every 8 cells = 72 px: one scroll per loop
+    bed_a = bed[..., 3] / 255.0
+    cracks = periodic_noise(xx, yy, 4.0, 64, 64, 1207)
+
+    def frame(k):
+        scroll = (k / FIRE_FRAMES) * period_y * cell
+        # tongues: the field is stretched vertically (sampled at half height) so flames read tall and licking
+        n1 = periodic_noise(xx, (yy + scroll) * 0.5, cell * 0.5, 64, period_y, 1211)
+        n2 = periodic_noise(xx * 1.7, (yy + scroll) * 0.85, cell * 0.85, 64, period_y, 1213)
+        rise = np.clip((FIRE_H - yy) / FIRE_H, 0, 1)                                    # 0 at the floor, 1 at top
+        columns = 0.5 + 0.5 * np.sin(xx * 0.11 + 0.7 * np.sin(xx * 0.037))
+        flame = (0.65 * n1 + 0.35 * n2) * (0.70 + 0.45 * columns) + 0.50 - 1.30 * rise ** 0.85
+        flame = np.clip(flame, 0, 1)
+        alpha = np.clip((flame - 0.12) / 0.10, 0, 1)
+        col = ink("hot_iron", np.clip(flame * 1.25, 0, 1))
+        body = np.zeros((FIRE_H, FIRE_W, 4)); body[..., :3] = col; body[..., 3] = alpha * 255
+        glow = body.copy()
+        # the debris bed sits in front of the flame roots, its cracks glowing
+        bedc = bed.copy()
+        glowing = (cracks > 0.62) * bed_a
+        bedc[..., :3] = bedc[..., :3] * (1 - glowing[..., None]) + ink("hot_iron", 0.7) * glowing[..., None]
+        over(body, bedc)
+        glow[..., 3] *= (1 - bed_a * (1 - glowing))
+        gc = np.zeros_like(glow); gc[..., :3] = ink("hot_iron", 0.7); gc[..., 3] = glowing * 255
+        over(glow, gc)
+        # sparks lifting (each a whole climb per loop)
+        rnd2 = random.Random(1217)
+        for e in range(10):
+            ex = rnd2.uniform(10, FIRE_W - 10); ph = rnd2.uniform(0, 1)
+            life = (ph + k / FIRE_FRAMES) % 1.0
+            ey = 58 - life * 56
+            sp = np.exp(-((xx - ex - 3 * math.sin(life * 7 + e)) ** 2 + (yy - ey) ** 2) / 0.8) * (1 - life)
+            paint(body, glow, np.clip(sp * 1.6, 0, 1), tuple(ink("hot_iron", 0.95)))
+        bloom(glow, 3, 1.2, cap=0.4)
+        return body, glow
+
+    return Prop("fire", FIRE_W, FIRE_H, FIRE_FRAMES, FIRE_FRAME_SECONDS, frame)
+
+
+# ---------------------------------------------------------------------------------------------------
+# TOXIC POOL ('q') - a low glowing toxin pool, crusted rim, bubbles, vapour
+# ---------------------------------------------------------------------------------------------------
+TOXIC_W, TOXIC_H = 160, 48
+TOXIC_FRAMES, TOXIC_FRAME_SECONDS = 16, 0.1
+
+
+def make_toxic():
+    yy, xx = np.mgrid[0:TOXIC_H, 0:TOXIC_W].astype(float)
+    cx, cy, rx, ry = 80, 39, 74, 8.5
+    q = np.sqrt(((xx - cx) / rx) ** 2 + ((yy - cy) / ry) ** 2)
+    edge_noise = periodic_noise(xx, yy, 6.0, 64, 64, 1301)
+    pool = (q < 0.88 + 0.12 * edge_noise).astype(float)
+    crust = ((q < 1.0 + 0.12 * edge_noise) & (pool < 0.5)).astype(float)
+
+    def frame(k):
+        t = 2 * math.pi * k / TOXIC_FRAMES
+        phase = k / TOXIC_FRAMES * 4 * 6.0                                               # caustics drift a whole period
+        ripple = periodic_noise(xx + phase, yy * 2.2, 6.0, 32, 64, 1303)
+        v = np.clip(0.45 + 0.35 * ripple + 0.25 * (1 - q) + 0.05 * math.sin(t), 0, 1)
+        col = ink("toxin", v * 0.95)
+        body = np.zeros((TOXIC_H, TOXIC_W, 4)); body[..., :3] = col; body[..., 3] = pool * 255
+        glow = body.copy()
+        paint(body, glow, crust, (24, 30, 20), glow_too=False)
+        rnd = random.Random(1307)
+        for b in range(7):                                                                 # bubbles swell and pop
+            bx = rnd.uniform(cx - rx * 0.7, cx + rx * 0.7); by = cy + rnd.uniform(-3, 3); ph = rnd.uniform(0, 1)
+            life = (ph + k / TOXIC_FRAMES) % 1.0
+            r = 1 + 3.5 * life
+            if life > 0.85:
+                continue                                                                   # popped
+            ring = np.clip(1 - np.abs(np.hypot(xx - bx, (yy - by) * 1.3) - r) / 0.9, 0, 1)
+            paint(body, glow, ring, tuple(ink("toxin", 0.97)))
+        for w in range(4):                                                                 # vapour lifting
+            wx = 30 + w * 34; life = ((w * 0.27) + k / TOXIC_FRAMES) % 1.0
+            wy = 34 - life * 30
+            wisp = np.exp(-(((xx - wx - 4 * math.sin(life * 5 + w)) / 5) ** 2) - (((yy - wy) / 3) ** 2)) * (1 - life)
+            paint(body, glow, np.clip(wisp * 0.45, 0, 1), tuple(ink("toxin", 0.75)))
+        bloom(glow, 3, 1.2, cap=0.4)
+        return body, glow
+
+    return Prop("toxic", TOXIC_W, TOXIC_H, TOXIC_FRAMES, TOXIC_FRAME_SECONDS, frame)
+
+
+PROPS = {"terminal": make_terminal, "bio_pod": make_pod, "portal": make_portal, "ai_core": make_ai_core, "generator": make_generator,
+         "explosive_barrel": make_explosive_barrel, "radioactive_barrel": make_radioactive_barrel,
+         "fire": make_fire, "toxic": make_toxic}
 
 
 # ---------------------------------------------------------------------------------------------------

@@ -1,0 +1,74 @@
+STATUS: IN PROGRESS
+CATEGORY: Visual
+TITLE: Generated props 2 - AI core node (pattern archive)
+CREATED: 2026-10-23
+IMPLEMENTED: -
+---
+
+Order 2 of the generated-prop-art series. Read generated-prop-art.txt (the brief, PS1-PS8, D1-D3) and
+docs/sprite-art-creation-guide.txt section 14 first; this file does not repeat them. Requested by the owner
+("Now rework AI core node", 2026-10-23); written and built by the main thread on the order-1 machinery.
+
+
+OVERVIEW
+--------
+The AI core node ('J', sprite prop_ai_core - one per research lab, in its alcove or a corner, and in the
+cavern's derelict nest) is rebuilt with the kit as an animated, floor-to-ceiling PATTERN ARCHIVE: the
+Organization machine that stores the patterns the Cradle reprints bodies from (story/00-premise.md). It is
+still "an AI core node" - a tall compute column - and nothing else.
+
+
+SCOPE
+-----
+IN
+  - make_ai_core() in props.py + its PROPS row; the sheet ai_core.prop.png / .glow.png / .prop.json.
+  - One GeneratedPropRegistry row: prop_ai_core -> ai_core. PROP_HEIGHT_AICORE_NODE 0.95 -> 1.00.
+  - Delete PropRenderer.generateAiCoreNodeTexture and its TextureGeneratorRegistry row (PS6).
+  - Docs: guide 14.7, tile-symbols 'J' row, CLAUDE.md package row (order list).
+OUT
+  - Placement, solidity, kits, symbols - unchanged (V4). Every other prop.
+
+
+VISUAL DESIGN
+-------------
+AI CORE NODE ('J', FULL wall height - floor to ceiling, canvas 144 x 256, 24 frames @ 0.1 s, loops)
+  A tall steel compute column. A plinth on the floor (vents, a rad hazard strip), a darkmetal chassis between
+  two gunmetal side rails, a collar at the top with cable bundles running up INTO the ceiling.
+  - WINDOW: a tall dark glass window down the front. Inside, a stack of thin MEMORY WAFERS lit NEON CYAN at
+    their edges, threaded by a bright vertical DATA SPINE; data pulses climb the spine (seamless loop) and on up
+    the cables; in the middle of the stack a pulsing CORE in RAD LIME with a white-hot heart - the one warm
+    accent, so the archive reads as alive and distinct from the cyan tube and the cyan portal.
+  - LEDs: columns of small status LEDs down both side rails blinking in phosphor green and cyan, an occasional
+    rad lime one.
+  - A lab-grey readout plate under the window with a small phosphor bar graph that moves.
+  - Story detail: the stencil PTN-ARC (pattern archive) on the plinth.
+  Static body (one kit render); everything that moves is painted per frame.
+
+
+ACCEPTANCE CRITERIA
+-------------------
+  A1  props.py bakes ai_core deterministically; the order-1 sheets are byte-identical.
+  A2  In game the AI core node shows the new animated art with ungraded glow, floor to ceiling; no old
+      picture of it remains in the code.
+  A3  Build green (the known StoryBarkTest failure aside); TextureGeneratorRegistryTest still passes.
+  A4  Docs updated. A5  Owner approval (PS7) written into DECISIONS.
+
+
+CHECKPOINTS
+-----------
+  CP0  idea + checkpoint file.   CP1  bake + previews.   CP2  wiring + old generator deleted + build.
+  CP3  in-engine screenshots + docs.   CP4  owner approval -> IMPLEMENTED.
+
+
+DECISIONS
+---------
+  (default) Floor-to-ceiling, like the specimen tube (the master brief: full height where it matters - a
+    column of the facility's machine reads best joined to the ceiling).
+  (default) Accent = cyan wafers + a rad lime core. The owner can swap the core ink in one constant.
+  (owner, 2026-10-23) Shown; the owner moved straight on to the next props (the generator) without changes -
+    taken as approval, and said so.
+
+
+OPEN QUESTIONS
+--------------
+  (none)
