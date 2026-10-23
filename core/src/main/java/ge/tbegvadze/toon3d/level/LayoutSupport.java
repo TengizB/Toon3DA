@@ -134,6 +134,47 @@ final class LayoutSupport {
         return null;
     }
 
+    /**
+     * Dresses every room but the entrance (R22): a special from its kit (a DENSE kit RELAXED once the floor's tight
+     * room is spent), a regular room from one of the regular kits (R23). Then the R20 terminal guarantee.
+     */
+    static void dressRooms(RoomDresser dresser, List<LayoutRoom> rooms, LevelGenConfig config) {
+        RoomBlueprintRegistry registry = RoomBlueprints.rooms();
+        RoomBlueprint standard = registry.get(RoomBlueprints.ID_STANDARD);
+        for (LayoutRoom room : rooms) {
+            if (room.role == LevelLayoutReport.Role.ENTRANCE) continue;
+            if (room.role == LevelLayoutReport.Role.REGULAR) {
+                dresser.dress(room, dresser.pickRegularKit(room, standard.regularKits(),
+                        config != null ? config.preferredRegularKit : null), null);
+            } else {
+                RoomBlueprint blueprint = registry.get(room.blueprintId);
+                dresser.dress(room, blueprint.kit(), blueprint.relaxedKit());
+            }
+        }
+        guaranteeTerminal(dresser, rooms, registry);
+    }
+
+    /**
+     * R20: every combat floor carries a usable terminal (the story's LOG_FOUND beats fire off them). If no kit
+     * produced one, a regular room is re-dressed as an OFFICE; with none that takes, the OFFICE terminal row is
+     * added to the first terminal-allowed special.
+     */
+    private static void guaranteeTerminal(RoomDresser dresser, List<LayoutRoom> rooms, RoomBlueprintRegistry registry) {
+        if (dresser.hasUsableTerminal()) return;
+        for (LayoutRoom room : rooms) {
+            if (room.role != LevelLayoutReport.Role.REGULAR) continue;
+            dresser.redress(room, RoomBlueprints.officeKit());
+            if (dresser.hasUsableTerminal()) return;
+        }
+        for (LayoutRoom room : rooms) {
+            if (room.role != LevelLayoutReport.Role.SPECIAL) continue;
+            PropKit kit = registry.get(room.blueprintId).kit();
+            if (kit == null || !kit.placesTerminals()) continue;
+            dresser.dressExtraRow(room, RoomBlueprints.officeKit().rows().get(0));
+            if (dresser.hasUsableTerminal()) return;
+        }
+    }
+
     /** Carves every room's interior to lit floor ' '. */
     static void carveInteriors(char[][] grid, List<LayoutRoom> rooms) {
         for (LayoutRoom room : rooms) {
@@ -171,20 +212,9 @@ final class LayoutSupport {
         for (List<int[]> spine : wideHallSpines) {
             int eligible = 0;
             for (int[] tile : spine) {
-                int tileColumn = tile[0], tileRow = tile[1];
-                if (!isPlainFloor(grid[tileRow][tileColumn]) || dresser.isInClearance(tileColumn, tileRow)) continue;
+                if (!isPlainFloor(grid[tile[1]][tile[0]]) || dresser.isInClearance(tile[0], tile[1])) continue;
                 eligible++;
-                if (eligible % spacing != 0) continue;
-                if (touchesColumn(grid, tileColumn, tileRow)) continue;
-                boolean northSouth = isOpen(grid, tileColumn, tileRow + 1) && isOpen(grid, tileColumn, tileRow - 1);
-                boolean eastWest   = isOpen(grid, tileColumn + 1, tileRow) && isOpen(grid, tileColumn - 1, tileRow);
-                if (!northSouth || !eastWest) continue; // a column only where the hall is open all round
-                char previous = grid[tileRow][tileColumn];
-                int openBefore = countReachable(grid, spine.get(0));
-                grid[tileRow][tileColumn] = 'P';
-                // A column never plugs the hall and never strands a tile (the count drops by exactly the column).
-                if (FloorPopulator.wouldPlugPassage(grid, tileColumn, tileRow)
-                        || countReachable(grid, spine.get(0)) != openBefore - 1) grid[tileRow][tileColumn] = previous;
+                if (eligible % spacing == 0) tryHallColumn(grid, tile[0], tile[1], dresser);
             }
         }
         java.util.Set<Long> socketOuterTiles = new java.util.HashSet<>();
@@ -199,6 +229,29 @@ final class LayoutSupport {
                 grid[tileRow][tileColumn] = HALL_DECALS.charAt(random.nextInt(HALL_DECALS.length()));
             }
         }
+    }
+
+    /**
+     * One hall column (R28): only on plain floor outside every clearance zone, never touching another column, only
+     * where the hall is open on all four sides, never plugging a passage and never stranding a tile. Returns
+     * whether it was placed.
+     */
+    static boolean tryHallColumn(char[][] grid, int tileColumn, int tileRow, RoomDresser dresser) {
+        if (tileRow <= 0 || tileColumn <= 0 || tileRow >= grid.length - 1 || tileColumn >= grid[0].length - 1) return false;
+        if (!isPlainFloor(grid[tileRow][tileColumn]) || dresser.isInClearance(tileColumn, tileRow)) return false;
+        if (touchesColumn(grid, tileColumn, tileRow)) return false;
+        boolean openAllRound = isOpen(grid, tileColumn, tileRow + 1) && isOpen(grid, tileColumn, tileRow - 1)
+                && isOpen(grid, tileColumn + 1, tileRow) && isOpen(grid, tileColumn - 1, tileRow);
+        if (!openAllRound) return false;
+        int[] neighbour = { tileColumn + 1, tileRow };
+        int openBefore = countReachable(grid, neighbour);
+        char previous = grid[tileRow][tileColumn];
+        grid[tileRow][tileColumn] = 'P';
+        if (FloorPopulator.wouldPlugPassage(grid, tileColumn, tileRow) || countReachable(grid, neighbour) != openBefore - 1) {
+            grid[tileRow][tileColumn] = previous;
+            return false;
+        }
+        return true;
     }
 
     /**

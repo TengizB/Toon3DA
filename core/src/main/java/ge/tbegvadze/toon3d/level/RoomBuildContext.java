@@ -27,6 +27,8 @@ public final class RoomBuildContext {
     private final Random           random;
     private final LevelGenConfig   config;
     private final List<LayoutRoom> rooms;
+    // LINEAR_CORRIDOR's interior-layout variants replace the BARE kit's symmetric pillar pair (G2).
+    private boolean linearInteriorVariants;
 
     /**
      * @param grid   the floor grid ({@code grid[row][column]}); the room's interior is carved, its sockets open
@@ -45,6 +47,12 @@ public final class RoomBuildContext {
 
     public LayoutRoom room() {
         return room;
+    }
+
+    /** The floor is a LINEAR_CORRIDOR: regular rooms take its interior-layout variants as pillar slots (G2). */
+    public RoomBuildContext withLinearInteriorVariants() {
+        this.linearInteriorVariants = true;
+        return this;
     }
 
     private boolean isReservedForDoor(int tileColumn, int tileRow) {
@@ -181,6 +189,10 @@ public final class RoomBuildContext {
      */
     public void exportPillarSlots() {
         if (!config.columns) return;
+        if (linearInteriorVariants) {
+            exportLinearInteriorVariant();
+            return;
+        }
         if (room.interiorWidth() < LevelGenConstants.LEVEL_GEN_CENTRE_ROW_MIN_INTERIOR
                 || room.interiorHeight() < LevelGenConstants.LEVEL_GEN_CENTRE_ROW_MIN_INTERIOR) return;
         DoorSocket primary = room.primarySocket();
@@ -194,6 +206,44 @@ public final class RoomBuildContext {
             int offset = Math.max(2, room.interiorHeight() / 4);
             slots.add(new int[]{ room.centerColumn(), room.centerRow() - offset });
             slots.add(new int[]{ room.centerColumn(), room.centerRow() + offset });
+        }
+        room.exportFeature(RoomBlueprints.FEATURE_PILLARS, slots);
+    }
+
+    /**
+     * LINEAR_CORRIDOR's interior layouts, kept as the BARE kit's pillar slots for regular rooms of at least
+     * LEVEL_GEN_INTERIOR_MIN_DIM (G2): FOUR PILLARS at the quadrant centres, a CENTRE AVENUE of columns down the long
+     * axis (the centre kept clear), or an ALTAR of four columns on the centre's diagonals. The dresser places them
+     * under R18, so a slot on a lane or beside a door simply stays empty.
+     */
+    private void exportLinearInteriorVariant() {
+        if (room.interiorWidth() < LevelGenConstants.LEVEL_GEN_INTERIOR_MIN_DIM
+                || room.interiorHeight() < LevelGenConstants.LEVEL_GEN_INTERIOR_MIN_DIM) return;
+        List<int[]> slots = new ArrayList<>();
+        int variant = random.nextInt(3);
+        if (variant == 0) {
+            int quarterWidth  = room.interiorWidth() / 4;
+            int quarterHeight = room.interiorHeight() / 4;
+            for (int tileColumn : new int[]{ room.leftColumn + 1 + quarterWidth, room.rightColumn - 1 - quarterWidth }) {
+                for (int tileRow : new int[]{ room.bottomRow + 1 + quarterHeight, room.topRow - 1 - quarterHeight }) {
+                    slots.add(new int[]{ tileColumn, tileRow });
+                }
+            }
+        } else if (variant == 1) {
+            int spacing = LevelGenConstants.LEVEL_GEN_INTERIOR_COLUMN_SPACING + 1;
+            if (room.interiorWidth() >= room.interiorHeight()) {
+                for (int tileColumn = room.leftColumn + 2; tileColumn < room.rightColumn - 1; tileColumn += spacing) {
+                    if (tileColumn != room.centerColumn()) slots.add(new int[]{ tileColumn, room.centerRow() });
+                }
+            } else {
+                for (int tileRow = room.bottomRow + 2; tileRow < room.topRow - 1; tileRow += spacing) {
+                    if (tileRow != room.centerRow()) slots.add(new int[]{ room.centerColumn(), tileRow });
+                }
+            }
+        } else {
+            for (int[] diagonal : new int[][]{ { -1, -1 }, { 1, -1 }, { -1, 1 }, { 1, 1 } }) {
+                slots.add(new int[]{ room.centerColumn() + diagonal[0], room.centerRow() + diagonal[1] });
+            }
         }
         room.exportFeature(RoomBlueprints.FEATURE_PILLARS, slots);
     }

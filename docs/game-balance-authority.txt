@@ -2544,6 +2544,11 @@ THE TUNING LOOP the whole series was built to enable:
   Numbers chase feel; the schema keeps them honest.
 
 CHANGELOG
+  level-generation-overhaul / CP7 — BalanceConfig.LEVEL_GEN_PROP_CHANCE (0.13, SECTION 6) DELETED with its
+    BalanceSchema GRANDFATHERED name (the list shrinks by one, as C-CONSTANT allows). Its last reader, the per-tile
+    random prop scatter, is gone: rooms are furnished by prop kits under hard fill caps (level/RoomDresser,
+    LevelGenConstants.LEVEL_GEN_ROOM_FILL_CAP_*), which place no supply and no spawn. NO other number, band or waiver
+    moved.
   balance-overhaul order 8 — THE CONTENT BALANCE CONTRACT. New RuleKind.ADMISSION with eighteen C-rules (C-ENEMY ...
     C-CONSTANT, one per content kind K1-K18) and one BalanceAuditTest method each; RuleKind.COVERAGE RETIRED (folded
     into C-WEAPON / C-ITEM / C-AMMO / C-ENEMY / C-VERB; its relic line moved to R-RELIC-SOURCE). SECTION 5's

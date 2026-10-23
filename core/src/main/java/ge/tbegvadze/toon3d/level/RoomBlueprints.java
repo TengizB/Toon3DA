@@ -112,66 +112,61 @@ public final class RoomBlueprints {
      * a fresh registry without touching the shared singleton.
      */
     static void registerAll(RoomBlueprintRegistry registry) {
-        // Every row: id, tier, wall family, supply stance, demand (architecture + kit, R29), the CP7-retired
-        // eligibility + weight, the ARCHITECTURE build, then its size window + kit (+ relaxed kit). Props are never
-        // placed by build(): the RoomDresser places them from the kit.
+        // Every row: id, tier, wall family, supply stance, demand (architecture + kit, R29), the ARCHITECTURE build,
+        // then its size window + kit (+ relaxed kit). Props are never placed by build(): the RoomDresser places them.
 
         // ENTRANCE: the player's start room — no architecture, no props, no decals (R22).
         registry.register(new LambdaRoomBlueprint(ID_ENTRANCE, RoomKind.GENERIC, WallGroup.HALL,
                 RoomSupplyStance.SUPPLY_NEUTRAL, RoomSymbolDemand.of(emptyDemand()),
-                context -> true,
-                context -> LevelGenConstants.LEVEL_GEN_ROOM_ENTRANCE_SELECTION_WEIGHT,
                 context -> { /* no architecture */ }).layout(null, null, null));
 
         // STANDARD: every REGULAR room. Standard lighting plus the BARE kit's pillar slots; the kit is one of the five
         // regular kits (R23), chosen per room, so the row's own demand is empty — the dresser pins what it placed.
         registry.register(new LambdaRoomBlueprint(ID_STANDARD, RoomKind.GENERIC, WallGroup.HALL,
                 RoomSupplyStance.SUPPLY_NEUTRAL, RoomSymbolDemand.of(emptyDemand()),
-                context -> true,
-                context -> LevelGenConstants.LEVEL_GEN_ROOM_STANDARD_SELECTION_WEIGHT,
                 context -> {
                     context.standardFloor();
                     context.exportPillarSlots();
                 }).layout(null, null, null).regularKits(regularKits()));
 
         // SALVAGE_BAY: a dingy staging room around a central scrap heap. DENSE kit; RELAXED when the tight room is spent.
-        registry.register(special(ID_SALVAGE_BAY, RoomKind.GENERIC, WallGroup.STORAGE, salvageBayKit(), salvageBayWindow(),
+        registry.register(special(ID_SALVAGE_BAY, RoomKind.GENERIC, WallGroup.STORAGE, salvageBayKit(),
                 RoomBuildContext::salvageBayFloor).layout(salvageBayWindow(), salvageBayKit(), salvageBayRelaxedKit()));
 
         // SUPPLY_CACHE: a compact storeroom — crate stacks in two corners, a locker run.
-        registry.register(special(ID_SUPPLY_CACHE, RoomKind.GENERIC, WallGroup.STORAGE, supplyCacheKit(), supplyCacheWindow(),
+        registry.register(special(ID_SUPPLY_CACHE, RoomKind.GENERIC, WallGroup.STORAGE, supplyCacheKit(),
                 RoomBuildContext::standardFloor).layout(supplyCacheWindow(), supplyCacheKit(), null));
 
         // SERVER_ROOM: the data vault — rack aisles of terminals and lockers. DENSE kit; RELAXED keeps alternate lines.
-        registry.register(special(ID_SERVER_ROOM, RoomKind.SIGNATURE, WallGroup.RESEARCH, serverRoomKit(true), serverRoomWindow(),
+        registry.register(special(ID_SERVER_ROOM, RoomKind.SIGNATURE, WallGroup.RESEARCH, serverRoomKit(true),
                 RoomBuildContext::serverRoomFloor).layout(serverRoomWindow(), serverRoomKit(true), serverRoomKit(false)));
 
         // MEDICAL_BAY: clinical brightness (no floor pass), beds on the back wall.
-        registry.register(special(ID_MEDICAL_BAY, RoomKind.SIGNATURE, WallGroup.MEDICAL, medicalBayKit(), medicalBayWindow(),
+        registry.register(special(ID_MEDICAL_BAY, RoomKind.SIGNATURE, WallGroup.MEDICAL, medicalBayKit(),
                 context -> { /* fully lit */ }).layout(medicalBayWindow(), medicalBayKit(), null));
 
         // ARMORY: the last stand — weapon racks on the back wall, the dead in front of them.
-        registry.register(special(ID_ARMORY, RoomKind.SIGNATURE, WallGroup.SECURITY, armoryKit(), armoryWindow(),
+        registry.register(special(ID_ARMORY, RoomKind.SIGNATURE, WallGroup.SECURITY, armoryKit(),
                 RoomBuildContext::armoryFloor).layout(armoryWindow(), armoryKit(), null));
 
         // CRYO_CHAMBER: pod rows on the long walls, cold dim floor.
-        registry.register(special(ID_CRYO_CHAMBER, RoomKind.SIGNATURE, WallGroup.CONTAINMENT, cryoChamberKit(), cryoChamberWindow(),
+        registry.register(special(ID_CRYO_CHAMBER, RoomKind.SIGNATURE, WallGroup.CONTAINMENT, cryoChamberKit(),
                 RoomBuildContext::cryoChamberFloor).layout(cryoChamberWindow(), cryoChamberKit(), null));
 
         // POWER_PLANT: a humming generator block in the middle of a big dark room.
-        registry.register(special(ID_POWER_PLANT, RoomKind.SIGNATURE, WallGroup.MACHINERY, powerPlantKit(), powerPlantWindow(),
+        registry.register(special(ID_POWER_PLANT, RoomKind.SIGNATURE, WallGroup.MACHINERY, powerPlantKit(),
                 RoomBuildContext::powerPlantFloor).layout(powerPlantWindow(), powerPlantKit(), null));
 
         // COMMAND_CENTER: a console bank on the back wall, a holo-table in the middle.
-        registry.register(special(ID_COMMAND_CENTER, RoomKind.SIGNATURE, WallGroup.SECURITY, commandCenterKit(), commandCenterWindow(),
+        registry.register(special(ID_COMMAND_CENTER, RoomKind.SIGNATURE, WallGroup.SECURITY, commandCenterKit(),
                 RoomBuildContext::commandCenterFloor).layout(commandCenterWindow(), commandCenterKit(), null));
 
         // CONTAINMENT_BLOCK: cell pods on the back wall, an observation console by the door.
-        registry.register(special(ID_CONTAINMENT_BLOCK, RoomKind.SIGNATURE, WallGroup.CONTAINMENT, containmentBlockKit(), containmentBlockWindow(),
+        registry.register(special(ID_CONTAINMENT_BLOCK, RoomKind.SIGNATURE, WallGroup.CONTAINMENT, containmentBlockKit(),
                 RoomBuildContext::containmentBlockFloor).layout(containmentBlockWindow(), containmentBlockKit(), null));
 
         // RESEARCH_LAB: specimen tanks on the back wall; the force-field wall stub makes the AI core's alcove.
-        registry.register(special(ID_RESEARCH_LAB, RoomKind.SIGNATURE, WallGroup.RESEARCH, researchLabKit(), researchLabWindow(),
+        registry.register(special(ID_RESEARCH_LAB, RoomKind.SIGNATURE, WallGroup.RESEARCH, researchLabKit(),
                 context -> {
                     context.standardFloor();
                     context.researchLabAlcove();
@@ -182,39 +177,24 @@ public final class RoomBlueprints {
         Map<Character, String> rotunda = demand('?', "decal_magnetic_deck", '-', "decal_starlight_seam");
         registry.register(new LambdaRoomBlueprint(ID_STELLAR_OBSERVATORY, RoomKind.SIGNATURE, WallGroup.SIGNATURE,
                 RoomSupplyStance.SUPPLY_NEUTRAL, RoomSymbolDemand.of(union(rotunda, stellarObservatoryKit())),
-                context -> fitsWindow(stellarObservatoryWindow(), context),
-                context -> LevelGenConstants.LEVEL_GEN_SPECIAL_ROOM_SELECTION_WEIGHT,
                 RoomBuildContext::stellarObservatoryRotunda)
                 .layout(stellarObservatoryWindow(), stellarObservatoryKit(), null));
 
         // GORE_NEST: a demonic-breach aftermath — one ruptured pod over a carpet of decals.
-        registry.register(special(ID_GORE_NEST, RoomKind.SIGNATURE, WallGroup.SIGNATURE, goreNestKit(), goreNestWindow(),
+        registry.register(special(ID_GORE_NEST, RoomKind.SIGNATURE, WallGroup.SIGNATURE, goreNestKit(),
                 RoomBuildContext::goreNestFloor).layout(goreNestWindow(), goreNestKit(), null));
 
         // ATMOSPHERIC_PLANT: the hazardous-materials hub — scrubbers, and the three live cylinders that make it the
         // game's chain-reaction arena ('E' placement owner beside GroupBarrelPlacer).
-        registry.register(special(ID_ATMOSPHERIC_PLANT, RoomKind.SIGNATURE, WallGroup.MACHINERY, atmosphericPlantKit(), atmosphericPlantWindow(),
+        registry.register(special(ID_ATMOSPHERIC_PLANT, RoomKind.SIGNATURE, WallGroup.MACHINERY, atmosphericPlantKit(),
                 RoomBuildContext::atmosphericPlantFloor).layout(atmosphericPlantWindow(), atmosphericPlantKit(), null));
     }
 
-    /**
-     * A special room's row: its demand is exactly its kit's (R29), it competes with the one shared special weight
-     * (retired with eligibility at CP7), and build() runs its architecture.
-     */
+    /** A special room's row: its demand is exactly its kit's (R29), and build() runs its architecture. */
     private static LambdaRoomBlueprint special(String id, RoomKind kind, WallGroup wallGroup, PropKit kit,
-                                               RoomSizeWindow window, BuildStep architecture) {
+                                               BuildStep architecture) {
         return new LambdaRoomBlueprint(id, kind, wallGroup, RoomSupplyStance.SUPPLY_NEUTRAL,
-                RoomSymbolDemand.of(union(emptyDemand(), kit)),
-                context -> fitsWindow(window, context),
-                context -> LevelGenConstants.LEVEL_GEN_SPECIAL_ROOM_SELECTION_WEIGHT,
-                architecture);
-    }
-
-    /** CP7-retired eligibility: the candidate fits the window minimum in either orientation (no depth, no cap). */
-    private static boolean fitsWindow(RoomSizeWindow window, RoomContext context) {
-        int width = context.interiorWidth(), height = context.interiorHeight();
-        return (width >= window.minWidth && height >= window.minHeight)
-            || (!window.square && width >= window.minHeight && height >= window.minWidth);
+                RoomSymbolDemand.of(union(emptyDemand(), kit)), architecture);
     }
 
     /** Architecture demand plus a kit's demand (R29: a room claims exactly what it can stamp). */
@@ -481,9 +461,10 @@ public final class RoomBlueprints {
                 .row(PropKitRow.place('m').at(PropAnchor.ANY_WALL).count(1))
                 .row(PropKitRow.place(".s", 1f, 1f).at(PropAnchor.TRAIL).count(2, 4))
                 .build());
-        // BARE: no props; a room at least 7 x 7 gets its two pillars on the architecture's symmetric slots (R25).
+        // BARE: no props. A ROOMS_MST room at least 7 x 7 gets two pillars on the architecture's symmetric slots; a
+        // LINEAR room gets one of its interior-layout variants (four pillars / avenue / altar) as slots (R25, G2).
         kits.add(PropKit.plain(PropKit.ID_BARE)
-                .row(PropKitRow.place('P').at(PropAnchor.FEATURE).feature(FEATURE_PILLARS).count(2))
+                .row(PropKitRow.place('P').at(PropAnchor.FEATURE).feature(FEATURE_PILLARS).count(2, 4))
                 .build());
         return java.util.Collections.unmodifiableList(kits);
     }
@@ -514,16 +495,6 @@ public final class RoomBlueprints {
     // --- Concrete blueprint backed by the four functional pieces (kept package-private) ---
 
     @FunctionalInterface
-    interface Eligibility {
-        boolean test(RoomContext context);
-    }
-
-    @FunctionalInterface
-    interface SelectionWeight {
-        float of(RoomContext context);
-    }
-
-    @FunctionalInterface
     interface BuildStep {
         void build(RoomBuildContext context);
     }
@@ -534,8 +505,6 @@ public final class RoomBlueprints {
         private final WallGroup wallGroup;
         private final RoomSupplyStance supplyStance;
         private final RoomSymbolDemand demand;
-        private final Eligibility eligibility;
-        private final SelectionWeight weight;
         private final BuildStep buildStep;
         private RoomSizeWindow sizeWindow;
         private PropKit kit;
@@ -543,15 +512,12 @@ public final class RoomBlueprints {
         private java.util.List<PropKit> regularKits = java.util.Collections.emptyList();
 
         LambdaRoomBlueprint(String id, RoomKind kind, WallGroup wallGroup, RoomSupplyStance supplyStance,
-                            RoomSymbolDemand demand,
-                            Eligibility eligibility, SelectionWeight weight, BuildStep buildStep) {
+                            RoomSymbolDemand demand, BuildStep buildStep) {
             this.id          = id;
             this.kind        = kind;
             this.wallGroup   = wallGroup;
             this.supplyStance = supplyStance;
             this.demand      = demand;
-            this.eligibility = eligibility;
-            this.weight      = weight;
             this.buildStep   = buildStep;
         }
 
@@ -559,8 +525,6 @@ public final class RoomBlueprints {
         @Override public RoomKind kind() { return kind; }
         @Override public WallGroup wallGroup() { return wallGroup; }
         @Override public RoomSupplyStance supplyStance() { return supplyStance; }
-        @Override public boolean eligible(RoomContext context) { return eligibility.test(context); }
-        @Override public float selectionWeight(RoomContext context) { return weight.of(context); }
         @Override public RoomSymbolDemand symbolDemand() { return demand; }
         @Override public void build(RoomBuildContext context) { buildStep.build(context); }
         @Override public RoomSizeWindow sizeWindow() { return sizeWindow; }

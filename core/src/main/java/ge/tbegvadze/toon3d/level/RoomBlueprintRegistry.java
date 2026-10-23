@@ -7,10 +7,9 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * The registry the level generator selects rooms from (symbol/sprite-reuse order-5) — the ROOM twin of
- * {@code route/GeneratorRegistry}. Every v1 {@link RoomBlueprint} registers here via
- * {@link RoomBlueprints#bootstrap()}; the generator asks the registry for eligible rooms instead of
- * switching on a hardcoded {@code enum} ("never a switch statement").
+ * The room catalog's registry (the ROOM twin of {@code route/GeneratorRegistry}). Every {@link RoomBlueprint}
+ * registers here via {@link RoomBlueprints#bootstrap()}; the generators read rooms from it (the special pool is
+ * {@link SpecialRoomPlanner#specialPool}) instead of switching on a hardcoded {@code enum}.
  *
  * <p>Insertion-ordered so enumeration and seeded selection are reproducible. Duplicate id throws
  * (route-registry discipline); {@link #get(String)} throws for an unknown id. Headless — no LibGDX.
@@ -66,21 +65,6 @@ public final class RoomBlueprintRegistry {
     /** All {@link RoomKind#GENERIC} blueprints, in registration order (unmodifiable). */
     public List<RoomBlueprint> allGeneric() {
         return filterByKind(RoomKind.GENERIC);
-    }
-
-    /**
-     * The blueprints eligible for a candidate room described by {@code context}, in registration order
-     * (unmodifiable). This is the seeded pick the generator draws from in order-8; order-5 only exposes
-     * it and unit-tests the eligibility gates.
-     */
-    public List<RoomBlueprint> selectable(RoomContext context) {
-        List<RoomBlueprint> eligible = new ArrayList<>();
-        for (RoomBlueprint blueprint : byId.values()) {
-            if (blueprint.eligible(context)) {
-                eligible.add(blueprint);
-            }
-        }
-        return Collections.unmodifiableList(eligible);
     }
 
     private List<RoomBlueprint> filterByKind(RoomKind kind) {

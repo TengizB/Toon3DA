@@ -32,6 +32,8 @@ final class GroupBarrelPlacer {
 
     /** The existing explosive-barrel symbol (docs/tile-symbols.txt). No new symbol. */
     static final char BARREL_SYMBOL = 'E';
+    // The computer terminal ('T', docs/tile-symbols.txt): a barrel never takes its last open side (R20).
+    private static final char TERMINAL_SYMBOL = 'T';
     /** The sprite the palette must bind {@link #BARREL_SYMBOL} to on a generated level that carries barrels. */
     static final String BARREL_SPRITE_ID = "prop_explosive_barrel";
 
@@ -171,6 +173,7 @@ final class GroupBarrelPlacer {
                 // The same two guards placeInRoom applies, so a room whose every tile would plug a passage is
                 // never counted as able to host a barrel it can never receive.
                 if (plugsAPassage(grid, tileColumn, tileRow)) continue;
+                if (takesATerminalsLastAccess(grid, tileColumn, tileRow)) continue;
                 if (!keepsEverythingReachable(grid, survey, tileColumn, tileRow)) continue;
                 hostable.add(new int[]{tileColumn, tileRow});
             }
@@ -195,6 +198,7 @@ final class GroupBarrelPlacer {
             // Earlier barrels (this room's, or another's) may have changed what is safe: re-check, then stamp.
             // A barrel may never plug a one-tile-wide passage, even where a detour keeps everything reachable.
             if (plugsAPassage(grid, tileColumn, tileRow)) continue;
+            if (takesATerminalsLastAccess(grid, tileColumn, tileRow)) continue;
             if (!keepsEverythingReachable(grid, survey, tileColumn, tileRow)) continue;
             grid[tileRow][tileColumn] = BARREL_SYMBOL;
             placed++;
@@ -244,6 +248,31 @@ final class GroupBarrelPlacer {
                 && (survey.exitColumn < 0 || afterWithKeycards[survey.exitRow][survey.exitColumn]);
         grid[tileRow][tileColumn] = previous;
         return keeps;
+    }
+
+    /**
+     * Terminal guard (level-generation-overhaul R20): true when this tile is the only walkable orthogonal neighbour
+     * of an adjacent 'T', so a barrel here would wall the terminal in and the floor would lose its LOG_FOUND read.
+     */
+    private static boolean takesATerminalsLastAccess(char[][] grid, int tileColumn, int tileRow) {
+        for (int direction = 0; direction < 4; direction++) {
+            int terminalColumn = tileColumn + STEP_COLUMNS[direction];
+            int terminalRow    = tileRow    + STEP_ROWS[direction];
+            if (terminalRow < 0 || terminalRow >= grid.length
+                    || terminalColumn < 0 || terminalColumn >= grid[0].length) continue;
+            if (grid[terminalRow][terminalColumn] != TERMINAL_SYMBOL) continue;
+            boolean otherAccess = false;
+            for (int side = 0; side < 4 && !otherAccess; side++) {
+                int accessColumn = terminalColumn + STEP_COLUMNS[side];
+                int accessRow    = terminalRow    + STEP_ROWS[side];
+                if (accessColumn == tileColumn && accessRow == tileRow) continue;
+                if (accessRow < 0 || accessRow >= grid.length
+                        || accessColumn < 0 || accessColumn >= grid[0].length) continue;
+                otherAccess = isWalkable(grid[accessRow][accessColumn], true);
+            }
+            if (!otherAccess) return true;
+        }
+        return false;
     }
 
     /** A tile with a wall as an orthogonal neighbour. */

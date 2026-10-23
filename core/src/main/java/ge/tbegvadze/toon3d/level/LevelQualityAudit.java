@@ -397,7 +397,10 @@ public final class LevelQualityAudit {
                 if (hasPassableNeighbour(grid, tileColumn, tileRow)) usableTerminal = true;
             }
         }
-        if (COMBAT.contains(tally.name) && !usableTerminal) tally.floorsWithoutTerminal++;
+        if (COMBAT.contains(tally.name) && !usableTerminal) {
+            tally.floorsWithoutTerminal++;
+            explain(tally, "I9 no usable 'T' (any 'T'=" + anyTerminal + ")", -1, -1);
+        }
         if (anyTerminal && !"prop_terminal".equals(palette.spriteIdOf('T'))) tally.offSpriteTerminalFloors++;
     }
 

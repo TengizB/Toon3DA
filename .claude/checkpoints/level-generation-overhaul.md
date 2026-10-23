@@ -65,7 +65,7 @@ into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
       retired rolls gone from LevelGenerator; buildRoomForBridge re-pointed; symbolsStampedInIsolation re-pointed;
       snapshot test re-baselined (dated); RoomBlueprintBuildDemandTest updated; audit A3-A8 pass for ROOMS_MST;
       test + balanceSim green.
-- [ ] **CP7** — DONE WHEN: LINEAR runs pipeline A with G2; STORAGE_BAY/REACTOR/bridge/native props/roulette gone;
+- [x] **CP7** — (balanceSim: SR3 0.98 under D5, S-HEAVY NAIVE 0.31 under D6) DONE WHEN: LINEAR runs pipeline A with G2; STORAGE_BAY/REACTOR/bridge/native props/roulette gone;
       eligible/selectionWeight + weight/chance/depth/cap constants deleted; RoomBlueprintRegistryTest updated;
       LEVEL_GEN_PROP_CHANCE + GRANDFATHERED entry deleted (CHANGELOG); audit passes LINEAR; both gates green.
 - [ ] **CP8** — DONE WHEN: CAVERN runs G3; audit passes CAVERN; both gates green.
@@ -165,3 +165,31 @@ into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
   Eligibility still exists for LINEAR's roulette until CP7, as "fits the window minimum" (no depth, no cap).
 - CP6 closed: owner decision D5 (idea file) — SR3 0.99 accepted as noise; report SR3 at every later gate. Every
   other balanceSim band green at CP6 (S-NAVIGATION, S-TWIST, S-RELIC SR1/SR2/SR4 incl.).
+- CP7 (LINEAR_CORRIDOR on pipeline A, G2): `LinearCorridorGenerator` rewritten — a SpineRun (head/tail + slots), the
+  entrance at the head slot, the planned specials at evenly spaced spine fractions on alternating sides
+  (`slotsNearest` fallback, then one retry at the window minimum), regular side rooms at SIDE_ROOM_CHANCE with a
+  spine-facing socket, the plaza carved outside nearRoomMask, stairs in the room farthest down the spine, legacy base
+  palette + FloorSymbolPins, layout report attached. Linear-only architecture variants: `RoomBuildContext.
+  withLinearInteriorVariants()` (four-pillars / avenue / altar for rooms >= 5x5). BARE kit pillars now count(2,4).
+  `LayoutSupport.dressRooms` carries the R20 terminal guarantee; `tryHallColumn` is shared.
+  DELETED: RoomBlueprint.eligible/selectionWeight, LambdaRoomBlueprint eligibility/weight, fitsWindow, RoomContext,
+  RoomBlueprintRegistry.selectable, LevelGenerator.buildRoomForBridge, ~300 dead LevelGenConstants lines (every
+  selection weight, room *_CHANCE gate, *_MIN_DEPTH, *_MAX cap, per-room prop chance, SPINE_STORAGE_*/REACTOR_*,
+  LARGE_MODIFIER_*, MIN_SPECIAL_ROOMS, SERVER_ROOM_CHANCE...), BalanceConfig.LEVEL_GEN_PROP_CHANCE + its
+  GRANDFATHERED name (CHANGELOG line in game-balance-authority; procedural-level-generation.txt table line removed).
+  KEPT ON PURPOSE (not this idea's): the four dead enemy-mix LEVEL_GEN_*_THRESHOLD constants and the dead BalanceConfig
+  aliases LEVEL_GEN_MAX_ENEMIES_PER_ROOM / LEVEL_GEN_DEPTH_ENEMY_BONUS_MAX / _UPGRADE_CHANCE (encounter layer, dead
+  before CP0). LEVEL_GEN_CAVE_* dead chances were deleted here; CavernGenerator still reads LEVEL_GEN_CRYO_CHANCE etc.
+  (CP8 removes them).
+  FIX found by the audit: GroupBarrelPlacer.takesATerminalsLastAccess — a group barrel may not take a 'T''s last
+  walkable side (one LINEAR floor, seed 113 depth 25, had T boxed in by wall/wall/W/E). Snapshot re-baselined (dated,
+  3434936d..., stable over two runs). Audit `--explain` now also reports I9 no-usable-terminal floors.
+  Audit 200 seeds x 6 depths: LINEAR and ROOMS_MST every counter I1-I9/I13/I14/I16 = 0; LINEAR 2.00 specials/floor,
+  I11 max deviation 9%, fill regular max 0.120 / special 0.214 / dense 0.265, tight rooms 4.4%, 5.60 doors/floor;
+  ROOMS_MST unchanged from CP6 (2.83/floor, 11%, 23.30 doors/floor).
+  Fast gate: 481 tests, only the baseline StoryBarkTest red. balanceSim: SR3 0.98 (3.33 vs 3.40; D5) and S-HEAVY
+  "NAIVE heavies answered" 0.31 > 0.30 (CP6 0.27): every extra answer is "killed first" (97 -> 112), NAIVE avoid/guard
+  stay ~0, TACTICAL 0.91 — the long spine sightlines let NAIVE shoot a heavy before it lands. Owner delegated the call;
+  decision D6 (idea file): accept as a layout effect, no band moves, report S-HEAVY + SR3 at every later gate.
+  NEXT (CP8): CAVERN on G3 — walled chambers with sockets, specials first, formations/debris rules, ChamberType typing
+  dropped, 'T' out of the cave body; then delete the cave constants it stops reading. Both gates.

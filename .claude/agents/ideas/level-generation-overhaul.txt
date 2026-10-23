@@ -1015,6 +1015,11 @@ DECISIONS
   D5  balanceSim S-RELIC SR3 ("rarity is felt", LEGENDARY / COMMON mean depth >= 1.00) read 0.99 after the ROOMS_MST
       rebuild (3.17 vs 3.20 over 120 runs each; base 1.00 = 3.12 vs 3.12)?  ->  Owner: accept as sampling noise and
       continue. No band and no balance number moves; SR3's value is reported at every later gate.  (2026-10-23)
+  D6  balanceSim S-HEAVY "NAIVE heavies answered" (<= 0.30) read 0.31 after the LINEAR_CORRIDOR rebuild (CP6 0.27):
+      the whole rise is NAIVE killing the heavy before it lands (97 -> 112 of ~370 committed) on the new spine's long
+      sightlines; NAIVE still avoids/guards ~0 and TACTICAL holds 0.91?  ->  Owner delegated the decision; chosen:
+      accept as a layout effect, not a balance regression. No band and no number moves; S-HEAVY is reported beside
+      SR3 at every later gate.  (2026-10-23)
 
 
 OPEN QUESTIONS

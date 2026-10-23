@@ -299,7 +299,6 @@ geometry for the raycaster.
   LEVEL_GEN_ROOM_MARGIN            2    min gap between room bounding boxes (tiles)
   LEVEL_GEN_TARGET_ROOMS          10    stop adding rooms once count reached
   LEVEL_GEN_PLACEMENT_TRIES      300    max attempts to place each room
-  LEVEL_GEN_PROP_CHANCE         0.13f   probability any floor tile gets a prop
   LEVEL_GEN_MAX_ENEMIES_PER_ROOM   3    ceiling on enemies spawned per room
   LEVEL_GEN_CORRUPTOR_RATIO      0.65f  probability spawn char is '1' (Corruptor)
 

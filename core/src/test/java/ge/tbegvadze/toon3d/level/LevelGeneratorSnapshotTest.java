@@ -168,8 +168,10 @@ class LevelGeneratorSnapshotTest {
     // special plan, specials placed before the entrance and regular rooms, socket-to-socket corridors through the
     // CorridorRouter, flanked one-tile doorways, kit-dressed rooms (no per-tile prop roll), the hall pass and the
     // pinned palette. Every grid changes by design. Stable across two JVM runs.
+    // RE-BASELINE (level-generation-overhaul CP7, 2026-10-23): GroupBarrelPlacer never takes a terminal's last
+    // walkable side (R20), so a group barrel moves on the seeds where one boxed a 'T' in. No layout draw changed.
     private static final String EXPECTED_DIGEST =
-            "4ee51df2891913ef4ea76e3c2ecec6b70a58825b1a9e2b8ddbfe1812125f90d9";
+            "3434936dbe0d3bc34ddb576b65d335c88655e7f09adb239ac36dfc1d68727fd3";
 
     @Test
     void generatedGridsAreByteForByteStableAcrossSeedsAndDepths() {

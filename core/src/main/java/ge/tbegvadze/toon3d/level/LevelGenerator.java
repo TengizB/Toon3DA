@@ -161,7 +161,7 @@ public class LevelGenerator implements ILevelGenerator, SupplySlotProvider {
 
         // f — dressing (the entrance stays bare, R22); g — halls; h — the doorway guard.
         dresser = new RoomDresser(grid, rooms, seed);
-        dressRooms(rooms, registry);
+        LayoutSupport.dressRooms(dresser, rooms, config);
         LayoutSupport.dressHalls(grid, rooms, wideHallSpines, dresser, random);
         DoorwayRules.Validation validation = DoorwayRules.validate(grid, rooms);
 
@@ -407,45 +407,6 @@ public class LevelGenerator implements ILevelGenerator, SupplySlotProvider {
     }
 
     // -------------------------------------------------------------------------
-    // Dressing (R16-R23)
-    // -------------------------------------------------------------------------
-
-    private void dressRooms(List<LayoutRoom> rooms, RoomBlueprintRegistry registry) {
-        RoomBlueprint standard = registry.get(RoomBlueprints.ID_STANDARD);
-        for (LayoutRoom room : rooms) {
-            if (room.role == LevelLayoutReport.Role.ENTRANCE) continue;
-            if (room.role == LevelLayoutReport.Role.REGULAR) {
-                dresser.dress(room, dresser.pickRegularKit(room, standard.regularKits(), config.preferredRegularKit), null);
-            } else {
-                RoomBlueprint blueprint = registry.get(room.blueprintId);
-                dresser.dress(room, blueprint.kit(), blueprint.relaxedKit());
-            }
-        }
-        guaranteeTerminal(rooms, registry);
-    }
-
-    /**
-     * R20: every combat floor carries a usable terminal (the story's LOG_FOUND beats fire off them). If no kit
-     * produced one, a regular room is re-dressed as an OFFICE; with none that takes, the OFFICE terminal row is
-     * added to the first terminal-allowed special.
-     */
-    private void guaranteeTerminal(List<LayoutRoom> rooms, RoomBlueprintRegistry registry) {
-        if (dresser.hasUsableTerminal()) return;
-        for (LayoutRoom room : rooms) {
-            if (room.role != LevelLayoutReport.Role.REGULAR) continue;
-            dresser.redress(room, RoomBlueprints.officeKit());
-            if (dresser.hasUsableTerminal()) return;
-        }
-        for (LayoutRoom room : rooms) {
-            if (room.role != LevelLayoutReport.Role.SPECIAL) continue;
-            PropKit kit = registry.get(room.blueprintId).kit();
-            if (kit == null || !kit.placesTerminals()) continue;
-            dresser.dressExtraRow(room, RoomBlueprints.officeKit().rows().get(0));
-            if (dresser.hasUsableTerminal()) return;
-        }
-    }
-
-    // -------------------------------------------------------------------------
     // Room depth, keycard gate, stairs (algorithms unchanged; rooms are LayoutRooms now)
     // -------------------------------------------------------------------------
 
@@ -672,31 +633,6 @@ public class LevelGenerator implements ILevelGenerator, SupplySlotProvider {
                 new FloorPopulator.EncounterFacts(-1, 0f, 0f, 0, 0), config, dungeonDepth, seed);
         return populated.attachTo(new Level(grid, populated.spawnPoints, populated.weaponSpawnPoints,
                 LevelFinisher.request(grid, seed).config(config).basePalette(LevelPalettes.legacy()).finish()));
-    }
-
-    // -------------------------------------------------------------------------
-    // The build bridge (LINEAR_CORRIDOR's delegated rooms until its own rebuild)
-    // -------------------------------------------------------------------------
-
-    /**
-     * Builds one room of ANOTHER generator through the shared engine: architecture from the blueprint, props
-     * from its kit. The room's existing shell openings become its sockets. Bounds are shell bounds; the interior
-     * must already be carved.
-     */
-    static void buildRoomForBridge(char[][] grid, int leftColumn, int bottomRow, int rightColumn, int topRow,
-                                   RoomBlueprint blueprint, Random random, LevelGenConfig config, long floorSeed) {
-        LayoutRoom room = new LayoutRoom(leftColumn, bottomRow, rightColumn, topRow,
-                LevelLayoutReport.Role.SPECIAL, blueprint.id());
-        for (int tileRow = bottomRow; tileRow <= topRow; tileRow++) {
-            for (int tileColumn = leftColumn; tileColumn <= rightColumn; tileColumn++) {
-                if (!room.isShellTile(tileColumn, tileRow) || Level.isWall(grid[tileRow][tileColumn])) continue;
-                DoorSocket.Side side = room.sideOf(tileColumn, tileRow);
-                if (side != null) room.addSocket(new DoorSocket(tileColumn, tileRow, side));
-            }
-        }
-        List<LayoutRoom> rooms = Collections.singletonList(room);
-        blueprint.build(new RoomBuildContext(grid, room, random, config, rooms));
-        new RoomDresser(grid, rooms, floorSeed).dress(room, blueprint.kit(), blueprint.relaxedKit());
     }
 
     // -------------------------------------------------------------------------

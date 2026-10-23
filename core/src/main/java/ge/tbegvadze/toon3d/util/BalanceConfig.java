@@ -778,8 +778,6 @@ public final class BalanceConfig {
     // medkits, armour, ammo and weapons appear.
     // =====================================================================================
 
-    /** Chance any interior floor tile in a non-entrance room receives a prop. Range: 0.05–0.25. */
-    public static final float LEVEL_GEN_PROP_CHANCE          = 0.13f;
     /** Hard cap on enemies spawned per room. Range: 1–5. */
     public static final int   LEVEL_GEN_MAX_ENEMIES_PER_ROOM = 3;
 
