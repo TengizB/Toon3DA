@@ -12,7 +12,8 @@ import java.util.PriorityQueue;
  * another's with a seeded A* on the tile grid. Room footprints (shell and interior) are impassable except the
  * two endpoints, so a corridor can never cut a shell (R9); a tile beside another room costs
  * {@code LEVEL_GEN_ROUTE_SHELL_HUG_COST}, an existing corridor tile {@code LEVEL_GEN_ROUTE_MERGE_COST} (so
- * corridors merge), every other tile {@code LEVEL_GEN_ROUTE_BASE_COST}. Ties are broken by a per-tile jitter
+ * corridors merge), every other tile {@code LEVEL_GEN_ROUTE_BASE_COST}; every turn adds {@code LEVEL_GEN_ROUTE_TURN_COST}
+ * (straight legs, never a staircase). Ties are broken by a per-tile jitter
  * hashed from the route seed, so the route is deterministic without drawing from the layout's Random. It
  * returns the tiles; the caller carves them. {@link #widen} then makes an MST edge a 3-wide hall wherever
  * the band keeps a tile from every room, narrowing to one tile before each socket. Headless — no LibGDX.
@@ -36,12 +37,14 @@ public final class CorridorRouter {
                                     int fromColumn, int fromRow, int toColumn, int toRow, long routeSeed) {
         int height = grid.length;
         int width  = grid[0].length;
-        float[] bestCost = new float[width * height];
-        int[]   parent   = new int[width * height];
+        // The search state is (tile, arrival direction) so a turn can be charged; direction 4 = the start.
+        int states = width * height * 5;
+        float[] bestCost = new float[states];
+        int[]   parent   = new int[states];
         java.util.Arrays.fill(bestCost, Float.MAX_VALUE);
         java.util.Arrays.fill(parent, -1);
-        int start  = fromRow * width + fromColumn;
-        int target = toRow * width + toColumn;
+        int start = (fromRow * width + fromColumn) * 5 + 4;
+        int targetTile = toRow * width + toColumn;
         bestCost[start] = 0f;
         float heuristicScale = LevelGenConstants.LEVEL_GEN_ROUTE_MERGE_COST;
         PriorityQueue<float[]> open = new PriorityQueue<>((first, second) -> {
@@ -49,24 +52,32 @@ public final class CorridorRouter {
             return byPriority != 0 ? byPriority : Float.compare(first[1], second[1]);
         });
         open.add(new float[]{ heuristicScale * (Math.abs(fromColumn - toColumn) + Math.abs(fromRow - toRow)), start });
-        boolean[] closed = new boolean[width * height];
+        boolean[] closed = new boolean[states];
+        int reached = -1;
         while (!open.isEmpty()) {
             float[] entry = open.poll();
             int current = (int) entry[1];
             if (closed[current]) continue;
             closed[current] = true;
-            if (current == target) break;
-            int currentColumn = current % width;
-            int currentRow    = current / width;
+            int currentTile = current / 5;
+            int arrival     = current % 5;
+            if (currentTile == targetTile) {
+                reached = current;
+                break;
+            }
+            int currentColumn = currentTile % width;
+            int currentRow    = currentTile / width;
             for (int direction = 0; direction < 4; direction++) {
                 int nextColumn = currentColumn + STEP_COLUMNS[direction];
                 int nextRow    = currentRow + STEP_ROWS[direction];
                 // The outer border stays solid rock.
                 if (nextColumn <= 0 || nextRow <= 0 || nextColumn >= width - 1 || nextRow >= height - 1) continue;
-                int next = nextRow * width + nextColumn;
+                int nextTile = nextRow * width + nextColumn;
+                if (roomMask[nextRow][nextColumn] && nextTile != targetTile) continue;
+                int next = nextTile * 5 + direction;
                 if (closed[next]) continue;
-                if (roomMask[nextRow][nextColumn] && next != target) continue;
                 float step = stepCost(grid, hugMask, nextColumn, nextRow) + jitter(nextColumn, nextRow, routeSeed);
+                if (arrival != 4 && arrival != direction) step += LevelGenConstants.LEVEL_GEN_ROUTE_TURN_COST;
                 float cost = bestCost[current] + step;
                 if (cost >= bestCost[next]) continue;
                 bestCost[next] = cost;
@@ -76,9 +87,10 @@ public final class CorridorRouter {
             }
         }
         List<int[]> path = new ArrayList<>();
-        if (start != target && parent[target] < 0) return path;
-        for (int cursor = target; cursor >= 0; cursor = cursor == start ? -1 : parent[cursor]) {
-            path.add(new int[]{ cursor % width, cursor / width });
+        if (reached < 0) return path;
+        for (int cursor = reached; cursor >= 0; cursor = parent[cursor]) {
+            int tile = cursor / 5;
+            path.add(new int[]{ tile % width, tile / width });
         }
         Collections.reverse(path);
         return path;

@@ -31,7 +31,8 @@ import java.util.TreeMap;
  * ASCII dumps. Output: {@code core/build/reports/level-audit/summary.txt} (+ {@code dumps/}), echoed to stdout.
  *
  * <p>Args: {@code --seeds N} (default 200), {@code --depths 1,5,10,15,20,25}, {@code --generators
- * ROOMS_MST,CAVERN,START_ROOM} (default all), {@code --dump K} (K grids per generator), {@code --out DIR}.
+ * ROOMS_MST,CAVERN,START_ROOM} (default all), {@code --dump K} (K grids per generator), {@code --out DIR},
+ * {@code --explain K} (print the first K violation locations per generator).
  * Headless — no LibGDX.
  */
 public final class LevelQualityAudit {
@@ -74,6 +75,7 @@ public final class LevelQualityAudit {
         final Map<String, Integer> specialCounts = new TreeMap<>();
         final Map<String, Integer> specialCountsDepthOne = new TreeMap<>();
         int dumped;
+        final List<String> examples = new ArrayList<>();
 
         Tally(String name) {
             this.name = name;
@@ -115,6 +117,25 @@ public final class LevelQualityAudit {
         }
     }
 
+    /** How many violation locations to print per generator (--explain K). */
+    private static int explainLimit;
+    private static String currentFloor = "";
+    private static Level  currentLevel;
+    private static File   explainDumps;
+    private static final Set<String> explainedFloors = new HashSet<>();
+
+    // Records a violation location (and, once per floor, an ASCII dump of that floor under dumps/explain/).
+    private static void explain(Tally tally, String what, int tileColumn, int tileRow) {
+        if (tally.examples.size() >= explainLimit) return;
+        tally.examples.add(currentFloor + " " + what + " at (" + tileColumn + "," + tileRow + ")");
+        if (explainDumps == null || !explainedFloors.add(currentFloor)) return;
+        try {
+            writeDump(new File(explainDumps, currentFloor.replace(' ', '_').replace('=', '-') + ".txt"), currentLevel);
+        } catch (IOException ignored) {
+            // A dump is a convenience; the summary still lists the location.
+        }
+    }
+
     public static void main(String[] args) throws IOException {
         int seeds = 200;
         int dumpsPerGenerator = 0;
@@ -128,6 +149,7 @@ public final class LevelQualityAudit {
             if (argument.equals("--seeds")) seeds = Integer.parseInt(args[++index]);
             else if (argument.equals("--dump")) dumpsPerGenerator = Integer.parseInt(args[++index]);
             else if (argument.equals("--out")) outDirectory = args[++index];
+            else if (argument.equals("--explain")) explainLimit = Integer.parseInt(args[++index]);
             else if (argument.equals("--depths")) {
                 String[] parts = args[++index].split(",");
                 depths = new int[parts.length];
@@ -139,6 +161,10 @@ public final class LevelQualityAudit {
         }
         RoomBlueprints.bootstrap();
         File dumpDirectory = new File(outDirectory, "dumps");
+        if (explainLimit > 0) {
+            explainDumps = new File(dumpDirectory, "explain");
+            if (!explainDumps.isDirectory() && !explainDumps.mkdirs()) explainDumps = null;
+        }
         if (dumpsPerGenerator > 0 && !dumpDirectory.isDirectory() && !dumpDirectory.mkdirs()) {
             throw new IOException("cannot create " + dumpDirectory);
         }
@@ -149,7 +175,9 @@ public final class LevelQualityAudit {
             Tally tally = new Tally(generator);
             for (int depth : depths) {
                 for (long seed = 1; seed <= seeds; seed++) {
+                    currentFloor = generator + " seed=" + seed + " depth=" + depth;
                     Level level = build(generator, seed, depth);
+                    currentLevel = level;
                     analyse(level, depth, tally);
                     if (tally.dumped < dumpsPerGenerator) {
                         tally.dumped++;
@@ -179,10 +207,12 @@ public final class LevelQualityAudit {
         System.out.println("written: " + summary.getPath());
     }
 
+    /** Builds one floor exactly as World does: the run seed's floor seed for that depth (GameMath.floorSeed). */
     private static Level build(String generator, long seed, int depth) {
-        if (generator.equals(START_ROOM)) return new StartGameLevelGenerator(seed).generate();
+        long floorSeed = ge.tbegvadze.toon3d.util.GameMath.floorSeed(seed, depth);
+        if (generator.equals(START_ROOM)) return new StartGameLevelGenerator(floorSeed).generate();
         GeneratorId id = GeneratorId.valueOf(generator);
-        return RouteRegistries.generators().create(id, seed, new LevelGenConfig()).generate(depth);
+        return RouteRegistries.generators().create(id, floorSeed, new LevelGenConfig()).generate(depth);
     }
 
     // -------------------------------------------------------------------------
@@ -209,6 +239,9 @@ public final class LevelQualityAudit {
         }
         FloorContentReport content = level.getFloorContentReport();
         if (content != null) tally.pluggedCleared += content.pluggedPassagesCleared();
+        if (content != null && content.pluggedPassagesCleared() > 0) explain(tally, "I7 passage sweep removed "
+                + content.pluggedPassagesCleared(), -1, -1);
+        if (layout != null && layout.repairCarves() > 0) explain(tally, "I14 repair carves " + layout.repairCarves(), -1, -1);
 
         // --- Doors (I1, I15) and their clearance zones (I3).
         boolean[][] clearance = new boolean[height][width];
@@ -216,7 +249,10 @@ public final class LevelQualityAudit {
             for (int tileColumn = 0; tileColumn < width; tileColumn++) {
                 if (!Level.isDoor(grid[tileRow][tileColumn])) continue;
                 tally.doors++;
-                if (!doorPassesFlankRule(grid, tileColumn, tileRow)) tally.flankFailures++;
+                if (!doorPassesFlankRule(grid, tileColumn, tileRow)) {
+                    tally.flankFailures++;
+                    explain(tally, "I1 door", tileColumn, tileRow);
+                }
                 boolean verticalPassage = isWall(grid, tileColumn - 1, tileRow) && isWall(grid, tileColumn + 1, tileRow);
                 boolean horizontalPassage = isWall(grid, tileColumn, tileRow - 1) && isWall(grid, tileColumn, tileRow + 1);
                 markClearance(clearance, tileColumn, tileRow, verticalPassage, horizontalPassage);
@@ -230,7 +266,10 @@ public final class LevelQualityAudit {
         }
         for (int tileRow = 0; tileRow < height; tileRow++) {
             for (int tileColumn = 0; tileColumn < width; tileColumn++) {
-                if (clearance[tileRow][tileColumn] && isSolid(grid[tileRow][tileColumn])) tally.clearanceSolids++;
+                if (clearance[tileRow][tileColumn] && isSolid(grid[tileRow][tileColumn])) {
+                    tally.clearanceSolids++;
+                    explain(tally, "I3 '" + grid[tileRow][tileColumn] + "'", tileColumn, tileRow);
+                }
             }
         }
 
@@ -246,7 +285,7 @@ public final class LevelQualityAudit {
         LevelPalette palette = level.getPalette();
         for (LevelLayoutReport.RoomRecord room : rooms) {
             tally.rooms++;
-            tally.illegalOpenings += countIllegalOpenings(grid, room);
+            tally.illegalOpenings += countIllegalOpenings(grid, room, tally);
             boolean dense = room.kitId != null ? room.dense : DENSE_BLUEPRINTS.contains(room.blueprintId);
             List<int[]> band = room.laneBand != null ? room.laneBand
                     : computeLaneBand(grid, room, dense ? 0 : 1);
@@ -261,12 +300,17 @@ public final class LevelQualityAudit {
                     char cell = grid[tileRow][tileColumn];
                     if (Level.isWall(cell)) continue;
                     open++;
-                    if (isSolid(cell)) solids++;
-                    if (Level.isPropDecal(cell)) decals++;
+                    // Group barrels (GroupBarrelPlacer, balance-owned, R26) are not furniture: only the atmospheric
+                    // plant's own cylinders count toward its fill.
+                    boolean groupBarrel = cell == 'E' && !RoomBlueprints.ID_ATMOSPHERIC_PLANT.equals(room.blueprintId);
+                    if (isSolid(cell) && !groupBarrel) solids++;
+                    // R22 is about furniture: environment decals only (a supply pickup may land in the entrance).
+                    if (ge.tbegvadze.toon3d.tileset.SymbolCategories.categoryOf(cell)
+                            == ge.tbegvadze.toon3d.tileset.TileCategory.FLOOR_DECAL) decals++;
                 }
             }
             double fill = open > 0 ? (double) solids / open : 0d;
-            tally.recordFill(room.role.name(), fill);
+            tally.recordFill(room.role.name() + (dense ? "_DENSE" : ""), fill);
             if (room.role == LevelLayoutReport.Role.ENTRANCE && (solids > 0 || decals > 0)) tally.entrancesDressed++;
             if (dense) {
                 tally.tightRooms++;
@@ -274,15 +318,24 @@ public final class LevelQualityAudit {
             }
             float cap = room.role == LevelLayoutReport.Role.REGULAR ? FILL_CAP_REGULAR
                       : dense ? FILL_CAP_DENSE : FILL_CAP_SPECIAL;
-            if (room.role != LevelLayoutReport.Role.ENTRANCE && fill > cap + 1e-6) tally.roomsOverCap++;
+            if (room.role != LevelLayoutReport.Role.ENTRANCE && fill > cap + 1e-6) {
+                tally.roomsOverCap++;
+                explain(tally, "I12 over cap " + room.blueprintId + "/" + room.kitId, room.leftColumn, room.bottomRow);
+            }
 
             if (room.role == LevelLayoutReport.Role.SPECIAL) {
                 tally.placedSpecials++;
                 specialsThisFloor.merge(room.blueprintId, 1, Integer::sum);
                 tally.specialCounts.merge(room.blueprintId, 1, Integer::sum);
                 if (depth == 1) tally.specialCountsDepthOne.merge(room.blueprintId, 1, Integer::sum);
-                Character signature = signatureSymbolOf(room.blueprintId);
-                if (signature != null && !interiorContains(grid, room, signature)) tally.specialsWithoutSignature++;
+                char[] signature = signatureSymbolsOf(room.blueprintId);
+                boolean signed = signature == null;
+                if (signature != null) for (char symbol : signature) signed |= interiorContains(grid, room, symbol);
+                if (!signed) {
+                    tally.specialsWithoutSignature++;
+                    explain(tally, "I13 " + room.blueprintId + " without '" + new String(signature) + "'",
+                            room.leftColumn, room.bottomRow);
+                }
             }
             // I16: a symbol the room claims must render the sprite it claims.
             if (registry.contains(room.blueprintId)) {
@@ -337,7 +390,10 @@ public final class LevelQualityAudit {
                         if (!TERMINAL_ROOMS.contains(owner) && !TERMINAL_ROOMS.contains(room.blueprintId)) misplaced = true;
                     }
                 }
-                if (misplaced) tally.misplacedTerminals++;
+                if (misplaced) {
+                    tally.misplacedTerminals++;
+                    explain(tally, "I9 'T'", tileColumn, tileRow);
+                }
                 if (hasPassableNeighbour(grid, tileColumn, tileRow)) usableTerminal = true;
             }
         }
@@ -345,10 +401,12 @@ public final class LevelQualityAudit {
         if (anyTerminal && !"prop_terminal".equals(palette.spriteIdOf('T'))) tally.offSpriteTerminalFloors++;
     }
 
-    /** The SIGNATURE symbol of a registered blueprint (row 1 of its kit), or null when it declares none. */
-    private static Character signatureSymbolOf(String blueprintId) {
+    /** The SIGNATURE row's symbols of a registered blueprint (row 1 of its kit), or null when it declares none. */
+    private static char[] signatureSymbolsOf(String blueprintId) {
         RoomBlueprintRegistry registry = RoomBlueprints.rooms();
-        return registry.contains(blueprintId) ? registry.get(blueprintId).signatureSymbol() : null;
+        if (!registry.contains(blueprintId)) return null;
+        PropKit kit = registry.get(blueprintId).kit();
+        return kit == null || kit.signatureRow() == null ? null : kit.signatureRow().symbols();
     }
 
     // -------------------------------------------------------------------------
@@ -410,7 +468,7 @@ public final class LevelQualityAudit {
     }
 
     /** I2: shell openings that are not legal sockets (R10 / R11). */
-    private static int countIllegalOpenings(char[][] grid, LevelLayoutReport.RoomRecord room) {
+    private static int countIllegalOpenings(char[][] grid, LevelLayoutReport.RoomRecord room, Tally tally) {
         List<int[]> openings = shellOpenings(grid, room);
         int illegal = 0;
         for (int[] opening : openings) {
@@ -433,7 +491,10 @@ public final class LevelQualityAudit {
             else if (column == room.leftColumn) outerColumn--;
             else outerColumn++;
             if (!isPassable(grid, outerColumn, outerRow)) legal = false;
-            if (!legal) illegal++;
+            if (!legal) {
+                illegal++;
+                explain(tally, "I2 opening of " + room.blueprintId, column, row);
+            }
         }
         return illegal;
     }
@@ -672,6 +733,7 @@ public final class LevelQualityAudit {
         out.printf(Locale.ROOT, "  I15 doors per floor=%.2f%n", tally.doors / floors);
         out.printf(Locale.ROOT, "  I16 claimed symbols off-sprite=%d  floors whose 'T' is not a terminal=%d%n",
                 tally.offSpriteSymbols, tally.offSpriteTerminalFloors);
+        for (String example : tally.examples) out.println("    " + example);
     }
 
     /** "type=count ..." plus the largest deviation from the mean, over every registered special type. */

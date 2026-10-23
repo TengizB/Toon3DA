@@ -44,7 +44,7 @@ public final class SpecialRoomPlanner {
         RoomBlueprints.bootstrap();
         List<RoomBlueprint> pool = new ArrayList<>(specialPool(RoomBlueprints.rooms()));
         int count = Math.min(pool.size(), GameMath.specialRoomCountForFootprint(targetWalkableTiles));
-        Random random = new Random(floorSeed ^ LevelGenConstants.SPECIAL_ROOM_SEED_SALT);
+        Random random = new Random(GameMath.mixSeed(floorSeed, LevelGenConstants.SPECIAL_ROOM_SEED_SALT));
         List<RoomBlueprint> planned = new ArrayList<>();
         for (int index = 0; index < count; index++) {
             int pick = index + random.nextInt(pool.size() - index);

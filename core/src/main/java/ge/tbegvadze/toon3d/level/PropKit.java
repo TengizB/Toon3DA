@@ -1,6 +1,7 @@
 package ge.tbegvadze.toon3d.level;
 
 import ge.tbegvadze.toon3d.tileset.LevelPalettes;
+import ge.tbegvadze.toon3d.tileset.SymbolBudget;
 import ge.tbegvadze.toon3d.tileset.TilesetRegistries;
 
 import java.util.ArrayList;
@@ -70,12 +71,16 @@ public final class PropKit {
         return false;
     }
 
-    /** Every symbol the kit can place, mapped to the sprite it must render (its legacy sprite; R29). */
+    /**
+     * Every FLEXIBLE symbol the kit can place, mapped to the sprite it must render (its legacy sprite; R29). A
+     * fixed symbol ('P', '@') always renders its own picture and needs no pin.
+     */
     public Map<Character, String> spriteDemand() {
         TilesetRegistries.bootstrap();
         Map<Character, String> demand = new LinkedHashMap<>();
         for (PropKitRow row : rows) {
             for (char symbol : row.symbols) {
+                if (!SymbolBudget.standard().isFlexible(symbol)) continue;
                 String sprite = LevelPalettes.legacy().spriteIdOf(symbol);
                 if (sprite != null) demand.put(symbol, sprite);
             }

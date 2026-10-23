@@ -89,6 +89,16 @@ public final class LayoutRoom {
         if (primarySocket == null) primarySocket = socket;
     }
 
+    void removeSocket(DoorSocket socket) {
+        sockets.remove(socket);
+        if (primarySocket == socket) primarySocket = sockets.isEmpty() ? null : sockets.get(0);
+    }
+
+    /** Interior area in tiles. */
+    public int interiorArea() {
+        return Math.max(0, interiorWidth()) * Math.max(0, interiorHeight());
+    }
+
     /** The socket at a shell tile, or null. */
     public DoorSocket socketAt(int tileColumn, int tileRow) {
         for (DoorSocket socket : sockets) {

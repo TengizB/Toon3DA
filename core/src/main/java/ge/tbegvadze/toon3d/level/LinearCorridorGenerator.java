@@ -913,17 +913,15 @@ public class LinearCorridorGenerator implements ILevelGenerator, SupplySlotProvi
      * every symbol these rooms use.
      */
     private void buildDelegatedRooms(char[][] grid, List<Room> rooms) {
-        LevelGenerator buildBridge = null;
+        Random bridgeStream = null;
         for (Room room : rooms) {
             if (!room.delegated || room.blueprint == null) continue;
-            if (buildBridge == null) {
-                buildBridge = new LevelGenerator(random.nextLong());
-                buildBridge.setDungeonDepthForBridge(dungeonDepth);
-            }
-            buildBridge.buildRoomForBridge(grid, room.leftColumn, room.bottomRow,
-                    room.rightColumn, room.topRow, room.blueprint, retiredWallDressing);
+            if (bridgeStream == null) bridgeStream = new Random(random.nextLong());
+            LevelGenerator.buildRoomForBridge(grid, room.leftColumn, room.bottomRow, room.rightColumn, room.topRow,
+                    room.blueprint, bridgeStream, config, seed);
         }
     }
+
 
     /**
      * Maps a blueprint id to this generator's own {@link RoomType} tag with no switch: an id that

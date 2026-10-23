@@ -180,6 +180,12 @@ public final class LevelGenConfig {
      */
     public String wallSetId = null;
 
+    /**
+     * The regular-room kit this floor prefers (level-generation-overhaul R23/R31): it counts double in every regular
+     * room's uniform kit draw. Set by a route profile (CACHE -> "storeroom", ELITE -> "aftermath"); null = none.
+     */
+    public String preferredRegularKit = null;
+
     /** P7: how many floors into its region this floor is (0 = the region's first floor; RegionPlan). */
     public int floorIndexInRegion = 0;
 }

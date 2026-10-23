@@ -8,11 +8,12 @@ public final class LevelGenConstants {
     // Grid dimensions match the 80×45 tile layout that fills the 1280×720 world exactly.
     public static final int   LEVEL_GEN_GRID_WIDTH            = Constants.WORLD_WIDTH  / Constants.CELL_SIZE; // 80
     public static final int   LEVEL_GEN_GRID_HEIGHT           = Constants.WORLD_HEIGHT / Constants.CELL_SIZE; // 45
-    // Interior tile count, excluding the 1-tile perimeter wall on each side.
-    public static final int   LEVEL_GEN_ROOM_MIN_WIDTH        = 3;
-    public static final int   LEVEL_GEN_ROOM_MIN_HEIGHT       = 3;
-    public static final int   LEVEL_GEN_ROOM_MAX_WIDTH        = 20;
-    public static final int   LEVEL_GEN_ROOM_MAX_HEIGHT       = 14;
+    // REGULAR room interior window (level-generation-overhaul R7), excluding the 1-tile shell on each side. Big
+    // spaces come from the special rooms' windows and 3-wide halls, not from regular rooms.
+    public static final int   LEVEL_GEN_ROOM_MIN_WIDTH        = 4;
+    public static final int   LEVEL_GEN_ROOM_MIN_HEIGHT       = 4;
+    public static final int   LEVEL_GEN_ROOM_MAX_WIDTH        = 12;
+    public static final int   LEVEL_GEN_ROOM_MAX_HEIGHT       = 10;
     // Minimum gap between room bounding boxes so rooms never share a wall tile.
     public static final int   LEVEL_GEN_ROOM_MARGIN           = 2;
     public static final int   LEVEL_GEN_TARGET_ROOMS          = 16;
@@ -53,6 +54,9 @@ public final class LevelGenConstants {
     public static final float LEVEL_GEN_ROUTE_MERGE_COST           = 0.5f;
     public static final float LEVEL_GEN_ROUTE_BASE_COST            = 1f;
     public static final float LEVEL_GEN_ROUTE_TIE_JITTER           = 0.001f;
+    // Added on every change of direction, so corridors run as straight L / Z legs instead of staircases (a
+    // staircase reads badly in first person, and its widened shoulders would touch only diagonally).
+    public static final float LEVEL_GEN_ROUTE_TURN_COST            = 3f;
     // A 3-wide hall narrows to 1 wide for this many tiles before a socket (R13).
     public static final int   LEVEL_GEN_WIDE_HALL_TAPER_TILES      = 2;
 
@@ -137,13 +141,11 @@ public final class LevelGenConstants {
     public static final int LEVEL_GEN_SIZE_SUPPLY_CACHE_MIN_HEIGHT        = 5;
     public static final int LEVEL_GEN_SIZE_SUPPLY_CACHE_MAX_WIDTH         = 8;
     public static final int LEVEL_GEN_SIZE_SUPPLY_CACHE_MAX_HEIGHT        = 6;
-    // The entrance room (R6) and the regular rooms (R7; these become LEVEL_GEN_ROOM_MIN/MAX_* at CP6).
+    // The entrance room's interior, each axis (R6).
     public static final int LEVEL_GEN_ENTRANCE_MIN_DIM                    = 5;
     public static final int LEVEL_GEN_ENTRANCE_MAX_DIM                    = 7;
-    public static final int LEVEL_GEN_SIZE_REGULAR_MIN_WIDTH              = 4;
-    public static final int LEVEL_GEN_SIZE_REGULAR_MIN_HEIGHT             = 4;
-    public static final int LEVEL_GEN_SIZE_REGULAR_MAX_WIDTH              = 12;
-    public static final int LEVEL_GEN_SIZE_REGULAR_MAX_HEIGHT             = 10;
+    // A room whose interior holds at least this many tiles is a LARGE supply region (may host two groups, E3).
+    public static final int LEVEL_GEN_LARGE_ROOM_INTERIOR_AREA            = 81;
     // Probability that a wall tile adjacent to an explosive barrel ('E') becomes a hazard wall ('h').
     public static final float LEVEL_GEN_HAZARD_WALL_CHANCE    = 0.45f;
     // Maximum Manhattan distance (room-center to room-center) for optional loop corridors.
@@ -217,7 +219,7 @@ public final class LevelGenConstants {
     // Probability a floor tile in a server room becomes a flickering tile.
     public static final float LEVEL_GEN_SERVER_FLICKER_CHANCE      = 0.12f;
     // Ratio of rack props that are lockers vs terminals in a server room.
-    public static final float LEVEL_GEN_SERVER_LOCKER_RATIO        = 0.30f;
+    public static final float LEVEL_GEN_SERVER_LOCKER_RATIO        = 0.35f;
     // Boosted pickup chances for special rooms (loot hubs / set-piece arenas).
     // Base probability that any non-entrance room contains at least one ammo box pickup.
 

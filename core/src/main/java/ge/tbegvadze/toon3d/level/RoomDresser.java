@@ -1,5 +1,6 @@
 package ge.tbegvadze.toon3d.level;
 
+import ge.tbegvadze.toon3d.util.GameMath;
 import ge.tbegvadze.toon3d.util.LevelGenConstants;
 
 import java.util.ArrayDeque;
@@ -91,6 +92,19 @@ public final class RoomDresser {
     }
 
     /**
+     * The kit a REGULAR room draws (R23): uniform over the regular kits, the floor's preferred kit (set by a route
+     * profile, R31) counting double. Drawn from the room's own dresser stream (a salt apart from its dressing).
+     */
+    public PropKit pickRegularKit(LayoutRoom room, List<PropKit> kits, String preferredKitId) {
+        if (kits.isEmpty()) return null;
+        List<PropKit> weighted = new ArrayList<>(kits);
+        for (PropKit kit : kits) if (kit.id().equals(preferredKitId)) weighted.add(kit);
+        Random random = new Random(GameMath.mixSeed(floorSeed ^ LevelGenConstants.ROOM_DRESSING_SEED_SALT,
+                -(rooms.indexOf(room) + 1L)));
+        return weighted.get(random.nextInt(weighted.size()));
+    }
+
+    /**
      * Places ONE extra row into an already dressed room (the R20 terminal fallback): the room keeps its lanes,
      * band and kit; the row's symbols join the floor's demand. Returns how many tiles it placed.
      */
@@ -146,8 +160,7 @@ public final class RoomDresser {
 
     private Random streamFor(LayoutRoom room) {
         int index = rooms.indexOf(room);
-        return new Random(floorSeed ^ LevelGenConstants.ROOM_DRESSING_SEED_SALT
-                ^ ((index + 1L) * 0x9E3779B97F4A7C15L));
+        return new Random(GameMath.mixSeed(floorSeed ^ LevelGenConstants.ROOM_DRESSING_SEED_SALT, index + 1L));
     }
 
     private boolean inBounds(int tileColumn, int tileRow) {
@@ -421,33 +434,43 @@ public final class RoomDresser {
             return count;
         }
 
-        /** RUN (step 1) or SPACED (step 2) along one line: the longest run reachable, up to {@code wanted}. */
+        /**
+         * RUN (step 1) or SPACED (step 2) along one line: the longest run reachable, up to {@code wanted}. Every start
+         * is tried on the same clean room and undone; the winner is then placed again. (Keeping a run that was checked
+         * beside another run's tiles, then removing those, could leave its end tile plugging a passage.)
+         */
         private int placeRuns(PropKitRow row, List<List<int[]>> lines, int wanted, int step) {
             List<List<int[]>> order = new ArrayList<>(lines);
             Collections.shuffle(order, random);
-            List<int[]> bestRun = new ArrayList<>();
             char symbol = row.drawSymbol(random);
+            List<int[]> bestLine = null;
+            int bestStart = -1, bestLength = 0;
             for (List<int[]> line : order) {
                 List<Integer> starts = new ArrayList<>();
                 for (int index = 0; index < line.size(); index++) starts.add(index);
                 Collections.shuffle(starts, random);
                 for (int start : starts) {
-                    List<int[]> run = new ArrayList<>();
-                    for (int index = start; index < line.size() && run.size() < wanted; index += step) {
-                        int[] tile = line.get(index);
-                        if (!tryPlaceSolid(tile[0], tile[1], symbol, false)) break;
-                        run.add(tile);
+                    List<int[]> run = runFrom(line, start, step, wanted, symbol);
+                    if (run.size() >= wanted) return run.size();
+                    undo(run);
+                    if (run.size() > bestLength) {
+                        bestLength = run.size();
+                        bestLine   = line;
+                        bestStart  = start;
                     }
-                    if (run.size() > bestRun.size()) {
-                        undo(bestRun);
-                        bestRun = run;
-                    } else {
-                        undo(run);
-                    }
-                    if (bestRun.size() >= wanted) return bestRun.size();
                 }
             }
-            return bestRun.size();
+            return bestLine == null ? 0 : runFrom(bestLine, bestStart, step, wanted, symbol).size();
+        }
+
+        private List<int[]> runFrom(List<int[]> line, int start, int step, int wanted, char symbol) {
+            List<int[]> run = new ArrayList<>();
+            for (int index = start; index < line.size() && run.size() < wanted; index += step) {
+                int[] tile = line.get(index);
+                if (!tryPlaceSolid(tile[0], tile[1], symbol, false)) break;
+                run.add(tile);
+            }
+            return run;
         }
 
         /** CLUSTER: one contiguous blob grown from a seed (inside the centre footprint for a CENTRE row). */

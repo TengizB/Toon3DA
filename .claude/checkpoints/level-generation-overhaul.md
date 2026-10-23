@@ -61,7 +61,7 @@ into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
       sizeWindow()/kit()/signatureSymbol() additively; unwired; build + test green.
 - [x] **CP5** — DONE WHEN: SpecialRoomPlanner + GameMath.specialRoomCountForFootprint exist; tileset palette-request
       helper adds kit demands + 'T'/'E' pins; unwired; build + test green.
-- [ ] **CP6** — DONE WHEN: ROOMS_MST runs pipeline A (G1); old selection/corridor/placeDoors/prop helpers/LARGE/
+- [ ] **CP6** — (CP6a committed: layout done, audit + fast gate green; balanceSim SR3 red, see notes) DONE WHEN: ROOMS_MST runs pipeline A (G1); old selection/corridor/placeDoors/prop helpers/LARGE/
       retired rolls gone from LevelGenerator; buildRoomForBridge re-pointed; symbolsStampedInIsolation re-pointed;
       snapshot test re-baselined (dated); RoomBlueprintBuildDemandTest updated; audit A3-A8 pass for ROOMS_MST;
       test + balanceSim green.
@@ -149,3 +149,17 @@ into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
   `tileset.FloorSymbolPins.pin(requestBuilder, dresser.kitDemand())` adds the kit demand + 'T'/'E' pins; it replaces
   the generator's ad-hoc barrel pin. Constants: SPECIAL_ROOM_SEED_SALT, LEVEL_GEN_WALKABLE_TILES_PER_SPECIAL_ROOM,
   LEVEL_GEN_SPECIAL_ROOMS_MIN/MAX, LEVEL_GEN_SPECIAL_PLACEMENT_CANDIDATES.
+- CP6a (ROOMS_MST rebuilt; NOT ticked): audit 200 seeds = A3-A8 all 0 for ROOMS_MST (I11 max dev 11%, depth-1 every
+  type present, I12 regular max 0.120 / special 0.214 / dense 0.265, I15 23.3 doors/floor). Fast gate green (only the
+  baseline StoryBarkTest). LevelGeneratorSnapshotTest re-baselined (dated). RoomBlueprintBuildDemandTest,
+  RoomBlueprintRegistryTest and TilesetExtensibilityAcceptanceTest updated HERE (CP6 already removed the depth gates /
+  weight tiers / RoomType they pinned — plan said CP7). balanceSim: ONE red band, S-RELIC SR3 (LEGENDARY/COMMON mean
+  depth) 0.99 (3.17 vs 3.20); base 0a7d596 was exactly 1.00 (3.12 vs 3.12) against a 1.00 lower bound — a coin-flip
+  band on two near-equal 120-run means. Per the idea's BALANCE NOTES the checkpoint STOPS and the owner decides.
+  Shared engine now: `LayoutSupport` (connect / hangDoors / dressHalls / repairConnectivity / supplyRegionMap / report /
+  RouteMasks), `RoomBuildContext(grid, room, random, config, rooms)` architecture facade, `LevelGenerator.
+  buildRoomForBridge(grid, l, b, r, t, blueprint, random, config, floorSeed)` (LINEAR's delegated rooms; deleted at
+  CP7). Router has a turn cost (LEVEL_GEN_ROUTE_TURN_COST 3) — staircases broke widened halls. Dresser RUN/SPACED now
+  re-places the winning run on a clean room (an undo had left plugs). Streams use GameMath.mixSeed (consecutive
+  seeds were correlated). LevelGenConfig.preferredRegularKit exists (profiles set it at CP14).
+  Eligibility still exists for LINEAR's roulette until CP7, as "fits the window minimum" (no depth, no cap).

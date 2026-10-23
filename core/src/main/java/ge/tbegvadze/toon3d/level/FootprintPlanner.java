@@ -63,7 +63,7 @@ public final class FootprintPlanner {
      * Builds toward the floor's footprint. With no target (explicitly natural size) builds once at full
      * scale. Otherwise each build is measured and the scale corrected by target / (mean tiles per unit scale so
      * far); the loop stops at the first build that fields its bodies within {@code FOOTPRINT_AIM_FRACTION} of
-     * the tolerance, else keeps the closest such build.
+     * the tolerance, else keeps the closest such build. Returns null only when the builder discarded every attempt.
      *
      * @param config                the floor's config (explicit target)
      * @param depth                 floor depth (1-based)
@@ -82,6 +82,9 @@ public final class FootprintPlanner {
         float tilesPerScaleSum = 0f;
         for (int attempt = 0; attempt < LevelGenConstants.FOOTPRINT_MAX_ATTEMPTS; attempt++) {
             Level built = builder.build(scale, seed + attempt * ATTEMPT_SEED_STEP, target);
+            // A generator may DISCARD an attempt (null: e.g. a planned special room would not fit); the next attempt
+            // keeps the scale. When every attempt is discarded the caller gets null and builds its last resort.
+            if (built == null) continue;
             FloorContentReport report = built.getFloorContentReport();
             int walkable = report != null ? report.walkableTiles : 0;
             float error = Math.abs(walkable - target) / (float) Math.max(1, target);

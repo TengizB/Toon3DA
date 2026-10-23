@@ -163,9 +163,13 @@ class LevelGeneratorSnapshotTest {
     // depths 1-25 — see .claude/checkpoints/generated-wall-art-order-2.md). Stable across two JVM runs.
     // RE-BASELINE (level-generation-overhaul CP3, 2026-10-23): GroupBarrelPlacer (R26) now refuses tiles in a
     // door clearance zone and prefers flush tiles, so group barrels move on the seeds that had one near a door.
-    // No layout draw changed. The layout itself is rebuilt (and re-baselined again) at CP6. A deliberate change.
+    // No layout draw changed. A deliberate change.
+    // RE-BASELINE (level-generation-overhaul CP6, 2026-10-23): ROOMS_MST is rebuilt SPECIAL ROOMS FIRST — the
+    // special plan, specials placed before the entrance and regular rooms, socket-to-socket corridors through the
+    // CorridorRouter, flanked one-tile doorways, kit-dressed rooms (no per-tile prop roll), the hall pass and the
+    // pinned palette. Every grid changes by design. Stable across two JVM runs.
     private static final String EXPECTED_DIGEST =
-            "4ad2b93d128716cdb63e60f4016cb5dc566bb4e7d179f24a751905b537570ab1";
+            "4ee51df2891913ef4ea76e3c2ecec6b70a58825b1a9e2b8ddbfe1812125f90d9";
 
     @Test
     void generatedGridsAreByteForByteStableAcrossSeedsAndDepths() {
