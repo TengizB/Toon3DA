@@ -116,7 +116,8 @@ L   Locker              Equipment storage cabinet (steel blue-gray).           0
 C   Crate               Reinforced olive-drab munitions box: steel corner brackets, ribs, hazard band, UAC stencil. 0.50x wall height
 #   Security camera     Mounted surveillance device. GENERATED placement: a kit's CORNER / ENTRY_WALL row (flush),
                         the start room's STAGING_ARMORY corner.
-%   Generator           Power unit: glowing green reactor core, cooling fins, twin gauges, breaker bank, hazard base. 0.85x wall height
+%   Generator           Heavy power unit, GENERATED + ANIMATED (generated-prop-art order 3): a coil bay glowing HOT IRON
+                        red behind guard bars, a hot turbine fan, glowing exhaust stacks with embers. 0.85x wall height
 &   Bio-pod             Specimen tube, GENERATED + ANIMATED (generated-prop-art order 1): floor-to-ceiling column of neon
                         cyan fluid, a drifting grown specimen, rising bubbles. 1.00x wall height (floor to ceiling)
 =   Weapon rack         Armory rack: three standing rifles, hung pistol, grenades, magazines, ammo crate on pegboard. 0.70x wall height

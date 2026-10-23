@@ -37,6 +37,8 @@ public final class GeneratedPropRegistry {
         registerFixedChar(RenderConstants.STAIRS_DOWN_CHAR, "portal");
         // generated-prop-art order 2
         registerSprite("prop_ai_core",  "ai_core");
+        // generated-prop-art order 3
+        registerSprite("prop_generator", "generator");
         bootstrapped = true;
     }
 

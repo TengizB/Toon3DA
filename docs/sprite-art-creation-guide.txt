@@ -767,6 +767,8 @@ is .claude/agents/ideas/generated-prop-art.txt (+ -order-<n>); its brief and rul
   phosphor     CRT green: terminal text and status lamps
   neon_cyan    specimen fluid, ring lights, backlit keys (brighter and more saturated than the facility cyan)
   rad          radioactive lime: hazard lamps, warning strips, emitter studs
+  hot_iron     (order 3, owner D4) heated metal: deep red -> orange -> white-hot. Heat sources only (coils,
+               exhausts, warning lamps); it always ramps through orange, so it never reads as the keycard red
   Big glowing areas (a fluid column, a vortex, a screen's text) are PAINTED with numpy into the frame after the
   kit render, from these inks' ramps - the kit's translucent materials wash out to a pale tint at that size.
 
@@ -838,6 +840,12 @@ is .claude/agents/ideas/generated-prop-art.txt (+ -order-<n>); its brief and rul
             in the gap a rad-lime core - halo, three orbiting arcs (one third turn per loop), inner ring, white-hot
             heart - the one warm accent. Rail LEDs step every two frames; a phosphor bar graph on the readout.
             One static kit render + per-frame paint (~7 s bake). 24 frames @ 0.1 s.
+  generator (order 3) a heavy power unit on a skid (rad strip), gunmetal housing between darkmetal fin stacks,
+            and HEAT as the accent: a coil bay behind guard bars whose windings glow hot iron with a heat wave
+            rolling up (the bars are a second, bars-only render whose alpha masks the glow behind them), a round
+            turbine whose four dark blades turn a quarter turn per loop over a hot-iron disc, two exhaust stacks
+            with glowing lips and embers climbing and fading, and a control plate (trembling gauge needle, two
+            neon cyan lamps as the cold counterpoint, a blinking hot-iron warning lamp). 16 frames @ 0.1 s.
 
 ADD A PROP
   [ ] brief from the master (14.1): what it IS, its cold body materials, its one or two neon accents, still or

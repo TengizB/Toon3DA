@@ -39,11 +39,13 @@ same commit. Never `git add -A`.
 
 - [x] **CP0** — idea + this file committed and pushed.
 - [x] **CP1** — hot_iron ink + generator baked; previews sent; earlier sheets unchanged.
-- [ ] **CP2** — registry row, old generator deleted; build green (StoryBarkTest aside).
-- [ ] **CP3** — in-engine screenshots sent; docs updated.
+- [x] **CP2** — registry row, old generator deleted; build green (StoryBarkTest aside).
+- [x] **CP3** — in-engine screenshots sent; docs updated.
 - [ ] **CP4** — owner approval in DECISIONS; STATUS IMPLEMENTED.
 
 ## NOTES CARRIED FORWARD
 - CP1: hot_iron is the LAST kit material (after rad); terminal/bio_pod/portal/ai_core re-bake cmp-identical.
   make_generator = one static kit render + a bars-only render (its alpha masks the coil glow behind the guard
   bars) + per-frame paint. ~7 s bake.
+- CP2: build green except the known StoryBarkTest. CP3: seed 42 floor 1 has a '%' (lookat:%:0:2), shots in
+  cool_steel + clinical_white sent. CP4 waits on the OWNER.

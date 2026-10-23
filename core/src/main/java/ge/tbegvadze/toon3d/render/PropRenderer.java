@@ -1163,7 +1163,6 @@ public class PropRenderer implements Renderable, Disposable {
         registry.register("prop_locker",             PropRenderer::generateLockerTexture);
         registry.register("prop_crate",              PropRenderer::generateCrateTexture);
         registry.register("prop_camera",             PropRenderer::generateCameraTexture);
-        registry.register("prop_generator",          PropRenderer::generateGeneratorTexture);
         registry.register("prop_weapon_rack",        PropRenderer::generateWeaponRackTexture);
         registry.register("prop_vendor",             PropRenderer::generateVendorTexture);
         registry.register("prop_specimen_tank",      PropRenderer::generateSpecimenTankTexture);
@@ -2306,89 +2305,6 @@ public class PropRenderer implements Renderable, Disposable {
         // Red status LED
         pixmap.setColor(0.95f, 0.20f, 0.18f, 1f);
         pixmap.fillRectangle(39, 18, 3, 3);
-        return finalize(pixmap);
-    }
-
-    private static Texture generateGeneratorTexture() {
-        Pixmap pixmap = new Pixmap(96, 96, Pixmap.Format.RGBA8888);
-        pixmap.setColor(0f, 0f, 0f, 0f);
-        pixmap.fill();
-
-        // Cooling-fin stacks flanking the cabinet.
-        pixmap.setColor(0.14f, 0.15f, 0.18f, 1f);
-        for (int finRow = 14; finRow <= 56; finRow += 6) {
-            pixmap.fillRectangle(2, finRow, 12, 4);
-            pixmap.fillRectangle(82, finRow, 12, 4);
-        }
-        // Main cabinet.
-        beveledPanel(pixmap, 12, 6, 72, 84, 0.20f, 0.22f, 0.26f, 1.6f, 0.5f);
-        // Top conduit pipes with stacked ceramic insulator discs.
-        pixmap.setColor(0.30f, 0.31f, 0.35f, 1f);
-        pixmap.fillRectangle(26, 0, 8, 8);
-        pixmap.fillRectangle(62, 0, 8, 8);
-        pixmap.setColor(0.55f, 0.50f, 0.42f, 1f);
-        for (int discY = 1; discY <= 6; discY += 2) {
-            pixmap.fillRectangle(25, discY, 10, 1);
-            pixmap.fillRectangle(61, discY, 10, 1);
-        }
-
-        // ── Glowing reactor core (radial green-hot glow) ────────────────────
-        int coreCenterX = 48, coreCenterY = 32, coreRadius = 20;
-        pixmap.setColor(0.06f, 0.07f, 0.08f, 1f);
-        pixmap.fillRectangle(coreCenterX - 22, coreCenterY - 22, 44, 44);
-        for (int pixelRow = coreCenterY - coreRadius; pixelRow <= coreCenterY + coreRadius; pixelRow++) {
-            for (int pixelColumn = coreCenterX - coreRadius; pixelColumn <= coreCenterX + coreRadius; pixelColumn++) {
-                float normalizedX = (pixelColumn - coreCenterX) / (float) coreRadius;
-                float normalizedY = (pixelRow - coreCenterY) / (float) coreRadius;
-                float distance = (float) Math.sqrt(normalizedX * normalizedX + normalizedY * normalizedY);
-                if (distance > 1f) continue;
-                float red, green, blue;
-                if (distance < 0.25f) {
-                    red = 0.85f; green = 1.00f; blue = 0.80f;
-                } else if (distance < 0.55f) {
-                    float interpolationFactor = (distance - 0.25f) / 0.30f;
-                    red   = 0.85f - 0.55f * interpolationFactor;
-                    green = 1.00f - 0.10f * interpolationFactor;
-                    blue  = 0.80f - 0.45f * interpolationFactor;
-                } else {
-                    float interpolationFactor = (distance - 0.55f) / 0.45f;
-                    red   = 0.30f - 0.22f * interpolationFactor;
-                    green = 0.90f - 0.62f * interpolationFactor;
-                    blue  = 0.35f - 0.26f * interpolationFactor;
-                }
-                float ring   = (float) (Math.cos(distance * Math.PI * 5) * 0.5 + 0.5);
-                float factor = 0.80f + 0.20f * ring;
-                pixmap.setColor(red * factor, green * factor, blue * factor, 1f);
-                pixmap.drawPixel(pixelColumn, pixelRow);
-            }
-        }
-        // Core housing frame + bolts.
-        pixmap.setColor(0.32f, 0.34f, 0.38f, 1f);
-        drawRectOutline(pixmap, coreCenterX - 22, coreCenterY - 22, 44, 44);
-        boltStud(pixmap, coreCenterX - 20, coreCenterY - 20);
-        boltStud(pixmap, coreCenterX + 20, coreCenterY - 20);
-        boltStud(pixmap, coreCenterX - 20, coreCenterY + 20);
-        boltStud(pixmap, coreCenterX + 20, coreCenterY + 20);
-        // Electric arc filaments escaping the core.
-        pixmap.setColor(0.70f, 1.00f, 0.85f, 1f);
-        pixmap.drawPixel(coreCenterX + 10, coreCenterY - 14);
-        pixmap.drawPixel(coreCenterX + 12, coreCenterY - 16);
-        pixmap.drawPixel(coreCenterX - 12, coreCenterY + 12);
-        pixmap.drawPixel(coreCenterX - 14, coreCenterY + 13);
-
-        // ── Lower control panel ─────────────────────────────────────────────
-        pixmap.setColor(0.13f, 0.14f, 0.17f, 1f);
-        pixmap.fillRectangle(16, 60, 64, 26);
-        // Twin gauges flanking a breaker bank.
-        drawGauge(pixmap, 28, 72, 0.35f, 0.90f, 0.40f);
-        drawGauge(pixmap, 68, 72, 0.95f, 0.75f, 0.20f);
-        for (int breakerIndex = 0; breakerIndex < 4; breakerIndex++) {
-            boolean on = (breakerIndex % 2 == 0);
-            pixmap.setColor(on ? 0.30f : 0.20f, on ? 0.85f : 0.22f, on ? 0.40f : 0.25f, 1f);
-            pixmap.fillRectangle(40 + breakerIndex * 6, 66, 4, 12);
-        }
-        // Hazard chevron at the base.
-        hazardStripeBand(pixmap, 12, 84, 72, 6, 0.85f, 0.72f, 0.18f);
         return finalize(pixmap);
     }
 

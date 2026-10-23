@@ -135,7 +135,7 @@ guard shield, every vignette, and WALL EMISSIVES (the region set's glow atlas - 
 consoles; generated-wall-art order 2, section 17: ungraded and unfogged, distance-faded to 0.6 and dimmed by
 BLACKOUT's light multiplier only). GENERATED PROP GLOW (generated-prop-art order 1): a migrated prop's glow sheet
 (screens, lamps, fluid, energy + their baked neon bloom) by the same rule as the wall glow. The NEON PROP INKS
-(phosphor, neon_cyan, rad) are the owner's exception to V5 for environment props only
+(phosphor, neon_cyan, rad, and order 3's hot_iron) are the owner's exception to V5 for environment props only
 (generated-prop-art.txt D1; docs/sprite-art-creation-guide.txt section 14). Textures that mix body and glow in one image (AI core node, holo table)
 are graded as bodies.
 
