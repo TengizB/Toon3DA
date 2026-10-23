@@ -202,11 +202,12 @@ public final class FloorPopulator {
         int barrelCount = barrels.barrels;
 
         // --- PASSAGES: the last write to the grid. No solid prop or column may plug a one-tile-wide passage.
-        clearPluggedPassages(grid);
+        int pluggedPassagesCleared = clearPluggedPassages(grid);
 
         FloorContentReport report = buildReport(generatorName, spec, depth, survey, stampedSpawns, facts,
                 anchorRegion, anchorWalk, plan, placement);
         report.attachBarrels(barrels.barrels, barrels.eligibleRooms, barrels.roomsServed);
+        report.attachPluggedPassagesCleared(pluggedPassagesCleared);
         return new Result(stampedSpawns, weapons, credits, report, barrelCount);
     }
 
@@ -292,15 +293,21 @@ public final class FloorPopulator {
      * terminal dropped into a one-tile-wide corridor or a doorway-sized gap in a partition still plugs that
      * passage whenever a detour happens to exist. Every such prop/column is turned back into plain floor.
      * Removing a blocker never strands anything, so this cannot undo any earlier connectivity guarantee.
+     * Returns how many solids it removed (the layout audit's backstop counter; target 0).
      */
-    static void clearPluggedPassages(char[][] grid) {
+    static int clearPluggedPassages(char[][] grid) {
+        int removed = 0;
         for (int tileRow = 0; tileRow < grid.length; tileRow++) {
             for (int tileColumn = 0; tileColumn < grid[tileRow].length; tileColumn++) {
                 char cell = grid[tileRow][tileColumn];
                 if (!Level.isPropSolid(cell) && !Level.isColumn(cell)) continue;
-                if (wouldPlugPassage(grid, tileColumn, tileRow)) grid[tileRow][tileColumn] = ' ';
+                if (wouldPlugPassage(grid, tileColumn, tileRow)) {
+                    grid[tileRow][tileColumn] = ' ';
+                    removed++;
+                }
             }
         }
+        return removed;
     }
 
     /**

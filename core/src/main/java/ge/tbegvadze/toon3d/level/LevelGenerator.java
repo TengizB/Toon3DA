@@ -135,6 +135,9 @@ public class LevelGenerator implements ILevelGenerator, SupplySlotProvider {
     private int[][]    supplyRegionMap;
     private List<Room> supplyRooms;
 
+    // Connectivity-repair carves this build (level-generation-overhaul audit counter; target 0).
+    private int repairCarveCount;
+
     // R1 draw ledger (generated-wall-art order 2): the walls the retired wall-dressing passes would have
     // repainted, so their draws stay byte-identical. See RetiredWallDressing; no picture is chosen here.
     private RetiredWallDressing retiredWallDressing = new RetiredWallDressing(
@@ -183,6 +186,7 @@ public class LevelGenerator implements ILevelGenerator, SupplySlotProvider {
                                                         LevelGenConstants.LEVEL_GEN_GRID_WIDTH);
         mstEdgeRooms          = new ArrayList<>();
         wideHallwaySpineTiles = new ArrayList<>();
+        repairCarveCount      = 0;
 
         List<Room> rooms = placeRooms();
         if (rooms.size() < 2) return buildFallbackLevel();
@@ -256,8 +260,23 @@ public class LevelGenerator implements ILevelGenerator, SupplySlotProvider {
 
         // order-8 STEP B — build this level's varied palette from the rooms actually placed and attach it.
         // The generator only ever wrote SYMBOLS; the palette is what makes those symbols look varied.
-        return populated.attachTo(new Level(grid, populated.spawnPoints, populated.weaponSpawnPoints,
+        Level level = populated.attachTo(new Level(grid, populated.spawnPoints, populated.weaponSpawnPoints,
                 finishWalls(grid, rooms, allocatePalette(rooms, populated.barrelCount > 0))));
+        level.attachLayoutReport(buildLayoutReport(rooms));
+        return level;
+    }
+
+    /** The layout as the audit instrument reads it (level-generation-overhaul); no draw, no write. */
+    private LevelLayoutReport buildLayoutReport(List<Room> rooms) {
+        LevelLayoutReport report = new LevelLayoutReport().repairCarves(repairCarveCount);
+        for (int roomIndex = 0; roomIndex < rooms.size(); roomIndex++) {
+            Room room = rooms.get(roomIndex);
+            LevelLayoutReport.Role role = roomIndex == 0 ? LevelLayoutReport.Role.ENTRANCE
+                    : isSpecialRoom(room) ? LevelLayoutReport.Role.SPECIAL : LevelLayoutReport.Role.REGULAR;
+            report.room(LevelLayoutReport.RoomRecord.bare(room.leftColumn, room.bottomRow, room.rightColumn,
+                    room.topRow, role, room.blueprint != null ? room.blueprint.id() : RoomBlueprints.ID_STANDARD));
+        }
+        return report;
     }
 
     // -------------------------------------------------------------------------
@@ -2921,6 +2940,7 @@ public class LevelGenerator implements ILevelGenerator, SupplySlotProvider {
 
     private void carveEmergencyCorridor(char[][] grid, int fromColumn, int fromRow,
                                         int toColumn, int toRow) {
+        repairCarveCount++;
         carveEmergencyHorizontal(grid, fromRow, fromColumn, toColumn);
         carveEmergencyVertical(grid, toColumn, fromRow, toRow);
     }

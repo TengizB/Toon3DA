@@ -84,12 +84,12 @@ Invariant checklist (a generator change must keep every line true; the audit mea
 
 ## 6. THE AUDIT - `level/LevelQualityAudit`
 A dev-only measuring instrument (no assertion, no Gradle task, never run by a gate - like `sim/LadderReport`).
-Command (from the run-game mirror, after `./gradlew -q :core:compileJava`):
+Command (from the run-game mirror; confirmed at level-generation-overhaul CP2 — ~50 s for the full default sweep):
 ```
-cd /tmp/toon3d-runtime/mirror && java -cp "core/build/classes/java/main:$(find ~/.gradle -name 'gdx-1.*.jar' ! -name '*sources*' | head -1)" \
-  ge.tbegvadze.toon3d.level.LevelQualityAudit [--seeds N] [--depths 1,5,10] [--generators ROOMS_MST,CAVERN] [--dump K]
+cd /tmp/toon3d-runtime/mirror && ./gradlew -q :core:compileJava && java -cp \
+  "core/build/classes/java/main:core/build/resources/main:$(find ~/.gradle -name 'gdx-1.*.jar' ! -name '*sources*' | head -1)" \
+  ge.tbegvadze.toon3d.level.LevelQualityAudit [--seeds N] [--depths 1,5,10] [--generators ROOMS_MST,CAVERN,START_ROOM] [--dump K]
 ```
-(command confirmed at CP2 of level-generation-overhaul; see the checkpoint notes for the exact working form.)
 It writes `core/build/reports/level-audit/summary.txt` (+ `dumps/`) and echoes the summary. Read I1-I16: every
 "violation" counter must be 0, I10/I11 show the special plan and spread, I12 fill, I14 repair carves (target 0).
 Run it before and after any generator change and quote the before/after lines in your report.

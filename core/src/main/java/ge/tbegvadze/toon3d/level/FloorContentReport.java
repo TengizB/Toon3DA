@@ -78,6 +78,15 @@ public final class FloorContentReport {
     }
 
     /** Explosive barrels placed beside groups on this floor (H14). */
+    private int pluggedPassagesCleared;
+
+    void attachPluggedPassagesCleared(int count) {
+        this.pluggedPassagesCleared = count;
+    }
+
+    /** Solids the final passage sweep had to remove (FloorPopulator.clearPluggedPassages; target 0). */
+    public int pluggedPassagesCleared() { return pluggedPassagesCleared; }
+
     public int barrelCount()         { return barrelCount; }
     /** Rooms holding a group of HAZARD_GROUP_MIN_SIZE+ that are not the start room (H14 eligibility). */
     public int barrelEligibleRooms() { return barrelEligibleRooms; }

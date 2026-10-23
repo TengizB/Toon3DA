@@ -59,6 +59,9 @@ public class Level {
      */
     private         FloorContentReport     floorContentReport;
 
+    /** What the generator said about its layout (level-generation-overhaul); null on hand-made levels. */
+    private         LevelLayoutReport      layoutReport;
+
     /**
      * Builds a level using the shared {@link LevelPalettes#legacy()} palette — today's exact global
      * symbol → sprite mapping. This overload keeps every existing loader/generator call site unchanged
@@ -140,6 +143,16 @@ public class Level {
     /** The planned credit chips (S8). Empty on hand-made levels. Unmodifiable. */
     public List<CreditSpawnPoint> getCreditSpawnPoints() {
         return Collections.unmodifiableList(creditSpawnPoints);
+    }
+
+    /** Attaches the generator's layout report (level-generation-overhaul). Called once by the generator. */
+    void attachLayoutReport(LevelLayoutReport report) {
+        layoutReport = report;
+    }
+
+    /** The generator's layout report (dev audit only), or {@code null} on a hand-made level. */
+    public LevelLayoutReport getLayoutReport() {
+        return layoutReport;
     }
 
     /** What the floor populator planned and placed, or {@code null} on a hand-made level. */

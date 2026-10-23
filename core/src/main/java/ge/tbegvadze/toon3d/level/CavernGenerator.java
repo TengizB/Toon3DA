@@ -81,6 +81,9 @@ public class CavernGenerator implements ILevelGenerator, SupplySlotProvider {
     private       int[][]       supplyRegionMap;
     private       List<Chamber> supplyChambers;
 
+    // Connectivity-repair carves this build (level-generation-overhaul audit counter; target 0).
+    private       int           repairCarveCount;
+
 
     // Per-tile biome id for the open cave body; -1 = wall, chamber, or unseeded.
     // Populated by assignBiomes() and consumed by every cave-body decoration pass.
@@ -151,6 +154,7 @@ public class CavernGenerator implements ILevelGenerator, SupplySlotProvider {
 
         spawnColumn = gridWidth  / 2;
         spawnRow    = gridHeight / 2;
+        repairCarveCount = 0;
 
         // Phase 0 — random noise
         boolean[][] solid = new boolean[gridHeight][gridWidth];
@@ -215,8 +219,24 @@ public class CavernGenerator implements ILevelGenerator, SupplySlotProvider {
                 new FloorPopulator.EncounterFacts(placement.anchorSpawnIndex, encounter.spentThreatPoints(),
                         encounter.floorBudget(), encounter.bodyTarget(), footprintTarget),
                 config, dungeonDepth, seed);
-        return populated.attachTo(new Level(grid, populated.spawnPoints, populated.weaponSpawnPoints,
+        Level level = populated.attachTo(new Level(grid, populated.spawnPoints, populated.weaponSpawnPoints,
                          finishWalls(grid, chambers)));
+        level.attachLayoutReport(buildLayoutReport(chambers));
+        return level;
+    }
+
+    /** The layout as the audit instrument reads it (level-generation-overhaul); no draw, no write. */
+    private LevelLayoutReport buildLayoutReport(List<Chamber> chambers) {
+        LevelLayoutReport report = new LevelLayoutReport().repairCarves(repairCarveCount);
+        for (int chamberIndex = 0; chamberIndex < chambers.size(); chamberIndex++) {
+            Chamber chamber = chambers.get(chamberIndex);
+            LevelLayoutReport.Role role = chamberIndex == 0 ? LevelLayoutReport.Role.ENTRANCE
+                    : chamber.type == ChamberType.STANDARD ? LevelLayoutReport.Role.REGULAR
+                                                           : LevelLayoutReport.Role.SPECIAL;
+            report.room(LevelLayoutReport.RoomRecord.bare(chamber.leftColumn, chamber.bottomRow,
+                    chamber.rightColumn, chamber.topRow, role, chamber.type.name().toLowerCase(java.util.Locale.ROOT)));
+        }
+        return report;
     }
 
     /**
@@ -1204,6 +1224,7 @@ public class CavernGenerator implements ILevelGenerator, SupplySlotProvider {
             Chamber chamber = chambers.get(chamberIndex);
             if (!isTileReachable(grid, startColumn, startRow,
                                  chamber.centerColumn(), chamber.centerRow())) {
+                repairCarveCount++;
                 drunkardWalkGrid(grid, startColumn, startRow,
                                  chamber.centerColumn(), chamber.centerRow());
             }
@@ -1355,6 +1376,7 @@ public class CavernGenerator implements ILevelGenerator, SupplySlotProvider {
 
     private void carveEmergencyCorridor(char[][] grid, int fromColumn, int fromRow,
                                         int toColumn, int toRow) {
+        repairCarveCount++;
         carveEmergencyHorizontal(grid, fromRow, fromColumn, toColumn);
         carveEmergencyVertical(grid, toColumn, fromRow, toRow);
     }

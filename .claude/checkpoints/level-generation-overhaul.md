@@ -50,7 +50,7 @@ into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
 - [x] **CP1** — DONE WHEN: `.claude/agents/level-generation-engineer.md` exists with the TECHNICAL NOTES sections;
       `game-level-designer.md` deleted; CLAUDE.md table, orchestrator.md, commands/implement.md, run-game SKILL.md,
       docs/level-design-context.txt, ideas/_TEMPLATE.txt name the new agent; A1 grep clean; no Java changed.
-- [ ] **CP2** — DONE WHEN: `level/LevelQualityAudit` runs headless on the UNCHANGED generators, writes
+- [x] **CP2** — DONE WHEN: `level/LevelQualityAudit` runs headless on the UNCHANGED generators, writes
       `core/build/reports/level-audit/summary.txt`; BEFORE figures (I1-I16) recorded below; run command in the agent
       file; build + test green.
 - [ ] **CP3** — DONE WHEN: DoorSocket, DoorwayRules (validate + isInDoorClearance), CorridorRouter exist (headless);
@@ -89,3 +89,20 @@ into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
 - CP1: the new agent file is written, but agent definitions load at session start - a session that began before CP1
   cannot dispatch `level-generation-engineer` by name; such a session dispatches `java-architect` (or works on the
   main thread) with "follow .claude/agents/level-generation-engineer.md" in the contract.
+- CP2: `LevelLayoutReport` (level/) is attached to every Level by `Level.attachLayoutReport` (package-private) and read
+  by the audit through `Level.getLayoutReport()`. Generators report rooms as `RoomRecord`s with SHELL bounds; from CP6
+  on they must fill `kitId`, `dense`, `sockets`, `laneBand` (else the audit computes its own lane), `plannedSpecials`,
+  `repairCarves`, `doorwayValidation(flankFailures, demotions)`. `FloorContentReport.pluggedPassagesCleared()` counts
+  `FloorPopulator.clearPluggedPassages` removals (I7/I14). Audit I13 is a stub (`signatureSymbolOf` returns null) until
+  CP4 adds `RoomBlueprint.signatureSymbol()` — wire it there. Bespoke generators + start room report no layout yet
+  (their CPs 9-13 add it); for them I2/I4/I5/I8/I10-I12 read 0 and mean nothing.
+- CP2 BEFORE (200 seeds x depths 1,5,10,15,20,25; full text in commit; key lines):
+  ROOMS_MST  I1 1101 | I2 48564 | I3 17870 | I4 27591 | I5 242 | I6 0 | I7 13197 | I8 0 | I9 9317 misplaced T, 3 floors
+             no T | I10 4.51 specials/floor, 690 floors w/ duplicates | I11 server_room 1754 vs medical_bay 190, depth-1
+             observatory/gore/atmo 0 (max dev 321%) | I12 regular max 0.556, 2030 rooms over cap, 636 floors >1 tight |
+             I14 4556 repair carves | I15 12.9 doors/floor | I16 84 floors whose 'T' is not a terminal (C6 confirmed).
+  LINEAR     I1 727 | I2 12240 | I3 8786 | I4 12136 | I5 87 | I7 9880 | I9 1696 / 176 floors no T | I10 3.45/floor,
+             12 floors <2, 406 dup | I12 regular max 0.35 | I14 3900 | I15 2.61
+  CAVERN     I2 68115 (chambers unwalled) | I3 9020 | I7 1292 | I8 5515 | I9 5515 / 410 floors no T | I10 0.27/floor,
+             1178 floors <2 | I11 only medical_bay 197 + armory 124 | I14 2760 | I15 0.00 doors
+  BOSS 1 door/floor clean; MED_BAY 2 non-flush T/floor; EVENT 1, GATE 1 non-flush T/floor; START clean.

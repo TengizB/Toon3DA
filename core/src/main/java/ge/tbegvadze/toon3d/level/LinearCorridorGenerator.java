@@ -128,6 +128,9 @@ public class LinearCorridorGenerator implements ILevelGenerator, SupplySlotProvi
     private       int[][]                supplyRegionMap;
     private       List<Room>             supplyRooms;
 
+    // Connectivity-repair carves this build (level-generation-overhaul audit counter; target 0).
+    private       int                    repairCarveCount;
+
 
     // Dungeon floor this generator is building for (1-based); drives the encounter Threat-Point
     // budget (balance idea 4, Pillar 1). Defaults to 1; set via generate(int dungeonDepth).
@@ -174,6 +177,7 @@ public class LinearCorridorGenerator implements ILevelGenerator, SupplySlotProvi
         retiredWallDressing  = new RetiredWallDressing(LevelGenConstants.LEVEL_GEN_GRID_HEIGHT,
                                                        LevelGenConstants.LEVEL_GEN_GRID_WIDTH);
         spineCenterTiles     = new ArrayList<>();
+        repairCarveCount     = 0;
 
         boolean horizontal = random.nextFloat() < LevelGenConstants.LEVEL_GEN_SPINE_HORIZONTAL_CHANCE;
         List<Room> rooms   = horizontal ? buildHorizontalSpine(grid) : buildVerticalSpine(grid);
@@ -230,8 +234,26 @@ public class LinearCorridorGenerator implements ILevelGenerator, SupplySlotProvi
                 new FloorPopulator.EncounterFacts(placement.anchorSpawnIndex, encounter.spentThreatPoints(),
                         encounter.floorBudget(), encounter.bodyTarget(), footprintTarget),
                 config, dungeonDepth, seed);
-        return populated.attachTo(new Level(grid, populated.spawnPoints, populated.weaponSpawnPoints,
+        Level level = populated.attachTo(new Level(grid, populated.spawnPoints, populated.weaponSpawnPoints,
                          finishWalls(grid, rooms)));
+        level.attachLayoutReport(buildLayoutReport(rooms));
+        return level;
+    }
+
+    /** The layout as the audit instrument reads it (level-generation-overhaul); no draw, no write. */
+    private LevelLayoutReport buildLayoutReport(List<Room> rooms) {
+        LevelLayoutReport report = new LevelLayoutReport().repairCarves(repairCarveCount);
+        for (int roomIndex = 0; roomIndex < rooms.size(); roomIndex++) {
+            Room room = rooms.get(roomIndex);
+            String id = room.type.localWallGroup != null ? room.type.name().toLowerCase(java.util.Locale.ROOT)
+                    : room.blueprint != null ? room.blueprint.id() : RoomBlueprints.ID_STANDARD;
+            LevelLayoutReport.Role role = roomIndex == 0 ? LevelLayoutReport.Role.ENTRANCE
+                    : room.type.localWallGroup != null || isSpecialBlueprint(room.blueprint)
+                            ? LevelLayoutReport.Role.SPECIAL : LevelLayoutReport.Role.REGULAR;
+            report.room(LevelLayoutReport.RoomRecord.bare(room.leftColumn, room.bottomRow, room.rightColumn,
+                    room.topRow, role, id));
+        }
+        return report;
     }
 
     /**
@@ -1901,6 +1923,7 @@ public class LinearCorridorGenerator implements ILevelGenerator, SupplySlotProvi
     private void carveEmergencyCorridor(char[][] grid,
                                          int fromColumn, int fromRow,
                                          int toColumn,   int toRow) {
+        repairCarveCount++;
         carveEmergencyHorizontal(grid, fromRow,   fromColumn, toColumn);
         carveEmergencyVertical(grid,   toColumn,  fromRow,    toRow);
     }
