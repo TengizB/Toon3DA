@@ -33,6 +33,7 @@ public final class GeneratedPropSheet implements Disposable {
     // [frame * frameWidth + column]: the smallest / largest opaque row of that frame column (frame-local), or -1
     private final int[]   opaqueTopRow;
     private final int[]   opaqueBottomRow;
+    private final boolean ceilingMounted;
 
     private GeneratedPropSheet(String sheetId, Texture bodyTexture, Texture glowTexture, int frameWidth,
                                int frameHeight, int frameCount, int columns, float frameSeconds,
@@ -49,6 +50,7 @@ public final class GeneratedPropSheet implements Disposable {
         this.cycleSeconds    = frameSeconds * frameCount;
         this.opaqueTopRow    = opaqueTopRow;
         this.opaqueBottomRow = opaqueBottomRow;
+        this.ceilingMounted  = GeneratedPropRegistry.isCeilingMounted(sheetId);
     }
 
     /**
@@ -154,6 +156,8 @@ public final class GeneratedPropSheet implements Disposable {
     }
 
     public String  sheetId()     { return sheetId; }
+    /** True when the prop hangs from the ceiling: the prop renderer draws no floor contact shadow for it. */
+    public boolean isCeilingMounted() { return ceilingMounted; }
     public Texture bodyTexture() { return bodyTexture; }
     public Texture glowTexture() { return glowTexture; }
     public int     frameWidth()  { return frameWidth; }

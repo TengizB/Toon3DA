@@ -153,7 +153,7 @@ public final class RenderConstants {
     public static final float PROP_HEIGHT_OIL                  = 0.18f; // 'O' oil/fluid pool decal
 
     // New prop height multipliers (relative to full wall stripe)
-    public static final float PROP_CAMERA_HEIGHT               = 0.80f; // '#' security camera
+    public static final float PROP_CAMERA_HEIGHT               = 1.00f; // '#' security camera: full height, hangs from the ceiling (generated-prop-art order 5)
     public static final float PROP_GENERATOR_HEIGHT            = 0.85f; // '%' power generator / reactor
     public static final float PROP_BIOPOD_HEIGHT               = 1.00f; // '&' bio-pod: a floor-to-ceiling specimen tube (generated-prop-art order 1)
     public static final float PROP_RACK_HEIGHT                 = 0.70f; // '=' weapon rack

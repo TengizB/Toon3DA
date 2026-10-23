@@ -39,7 +39,7 @@ same commit. Never `git add -A`.
 
 - [x] **CP0** — idea + this file committed and pushed.
 - [x] **CP1** — camera baked (make_camera + PROPS row); previews (still + GIF) sent; earlier sheets unchanged.
-- [ ] **CP2** — registerCeilingSprite + isCeilingMounted, no contact shadow in both passes, height 1.0, old generator deleted; build green.
+- [x] **CP2** — registerCeilingSprite + isCeilingMounted, no contact shadow in both passes, height 1.0, old generator deleted; build green.
 - [ ] **CP3** — in-engine screenshots (two moods + an enemy behind the camera) sent; docs updated.
 - [ ] **CP4** — owner approval in DECISIONS; STATUS IMPLEMENTED.
 
@@ -48,3 +48,7 @@ same commit. Never `git add -A`.
   48 frames @ 0.1 s (not the idea's 24: a 2.4 s full sweep read too fast for a security camera; 4.8 s now).
   Body ends at row 78 of 256 (R1). Scan cone swing 0.32 rad and faded 14 px from the canvas sides (at 0.55 it
   was cut by the canvas edge). Bake ~20 s.
+- CP2: GeneratedPropRegistry.registerCeilingSprite("prop_camera", "camera") + isCeilingMounted(sheetId);
+  GeneratedPropSheet.isCeilingMounted() cached at construction; PropRenderer.contactShadowFraction(char, sheet)
+  used by both passes. generateCameraTexture + its registry row deleted (no camera PNG existed). Build green
+  except the known StoryBarkTest. A3 holds by construction: the occluder buffer re-draws only the prop's alpha.
