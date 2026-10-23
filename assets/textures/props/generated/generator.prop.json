@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "id": "generator",
+  "frameWidth": 176,
+  "frameHeight": 216,
+  "frameCount": 16,
+  "columns": 11,
+  "frameSeconds": 0.1
+}

@@ -133,6 +133,9 @@ MATERIALS = {
     "neon_cyan":   dict(ramp=ramp("003840", "00687a", "00a8c0", "1ae6ff", "8ef6ff", "effeff"), emissive=True),
     # rad: the radioactive lime of hazard lamps and warning strips
     "rad":         dict(ramp=ramp("263606", "4a6a0a", "80b014", "b8f020", "e2ff70", "faffdc"), emissive=True),
+    # hot_iron (generated-prop-art order 3, owner D4): heated metal - deep red, orange, a white-hot core.
+    # Never a flat saturated red (the keycard red stays sacred): it always ramps through orange.
+    "hot_iron":    dict(ramp=ramp("2a0402", "5c0a04", "9c1a06", "e0400c", "ff8a2a", "ffd9a0"), emissive=True),
 }
 
 # The wet sheen's glint colour: near-white with the slightest warmth (never pure white: the hit flash owns it).

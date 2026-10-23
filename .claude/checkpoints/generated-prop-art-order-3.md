@@ -38,9 +38,12 @@ same commit. Never `git add -A`.
 ## STEP LEDGER
 
 - [x] **CP0** — idea + this file committed and pushed.
-- [ ] **CP1** — hot_iron ink + generator baked; previews sent; earlier sheets unchanged.
+- [x] **CP1** — hot_iron ink + generator baked; previews sent; earlier sheets unchanged.
 - [ ] **CP2** — registry row, old generator deleted; build green (StoryBarkTest aside).
 - [ ] **CP3** — in-engine screenshots sent; docs updated.
 - [ ] **CP4** — owner approval in DECISIONS; STATUS IMPLEMENTED.
 
 ## NOTES CARRIED FORWARD
+- CP1: hot_iron is the LAST kit material (after rad); terminal/bio_pod/portal/ai_core re-bake cmp-identical.
+  make_generator = one static kit render + a bars-only render (its alpha masks the coil glow behind the guard
+  bars) + per-frame paint. ~7 s bake.

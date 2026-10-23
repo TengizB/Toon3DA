@@ -647,7 +647,150 @@ def make_ai_core():
     return Prop("ai_core", CORE_W, CORE_H, CORE_FRAMES, CORE_FRAME_SECONDS, frame)
 
 
-PROPS = {"terminal": make_terminal, "bio_pod": make_pod, "portal": make_portal, "ai_core": make_ai_core}
+# ---------------------------------------------------------------------------------------------------
+# GENERATOR ('%') - a heavy power unit whose heat is the accent (the HOT IRON ink, owner D4)
+# ---------------------------------------------------------------------------------------------------
+GEN_W, GEN_H = 176, 216
+GEN_FRAMES, GEN_FRAME_SECONDS = 16, 0.1
+GEN_BAY = (46, 96, 130, 176)                 # x0, y0, x1, y1: the coil bay behind the guard bars
+GEN_FAN = (88, 50, 24)                       # centre x, centre y, radius of the turbine face
+GEN_STACKS = (34, 142)                       # exhaust stack centre x
+GEN_BARS = range(52, 128, 11)                # guard bar x positions
+
+
+def hot_iron(v):
+    """The hot-iron ramp at intensity v (0-1, array): the kit ink, interpolated."""
+    r = kit.MATERIALS["hot_iron"]["ramp"]
+    pos = np.clip(v, 0, 1) * (len(r) - 1)
+    lo = np.floor(pos).astype(int); hi = np.minimum(lo + 1, len(r) - 1); f = (pos - lo)[..., None]
+    return r[lo] * (1 - f) + r[hi] * f
+
+
+def generator_body():
+    """The static steel: skid, housing, coil bay with guard bars, fin stacks, turbine housing, exhaust stacks,
+    control plate."""
+    x0, y0, x1, y1 = GEN_BAY
+    fx, fy, fr = GEN_FAN
+    skid = [slab([(12, 198), (164, 198), (168, 215), (8, 215)], "darkmetal", bevel=4, slope=0.9),
+            slab(chamfer_rect(14, 206, 162, 209, 1), "rad", bevel=1.2, slope=0.9, op="add", depth=1.0, glow=1.0)]
+    for fxp in (16, 160):
+        skid.append(slab(chamfer_rect(fxp - 7, 210, fxp + 7, 215, 1), "gunmetal", bevel=2, slope=0.9))
+    fins = []
+    for side_x0, side_x1 in ((6, 24), (152, 170)):
+        fins.append(slab(chamfer_rect(side_x0, 82, side_x1, 198, 2), "darkmetal", bevel=2.5, slope=0.9))
+        for fy_ in range(86, 196, 6):
+            fins.append(slab([(side_x0 - 1, fy_), (side_x1 + 1, fy_), (side_x1 + 1, fy_ + 3), (side_x0 - 1, fy_ + 3)],
+                             "gunmetal", bevel=1.2, slope=0.9))
+    housing = [
+        slab(chamfer_rect(22, 70, 154, 200, 6), "gunmetal", bevel=6, slope=0.9),
+        slab(chamfer_rect(x0 - 5, y0 - 5, x1 + 5, y1 + 5, 3), "darkmetal", bevel=3, slope=0.9, op="add", depth=1.2),
+        slab(chamfer_rect(x0, y0, x1, y1, 2), "darkmetal", bevel=2, slope=0.9, op="carve"),
+        slab(chamfer_rect(x0 + 1, y0 + 1, x1 - 1, y1 - 1, 2), "pupil", bevel=1.0, slope=0.8, op="add", depth=0.4),
+        slab(chamfer_rect(56, 182, 120, 196, 2), "livery_dk", bevel=2, slope=0.9, op="add", depth=1.2),   # control plate
+    ]
+    for rx in (28, 148):
+        for ry in (76, 194):
+            housing.append(blob(rx, ry, 1.8, 1.8, "darkmetal", op="add"))
+    bars = [limb(bx, y0 - 2, bx, y1 + 2, 1.8, 1.8, "gunmetal") for bx in GEN_BARS]
+    bars += [limb(x0 - 2, (y0 + y1) / 2, x1 + 2, (y0 + y1) / 2, 1.6, 1.6, "gunmetal")]
+    turbine = [
+        slab(chamfer_rect(48, 22, 128, 78, 8), "gunmetal", bevel=5, slope=0.9),
+        blob(fx, fy, fr + 4, fr + 4, "darkmetal", depth=3),
+        blob(fx, fy, fr, fr, "pupil", op="carve", depth=2),
+        blob(fx, fy, 5, 5, "gunmetal", depth=3),                                       # hub
+    ]
+    stacks = []
+    for sx in GEN_STACKS:
+        stacks += [limb(sx, 12, sx, 72, 7, 7, "darkmetal"),
+                   slab(chamfer_rect(sx - 9, 8, sx + 9, 14, 2), "gunmetal", bevel=2, slope=0.9),
+                   slab(chamfer_rect(sx - 9, 40, sx + 9, 45, 1), "gunmetal", bevel=1.5, slope=0.9)]
+    return [skid, fins, stacks, housing, turbine, bars]
+
+
+def generator_frame(body, glow, k, steel_alpha, yy, xx):
+    t = 2 * math.pi * k / GEN_FRAMES
+    x0, y0, x1, y1 = GEN_BAY
+    open_bay = ((xx >= x0 + 2) & (xx < x1 - 2) & (yy >= y0 + 2) & (yy < y1 - 2)).astype(float)
+    behind = open_bay * (1 - steel_alpha)                        # only where no guard bar covers the bay
+    # the induction windings: horizontal bands, hottest in a band that rolls up the bay once per loop
+    band = np.sin((yy - y0) * 0.9) * 0.5 + 0.5                                         # individual windings
+    roll = ((y1 - yy) / (y1 - y0) - k / GEN_FRAMES) % 1.0
+    wave = np.exp(-((roll - 0.5) / 0.18) ** 2)
+    heat = np.clip(0.30 + 0.35 * band + 0.45 * wave + 0.06 * math.sin(t * 2), 0, 1)
+    edge = np.clip(np.minimum(xx - x0, x1 - xx) / 14.0, 0, 1)                           # cooler at the sides
+    v = heat * (0.45 + 0.55 * edge)
+    col = hot_iron(v)
+    paint(body, glow, behind * 0.98, (0, 0, 0), glow_too=False)
+    m = behind[..., None]
+    body[..., :3] = body[..., :3] * (1 - m) + col * m
+    ga = glow[..., 3:] / 255.0
+    glow[..., :3] = glow[..., :3] * (1 - m) + col * m
+    glow[..., 3:] = np.maximum(ga, behind[..., None]) * 255
+    # the turbine: a hot-iron glow behind four dark blades turning a quarter turn per loop (seamless)
+    fx, fy, fr = GEN_FAN
+    r = np.hypot(xx - fx, yy - fy); ang = np.arctan2(yy - fy, xx - fx)
+    disc = ((r < fr - 1) & (r > 5)).astype(float)
+    blades = (np.cos(4 * (ang - (math.pi / 2) * k / GEN_FRAMES) + r * 0.08) > 0.35).astype(float) * disc
+    disc_heat = hot_iron(0.55 + 0.25 * np.clip(1 - r / fr, 0, 1) + 0.05 * math.sin(t))
+    hot = disc * (1 - blades)
+    hm = hot[..., None]
+    body[..., :3] = body[..., :3] * (1 - hm) + disc_heat * hm
+    glow[..., :3] = glow[..., :3] * (1 - hm) + disc_heat * hm
+    glow[..., 3] = np.maximum(glow[..., 3], hot * 235)
+    paint(body, glow, blades, (22, 26, 32), glow_too=False)
+    glow[..., 3] *= (1 - blades)
+    # the exhaust lips glow, and embers drift up from them and fade (each ember one whole climb per loop)
+    rnd = random.Random(3307)
+    for sx in GEN_STACKS:
+        lip = np.exp(-(((xx - sx) / 6.0) ** 2) - (((yy - 9) / 2.2) ** 2))
+        paint(body, glow, np.clip(lip * 1.3, 0, 1), tuple(hot_iron(np.array(0.85 + 0.1 * math.sin(t + sx)))))
+        for e in range(5):
+            ex = sx + rnd.uniform(-5, 5); phase = rnd.uniform(0, 1)
+            life = (phase + k / GEN_FRAMES) % 1.0
+            ey = 6 - life * 34
+            if ey < 0.5:
+                continue
+            ember = np.exp(-((xx - ex - 2 * math.sin(life * 6 + e)) ** 2 + (yy - ey) ** 2) / 0.9) * (1 - life)
+            paint(body, glow, np.clip(ember * 1.5, 0, 1), tuple(hot_iron(np.array(0.95 - 0.5 * life))))
+    # the control plate: a gauge with a trembling needle, two cyan lamps, a blinking hot-iron warning lamp
+    gx, gy = 70, 189
+    dial = (np.hypot(xx - gx, yy - gy) < 5).astype(float)
+    paint(body, glow, dial, (200, 205, 200), glow_too=False)
+    needle_ang = -2.2 + 0.25 * math.sin(t * 3) + 0.08 * math.sin(t * 7)
+    for step in range(5):
+        px, py = gx + step * math.cos(needle_ang), gy + step * math.sin(needle_ang)
+        nd = np.zeros(body.shape[:2]); nd[int(round(py)), int(round(px))] = 1
+        paint(body, glow, nd, (230, 70, 20))
+    for i, lx in enumerate((88, 98)):
+        lamp = np.exp(-(((xx - lx) ** 2 + (yy - 189) ** 2) / 3.0))
+        paint(body, glow, np.clip(lamp * 1.5, 0, 1), (90, 240, 255))
+    warn_on = (k // 4) % 2 == 0
+    lamp = np.exp(-(((xx - 110) ** 2 + (yy - 189) ** 2) / 3.2))
+    paint(body, glow, np.clip(lamp * (1.6 if warn_on else 0.5), 0, 1),
+          tuple(hot_iron(np.array(0.8 if warn_on else 0.35))), glow_too=warn_on)
+
+
+def make_generator():
+    base = bake(generator_body(), GEN_W, GEN_H, seed=811)
+    bars_only = bake([[limb(bx, GEN_BAY[1] - 2, bx, GEN_BAY[3] + 2, 1.8, 1.8, "gunmetal") for bx in GEN_BARS]
+                      + [limb(GEN_BAY[0] - 2, (GEN_BAY[1] + GEN_BAY[3]) / 2, GEN_BAY[2] + 2,
+                              (GEN_BAY[1] + GEN_BAY[3]) / 2, 1.6, 1.6, "gunmetal")]], GEN_W, GEN_H, seed=811)
+    steel_alpha = bars_only[0][..., 3] / 255.0
+    yy, xx = np.mgrid[0:GEN_H, 0:GEN_W].astype(float)
+
+    def frame(k):
+        body, glow = base[0].copy(), base[1].copy()
+        generator_frame(body, glow, k, steel_alpha, yy, xx)
+        img = finish(body)
+        kit.stencil(img, "GEN-04", 64, 74, (150, 156, 164))
+        body = np.asarray(img, float).copy()
+        bloom(glow, 4, 1.4, cap=0.5)
+        return body, glow
+
+    return Prop("generator", GEN_W, GEN_H, GEN_FRAMES, GEN_FRAME_SECONDS, frame)
+
+
+PROPS = {"terminal": make_terminal, "bio_pod": make_pod, "portal": make_portal, "ai_core": make_ai_core, "generator": make_generator}
 
 
 # ---------------------------------------------------------------------------------------------------
