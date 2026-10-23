@@ -39,11 +39,15 @@ same commit. Never `git add -A`.
 
 - [x] **CP0** — idea + this file committed and pushed.
 - [x] **CP1** — ai_core baked into assets/textures/props/generated/; previews sent; order-1 sheets unchanged.
-- [ ] **CP2** — registry row, height 1.0, old generator deleted; mirror build green (StoryBarkTest aside).
-- [ ] **CP3** — in-engine screenshots sent; docs updated.
+- [x] **CP2** — registry row, height 1.0, old generator deleted; mirror build green (StoryBarkTest aside).
+- [x] **CP3** — in-engine screenshots sent; docs updated.
 - [ ] **CP4** — owner approval in DECISIONS; STATUS IMPLEMENTED.
 
 ## NOTES CARRIED FORWARD
 
 - CP1: make_ai_core() = one static kit render (ai_core_body) + per-frame numpy paint (window, LEDs, readout,
   cable pulse); ~7 s for the whole bake. Deterministic (two bakes cmp-identical); terminal + bio_pod re-bake identical.
+- CP2: build green except the known StoryBarkTest. CP3: seed 42 floor 1 has a 'J' (lookat:J:0:2 after the kill:0
+  x8 + LEAVE IT opening); screenshots cool_steel + amber_hot sent. In a fresh container rerun run-game/setup.sh
+  (GLFW fails without the Xvfb display).
+- CP4 waits on the OWNER.

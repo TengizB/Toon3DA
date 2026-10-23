@@ -123,7 +123,9 @@ C   Crate               Reinforced olive-drab munitions box: steel corner bracke
 @   Special equipment   Advanced machine: violet→cyan energy aperture (orbiting containment ring + core orb), twin tall plasma canisters, vented emitter housing, lower control panel (readout, keypad, gauge), hazard band. 0.88x wall height
 I   Specimen tank       Tall research cylinder: steel plinth (readout, vents), capped collar with cyan emitter ring, teal cryo-fluid with air gap + meniscus, glowing containment bands, curled bioluminescent specimen, glass sheen, rising bubbles, frost. 0.85x wall height
 W   Holo-workstation    Low console (keypad deck, live waveform screen, status LEDs) with a holo-emitter disc projecting a translucent cyan wireframe globe: scan-lined volume, lat/long arcs, fanning beams, floating data glyphs. 0.70x wall height
-J   AI core node        Tall server tower: chassis with edge cooling fins, crown cyan-white core glow orb, glowing vertical data spine threading a stack of translucent processing slabs (internal glow, bright seam, edge LEDs), base readout. 0.95x wall height
+J   AI core node        The PATTERN ARCHIVE, GENERATED + ANIMATED (generated-prop-art order 2): a floor-to-ceiling steel
+                        compute column; behind its glass, cyan memory wafers on a data spine around a pulsing rad-lime
+                        core; blinking rail LEDs. 1.00x wall height (floor to ceiling)
 ;   Gravity well core    CENTERPIECE. Floating anti-grav generator: dark emitter hub over a pedestal, encircled by a spinning pale-blue containment ring with orbiting debris chunks. STELLAR_OBSERVATORY room only, exactly one at the centroid tile. 0.98x wall height
 \   Floating cargo crate Magnetically tethered supply crate hanging off the deck, tilted ~20deg, cyan tether-beam to a deck clamp. STELLAR_OBSERVATORY room only. 0.55x wall height
 |   Docking strut pylon  Tapered titanium support strut with a clamp collar and a vertical ladder of status LEDs. STELLAR_OBSERVATORY room only. 0.92x wall height

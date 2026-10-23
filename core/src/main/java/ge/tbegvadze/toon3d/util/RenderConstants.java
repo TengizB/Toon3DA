@@ -161,7 +161,7 @@ public final class RenderConstants {
     public static final float PROP_VENDOR_HEIGHT               = 0.88f; // '@' vending / supply dispenser
     public static final float PROP_HEIGHT_SPECIMEN_TANK        = 0.85f; // 'I' specimen tank
     public static final float PROP_HEIGHT_HOLO_WORKSTATION     = 0.70f; // 'W' holo-workstation
-    public static final float PROP_HEIGHT_AICORE_NODE          = 0.95f; // 'J' AI core node
+    public static final float PROP_HEIGHT_AICORE_NODE          = 1.00f; // 'J' AI core node: the floor-to-ceiling pattern archive (generated-prop-art order 2)
     public static final float PROP_HEIGHT_ENERGY_SCORCH        = 0.18f; // 'e' energy scorch decal
     // Terrain hazards (idea 4, Pillar 3) — animated volumetric effects, NOT flat decals. Both
     // fill the full tile footprint (see HAZARD_CELL_WIDTH_FILL) instead of a small centred patch.

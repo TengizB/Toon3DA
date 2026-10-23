@@ -1167,7 +1167,6 @@ public class PropRenderer implements Renderable, Disposable {
         registry.register("prop_weapon_rack",        PropRenderer::generateWeaponRackTexture);
         registry.register("prop_vendor",             PropRenderer::generateVendorTexture);
         registry.register("prop_specimen_tank",      PropRenderer::generateSpecimenTankTexture);
-        registry.register("prop_ai_core",            PropRenderer::generateAiCoreNodeTexture);
         registry.register("prop_holo_workstation",   PropRenderer::generateHoloWorkstationTexture);
         registry.register("prop_gravity_well_core",  PropRenderer::generateGravityWellCoreTexture);
         registry.register("prop_floating_cargo_crate", PropRenderer::generateFloatingCargoCrateTexture);
@@ -2914,107 +2913,6 @@ public class PropRenderer implements Renderable, Disposable {
         pixmap.setColor(0.85f, 0.98f, 1.00f, 1f);
         pixmap.fillRectangle(holoCenterX + holoRadius, holoCenterY - 2, 2, 2);
         pixmap.fillRectangle(holoCenterX - holoRadius - 2, holoCenterY + 6, 2, 2);
-
-        return finalize(pixmap);
-    }
-
-    // AI core node ('J') — a tall server tower: beveled chassis with edge cooling
-    // fins, a radial cyan-white "core" glow orb at the crown, a glowing vertical data
-    // spine threading a stack of translucent processing slabs (each with an internal
-    // glow gradient, bright central seam and edge LEDs), and a base unit with a
-    // readout panel and vents.
-    private static Texture generateAiCoreNodeTexture() {
-        final int textureWidth = 72, textureHeight = 192;
-        Pixmap pixmap = new Pixmap(textureWidth, textureHeight, Pixmap.Format.RGBA8888);
-        pixmap.setColor(0f, 0f, 0f, 0f);
-        pixmap.fill();
-
-        // ── Outer chassis frame + edge cooling fins ──
-        beveledPanel(pixmap, 6, 2, 60, 188, 0.12f, 0.13f, 0.17f, 1.6f, 0.5f);
-        pixmap.setColor(0.16f, 0.17f, 0.21f, 1f);
-        for (int finRow = 40; finRow < 168; finRow += 7) {
-            pixmap.fillRectangle(2, finRow, 6, 4);
-            pixmap.fillRectangle(64, finRow, 6, 4);
-        }
-
-        // ── Crown AI core orb (radial cyan-white glow) ──
-        int coreCenterX = 36, coreCenterY = 26, coreRadius = 18;
-        pixmap.setColor(0.05f, 0.07f, 0.10f, 1f);
-        pixmap.fillRectangle(coreCenterX - 20, 6, 40, 40);
-        for (int pixelRow = coreCenterY - coreRadius; pixelRow <= coreCenterY + coreRadius; pixelRow++) {
-            for (int pixelColumn = coreCenterX - coreRadius; pixelColumn <= coreCenterX + coreRadius; pixelColumn++) {
-                float normalizedX = (pixelColumn - coreCenterX) / (float) coreRadius;
-                float normalizedY = (pixelRow - coreCenterY) / (float) coreRadius;
-                float distance = (float) Math.sqrt(normalizedX * normalizedX + normalizedY * normalizedY);
-                if (distance > 1f) continue;
-                float red, green, blue;
-                if (distance < 0.25f) {
-                    red = 0.92f; green = 0.99f; blue = 1.00f;
-                } else if (distance < 0.6f) {
-                    float interpolationFactor = (distance - 0.25f) / 0.35f;
-                    red   = 0.92f - 0.62f * interpolationFactor;
-                    green = 0.99f - 0.24f * interpolationFactor;
-                    blue  = 1.00f - 0.05f * interpolationFactor;
-                } else {
-                    float interpolationFactor = (distance - 0.6f) / 0.4f;
-                    red   = 0.30f - 0.20f * interpolationFactor;
-                    green = 0.75f - 0.45f * interpolationFactor;
-                    blue  = 0.95f - 0.55f * interpolationFactor;
-                }
-                float ring   = (float) (Math.cos(distance * Math.PI * 5) * 0.5 + 0.5);
-                float factor = 0.82f + 0.18f * ring;
-                pixmap.setColor(red * factor, green * factor, blue * factor, 1f);
-                pixmap.drawPixel(pixelColumn, pixelRow);
-            }
-        }
-        pixmap.setColor(0.30f, 0.34f, 0.40f, 1f);
-        drawRectOutline(pixmap, coreCenterX - 20, 6, 40, 40);
-        boltStud(pixmap, coreCenterX - 18, 8); boltStud(pixmap, coreCenterX + 17, 8);
-
-        // ── Central data spine (glowing cyan conduit through the stack) ──
-        pixmap.setColor(0.10f, 0.40f, 0.50f, 1f);
-        pixmap.fillRectangle(coreCenterX - 3, 46, 6, 122);
-        pixmap.setColor(0.55f, 0.95f, 1.00f, 1f);
-        pixmap.fillRectangle(coreCenterX - 1, 46, 2, 122);
-
-        // ── Stacked translucent processing slabs ──
-        int slabTopStart = 50, slabHeight = 18, slabGap = 6, slabCount = 5;
-        for (int slabIndex = 0; slabIndex < slabCount; slabIndex++) {
-            int slabTop = slabTopStart + slabIndex * (slabHeight + slabGap);
-            beveledPanel(pixmap, 12, slabTop, 48, slabHeight, 0.16f, 0.42f, 0.55f, 1.4f, 0.5f);
-            // Internal glow gradient — brightest toward the slab's mid-line.
-            for (int rowOffset = 2; rowOffset < slabHeight - 2; rowOffset++) {
-                float vertical = 1f - Math.abs(rowOffset - slabHeight / 2f) / (slabHeight / 2f);
-                pixmap.setColor(0.25f * vertical + 0.10f, 0.65f * vertical + 0.20f, 0.80f * vertical + 0.25f, 1f);
-                pixmap.fillRectangle(15, slabTop + rowOffset, 42, 1);
-            }
-            // Bright central seam aligned with the data spine.
-            pixmap.setColor(0.70f, 0.98f, 1.00f, 1f);
-            pixmap.fillRectangle(coreCenterX - 2, slabTop, 4, slabHeight);
-            // Edge status LEDs — amber on the second slab, cyan elsewhere.
-            if (slabIndex == 1) pixmap.setColor(1.00f, 0.66f, 0.16f, 1f);
-            else                pixmap.setColor(0.40f, 0.95f, 1.00f, 1f);
-            pixmap.fillRectangle(14, slabTop + 7, 4, 4);
-            pixmap.fillRectangle(54, slabTop + 7, 4, 4);
-        }
-
-        // ── Base unit with readout, lamps and vents ──
-        pixmap.setColor(0.14f, 0.15f, 0.19f, 1f);
-        pixmap.fillRectangle(10, 168, 52, 22);
-        pixmap.setColor(0.05f, 0.16f, 0.20f, 1f);
-        pixmap.fillRectangle(14, 172, 26, 14);
-        pixmap.setColor(0.35f, 0.90f, 1.00f, 1f);
-        pixmap.fillRectangle(16, 174, 22, 2);
-        pixmap.fillRectangle(16, 178, 14, 2);
-        pixmap.fillRectangle(16, 182, 18, 2);
-        pixmap.setColor(0.30f, 0.95f, 0.40f, 1f); pixmap.fillRectangle(44, 172, 5, 5);
-        pixmap.setColor(0.95f, 0.72f, 0.20f, 1f); pixmap.fillRectangle(52, 172, 5, 5);
-        pixmap.setColor(0.12f, 0.13f, 0.16f, 1f);
-        for (int ventRow = 180; ventRow < 188; ventRow += 3) {
-            pixmap.fillRectangle(44, ventRow, 14, 1);
-        }
-        boltStud(pixmap, 10, 170); boltStud(pixmap, 62, 170);
-        boltStud(pixmap, 10, 188); boltStud(pixmap, 62, 188);
 
         return finalize(pixmap);
     }

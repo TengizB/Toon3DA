@@ -831,6 +831,13 @@ is .claude/agents/ideas/generated-prop-art.txt (+ -order-<n>); its brief and rul
             vanishing core at eye height (they slide inward one spacing per loop), a hot rim, motes rising, its
             light pooling on the platform. The owner rejected a round ring-gate: an exit must read as a DOOR. 16
             frames @ 1/12 s. [first design, removed: a ring with a violet vortex]
+  ai_core   (order 2) the PATTERN ARCHIVE - where the reprint patterns are kept: a floor-to-ceiling steel column
+            (plinth with a rad strip and the PTN-ARC stencil, darkmetal chassis between gunmetal rails, a collar
+            with cables into the ceiling). Behind a tall glass window: a faint cyan haze, memory wafers with
+            edge-lit lips and flickering node dots, a data spine with pulses climbing a full window per loop, and
+            in the gap a rad-lime core - halo, three orbiting arcs (one third turn per loop), inner ring, white-hot
+            heart - the one warm accent. Rail LEDs step every two frames; a phosphor bar graph on the readout.
+            One static kit render + per-frame paint (~7 s bake). 24 frames @ 0.1 s.
 
 ADD A PROP
   [ ] brief from the master (14.1): what it IS, its cold body materials, its one or two neon accents, still or
