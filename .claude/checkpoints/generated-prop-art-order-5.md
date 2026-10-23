@@ -40,7 +40,7 @@ same commit. Never `git add -A`.
 - [x] **CP0** — idea + this file committed and pushed.
 - [x] **CP1** — camera baked (make_camera + PROPS row); previews (still + GIF) sent; earlier sheets unchanged.
 - [x] **CP2** — registerCeilingSprite + isCeilingMounted, no contact shadow in both passes, height 1.0, old generator deleted; build green.
-- [ ] **CP3** — in-engine screenshots (two moods + an enemy behind the camera) sent; docs updated.
+- [x] **CP3** — in-engine screenshots (two moods + an enemy behind the camera) sent; docs updated.
 - [ ] **CP4** — owner approval in DECISIONS; STATUS IMPLEMENTED.
 
 ## NOTES CARRIED FORWARD
@@ -52,3 +52,8 @@ same commit. Never `git add -A`.
   GeneratedPropSheet.isCeilingMounted() cached at construction; PropRenderer.contactShadowFraction(char, sheet)
   used by both passes. generateCameraTexture + its registry row deleted (no camera PNG existed). Build green
   except the known StoryBarkTest. A3 holds by construction: the occluder buffer re-draws only the prop's alpha.
+- CP3: shots from seed 7 (run-game: seed:7, descend + engage three times, kill:0 x30, then lookat:#:0:2:S).
+  Floor 1's '#' (10,30) is in a corner - nothing can stand behind it; the third floor's '#' (65,17) has open floor
+  behind, spawn:GHOUL:3:0 lands on (65,18) = the A3 shot. cool_steel + amber_hot sent, plus the pan GIF.
+  Docs: guide 14.3 / 14.6 / 14.7 / ADD A PROP, tile-symbols '#', CLAUDE.md propvisual row, SKILL.md.
+  CP4 waits on the OWNER.

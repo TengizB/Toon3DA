@@ -60,7 +60,7 @@ python3 walls.py /tmp/w --preview /tmp/w/preview outer_facility                 
 
 `props.py` makes the environment objects (the generated-prop-art series): terminal, specimen tube (bio-pod),
 exit portal (order 1), the AI core node (order 2), the generator (order 3), and both barrels plus the fire
-and toxic floor hazards (order 4) so far. THE METHOD is section 14 of `docs/sprite-art-creation-guide.txt` (the neon inks, the canvas,
+and toxic floor hazards (order 4), and the security camera hanging from the ceiling (order 5) so far. THE METHOD is section 14 of `docs/sprite-art-creation-guide.txt` (the neon inks, the canvas,
 the smooth bake, the bloom, the frame-grid sheet, the runtime). Shipped per prop, in
 `assets/textures/props/generated/`: `<id>.prop.png` (body frames), `<id>.glow.png` (glow + bloom frames, same
 grid), `<id>.prop.json`.

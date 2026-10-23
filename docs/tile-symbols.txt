@@ -116,8 +116,11 @@ T   Computer terminal   Free-standing Organization console, GENERATED + ANIMATED
                         Every combat floor carries >= 1 with an open neighbour (the story's LOG_FOUND beats).
 L   Locker              Equipment storage cabinet (steel blue-gray).           0.90x wall height
 C   Crate               Reinforced olive-drab munitions box: steel corner brackets, ribs, hazard band, UAC stencil. 0.50x wall height
-#   Security camera     Mounted surveillance device. GENERATED placement: a kit's CORNER / ENTRY_WALL row (flush),
-                        the start room's STAGING_ARMORY corner.
+#   Security camera     The Organization's eye, GENERATED + ANIMATED and CEILING-MOUNTED (generated-prop-art order 5):
+                        a ceiling plate, a drop arm and a camera head that pans the room, neon cyan lens, blinking
+                        hot-iron REC lamp, a faint scan cone. Hangs from the ceiling (no floor shadow) but the tile
+                        stays SOLID. GENERATED placement: a kit's CORNER / ENTRY_WALL row (flush), the start room's
+                        STAGING_ARMORY corner. 1.00x wall height (full-height billboard, painted at the top)
 %   Generator           Heavy power unit, GENERATED + ANIMATED (generated-prop-art order 3): a coil bay glowing HOT IRON
                         red behind guard bars, a hot turbine fan, glowing exhaust stacks with embers. 0.85x wall height
 &   Bio-pod             Specimen tube, GENERATED + ANIMATED (generated-prop-art order 1): floor-to-ceiling column of neon

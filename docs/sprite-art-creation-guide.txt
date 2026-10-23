@@ -780,6 +780,11 @@ is .claude/agents/ideas/generated-prop-art.txt (+ -order-<n>); its brief and rul
   The frame's aspect is the billboard's aspect (width = height x frameWidth / frameHeight). One wall tile is 256
   texels tall, so a full-height prop is 256 px tall and a 0.80 prop about 200. Leave air at the sides for the bloom.
   Order 1: terminal 160x200 (0.80), bio_pod 112x256 (1.0), portal 224x256 (1.0).
+  CEILING-MOUNTED (order 5, R1): a prop that HANGS is still a full-height canvas (height 1.0) - its top row is the
+  ceiling line, the object is painted in the top rows, and EVERYTHING BELOW IT IS FULLY TRANSPARENT in the body
+  (a glow-only effect such as the camera's scan cone may reach lower). The per-frame opaque-column masks then keep
+  it out of the occluder record below the object, so an enemy behind it is drawn whole. camera 128x256 (1.0),
+  body rows 0-78.
 
 14.4 THE BAKE (props.py)
   - SMOOTH (kit.render smooth=2), as the walls: no dither, no grain speckle, anti-aliased edges (PS2).
@@ -816,6 +821,10 @@ is .claude/agents/ideas/generated-prop-art.txt (+ -order-<n>); its brief and rul
   - GLOW pass = the glow frame, NORMAL blend, white, alpha = the wall glow's distance fade (WALL_GLOW_FADE_*) x
     the floor's light multiplier: walls and props glow alike, BLACKOUT dims both.
   - A migrated sprite has no Pixmap generator (TilesetGfxBootstrap.expectedGeneratorIds() excludes it, PS6).
+  - registerCeilingSprite(spriteId, sheetId) (order 5) = registerSprite + the CEILING flag;
+    GeneratedPropRegistry.isCeilingMounted(sheetId) / GeneratedPropSheet.isCeilingMounted(). A ceiling-mounted
+    sheet gets contact-shadow fraction 0 in BOTH prop passes (PropRenderer.contactShadowFraction); body, glow,
+    muzzle light and occluder record are unchanged. The next hanging prop (lamps, cable bundles) is one row.
   - Heights stay in RenderConstants (PROP_HEIGHT_TERMINAL 0.80, PROP_BIOPOD_HEIGHT 1.0, PORTAL_SPRITE_HEIGHT 1.0).
 
 14.7 THE ORDER-1 PROPS
@@ -860,13 +869,23 @@ is .claude/agents/ideas/generated-prop-art.txt (+ -order-<n>); its brief and rul
             vertically stretched noise field in the hot-iron ramp over a charred debris bed with glowing cracks,
             sparks. toxic: a low toxin pool with drifting caustics, a dark crust rim, bubbles that swell and pop,
             vapour. Hazards are drawn full-tile wide, so their canvas aspect does not matter.
+  camera    (order 5, owner: "not stand on the floor but come down from ceiling") the Organization's eye, the first
+            CEILING-MOUNTED prop: a riveted gunmetal ceiling plate flush with the top row (SEC-02 stencil), a
+            darkmetal drop arm with a clamp collar, a U yoke and a livery_dk housing with a sun hood, a rubber cable
+            looping back up into the ceiling. The head PANS (yaw = sin(2 pi k / frames)): the housing foreshortens
+            to its front face and stretches to its side, the lens end tips down, the yoke turns - one kit render
+            per pan pose, cached by yaw over a static mount render. Lens: dark glass, a neon_cyan iris ring and
+            core, a white glint. A hot-iron REC lamp blinks (6 on / 6 off). A faint neon cyan SCAN cone (glow
+            only, alpha <= 0.22, faded 14 px from the canvas sides so it is never cut) sweeps with the pan.
+            48 frames @ 0.1 s (a 4.8 s sweep; 2.4 s read too fast for a camera).
 
 ADD A PROP
   [ ] brief from the master (14.1): what it IS, its cold body materials, its one or two neon accents, still or
       animated, its height
   [ ] a make_<prop>() in props.py + one PROPS row; new inks appended last to kit.MATERIALS if needed
   [ ] bake + preview; deterministic; enemies + walls byte-identical after any kit change
-  [ ] one GeneratedPropRegistry row; its height constant in RenderConstants
+  [ ] one GeneratedPropRegistry row (registerCeilingSprite for a prop that hangs - 14.3, 14.6); its height
+      constant in RenderConstants
   [ ] its old Pixmap generator and TextureGeneratorRegistry row deleted (PS6)
   [ ] in-engine screenshots (run-game: lookat:SYMBOL:0:2), default mood + one other; owner approval (PS7)
   [ ] docs: 14.7 here, the prop's row in docs/tile-symbols.txt
