@@ -1,8 +1,9 @@
 package ge.tbegvadze.toon3d.level;
 
 /**
- * Configuration for procedural level generation — single source of truth for which tile
- * symbols the generator may place and at what relative frequencies.
+ * Configuration for procedural level generation: floor lighting, the structural switches (columns, wide halls,
+ * lock-and-key), the encounter / supply / footprint inputs, the wall set, and the floor's preferred regular-room kit.
+ * Rooms are furnished by prop kits (level-generation-overhaul) — there is no per-symbol scatter flag or weight.
  *
  * All public fields are intentionally mutable so callers can build a custom config by
  * mutating a default instance rather than going through a verbose builder chain.
@@ -28,61 +29,11 @@ public final class LevelGenConfig {
     public boolean normalFloors = true;
 
     // -------------------------------------------------------------------------
-    // Solid props (block player movement)
-    // -------------------------------------------------------------------------
-
-    /** Radioactive barrels ('g'). */
-    public boolean radioactiveBarrels = true;
-
-    /** Crates ('C'). */
-    public boolean crates = true;
-
-    /** Computer terminals ('T'). */
-    public boolean computerTerminals = true;
-
-    /** Lockers ('L'). Off by default. */
-    public boolean lockers = false;
-
-    // -------------------------------------------------------------------------
-    // Decal props (walkable; no collision)
-    // -------------------------------------------------------------------------
-
-    /** Blood stain decals ('.'). Also trigger rust and gore wall post-passes. */
-    public boolean bloodStains = true;
-
-    /**
-     * Corpse decals ('m'). OFF by default: 'm' is the game's DEATH MARKER — EnemyManager.killEnemy
-     * stamps it on the tile where an enemy dies — so generating it as scenery made a freshly entered
-     * room indistinguishable from one the player had already fought through. Measured at ~16.4
-     * pre-placed corpses against ~11.7 live enemies per floor (1.4 corpses per living enemy), which
-     * reads unmistakably as "the enemies here died on their own" and was reported as exactly that.
-     *
-     * <p>'m' now means one thing only: SOMETHING DIED HERE DURING THIS RUN. Aftermath atmosphere is
-     * carried by the blood ('.'), alt-blood ('s'), oil ('O') and scorch ('e') decals, which imply a
-     * fight without implying a body the player did not make. Turn this on only for a hand-authored
-     * level where pre-existing corpses are the intended story.
-     */
-    public boolean corpses = false;
-
-    /** Oil pool decals ('O'). Also trigger rust-wall post-pass. */
-    public boolean oilPools = true;
-
-    // -------------------------------------------------------------------------
     // Structural elements
     // -------------------------------------------------------------------------
 
-    /** Cylindrical columns ('P'). Adds visual depth and cover in larger rooms. */
+    /** Cylindrical columns ('P'): the architecture's pillar slots and the hall pass's spaced hall columns. */
     public boolean columns = true;
-
-    /**
-     * Enable the LARGE size modifier: gates whether any non-entrance room may independently roll
-     * LEVEL_GEN_LARGE_MODIFIER_CHANCE to be stamped significantly larger than standard, keeping
-     * whatever room-type styling it would have received anyway. Not a room type of its own.
-     */
-    public boolean enableLargeRooms = true;
-
-    /** Enable SERVER_ROOM data vaults (terminal walls, rack rows, dark atmosphere). */
-    public boolean enableServerRooms = true;
 
     /** Enable wide (3-tile) grand hallways with centre-line columns on 2-3 MST edges. */
     public boolean enableWideHallways = true;
@@ -96,39 +47,6 @@ public final class LevelGenConfig {
 
     // Pickups are no longer configured per floor (balance-overhaul order 2): the SupplyPlanner places every
     // medkit, armour, ammo box, weapon drop and credit chip from the node's {@link #supplySpec}.
-
-    // -------------------------------------------------------------------------
-    // Prop relative weights
-    // Disabled categories are silently skipped; remaining weights are normalised
-    // at runtime so the total always sums to 1.0 regardless of which are enabled.
-    // -------------------------------------------------------------------------
-
-    public float radioactiveBarrelWeight = 0.22f;
-    public float crateWeight             = 0.10f;
-    public float terminalWeight          = 0.10f;
-    public float lockerWeight            = 0.08f;
-    public float bloodStainWeight        = 0.16f;
-    public float corpseWeight            = 0.14f;
-    public float oilPoolWeight           = 0.12f;
-
-    // -------------------------------------------------------------------------
-    // Column placement parameters
-    // -------------------------------------------------------------------------
-
-    /** Probability (0–1) that an eligible non-entrance room receives columns at all. */
-    public float columnChancePerRoom = 0.65f;
-
-    /** Minimum number of columns placed when a room is selected for columns. */
-    public int columnMinCount = 1;
-
-    /** Maximum number of columns placed when a room is selected for columns. */
-    public int columnMaxCount = 3;
-
-    /**
-     * Minimum interior dimension (width AND height) a room must have to be eligible
-     * for column placement. Prevents columns from blocking tiny rooms.
-     */
-    public int columnMinRoomSize = 4;
 
     // -------------------------------------------------------------------------
     // Encounter budget (route-map order-7)
@@ -179,6 +97,12 @@ public final class LevelGenConfig {
      * fields; the LevelFinisher dresses every wall from it. Null = the default set (outer_facility).
      */
     public String wallSetId = null;
+
+    /**
+     * The regular-room kit this floor prefers (level-generation-overhaul R23/R31): it counts double in every regular
+     * room's uniform kit draw. Set by a route profile (CACHE -> "storeroom", ELITE -> "aftermath"); null = none.
+     */
+    public String preferredRegularKit = null;
 
     /** P7: how many floors into its region this floor is (0 = the region's first floor; RegionPlan). */
     public int floorIndexInRegion = 0;

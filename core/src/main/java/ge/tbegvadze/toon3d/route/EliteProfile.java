@@ -21,8 +21,8 @@ import java.util.List;
  *       a normal combat floor; the danger comes from budget + affix + hazards, so no bespoke generator
  *       is needed. Boss depths still defer to the arena ({@link GameMath#isBossFloor(int)} is the
  *       single authority, matching every other profile).</li>
- *   <li>Config: hazard-forward — radioactive barrels weighted up, large arena room on, some flicker /
- *       unlit dread, oil/corpses up. Lock-and-key on so clearing the floor can literally unlock the
+ *   <li>Config: some flicker / unlit dread, cover columns, regular rooms leaning the AFTERMATH kit
+ *       (level-generation-overhaul R31). Lock-and-key on so clearing the floor can literally unlock the
  *       payout. {@link FloorEffects#redAlert()} lights the emergency pulse the moment you arrive.</li>
  *   <li>Threat + reward: the ELITE {@link NodeSupplySpec} (balance-overhaul order 2) — 1.6x threat
  *       through the shared encounter planner (a WARBAND anchor), the vault ammo share, the guaranteed
@@ -97,22 +97,17 @@ public final class EliteProfile implements NodeLevelProfile {
         return new LevelPlan(resolveGeneratorId(node, seed), config, guarantees, budget, vault, effects);
     }
 
-    /** A hazard-forward hotzone config: barrels up, an arena room, dread lighting, lock-and-key on. */
+    /** A hotzone config: dread lighting, cover columns, AFTERMATH-leaning regular rooms, lock-and-key on. */
     private LevelGenConfig buildHotzoneConfig() {
         LevelGenConfig config = new LevelGenConfig();
-        // Hazards live — the arena itself is dangerous.
-        config.radioactiveBarrels      = true;
-        config.radioactiveBarrelWeight = RouteMapConstants.ELITE_RADIOACTIVE_BARREL_WEIGHT;
         // Dread lighting: some flicker / unlit so it LOOKS like a breach (red alert does the rest).
         config.flickeringFloors = true;
         config.unlitFloors      = true;
         config.normalFloors     = true;
-        // An arena-ish reward room + cover columns for a real setpiece.
-        config.enableLargeRooms = true;
+        // Cover columns for a real setpiece.
         config.columns          = true;
-        // Gore up (a place things died guarding).
-        config.corpses  = true;
-        config.oilPools = true;
+        // Regular rooms lean AFTERMATH — a place things died guarding (R31).
+        config.preferredRegularKit = ge.tbegvadze.toon3d.level.PropKit.ID_AFTERMATH;
         // Clearing the floor can literally unlock the vault (reuses the DoorManager keycard system).
         config.enableLockAndKey = true;
         return config;

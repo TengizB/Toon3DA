@@ -56,6 +56,10 @@ public final class BossArenaGenerator implements ILevelGenerator {
     private static final char BOSS_SPAWN_TILE     = 'n';
     private static final char PLAYER_START_TILE   = 'p';
     private static final char EXIT_TILE           = RenderConstants.STAIRS_DOWN_CHAR; // '>'
+    private static final char STAGING_LOCKER_TILE = 'L'; // the antechamber's STAGING lockers (G4)
+    /** The layout report's ids for the two rooms (no registered blueprint: no special room here, G4). */
+    private static final String ARENA_ROOM_ID      = "boss_arena";
+    private static final String ANTECHAMBER_ROOM_ID = "staging";
 
     // Every Nth perimeter-adjacent (edge) floor tile flickers; the rest are unlit — deterministic so the
     // base room is identical across re-roll attempts (only cover/barrels vary).
@@ -145,6 +149,7 @@ public final class BossArenaGenerator implements ILevelGenerator {
             fillWalls(matrix);
             carveArena(matrix, arenaInteriorLeft, arenaInteriorBottom, arenaInteriorRight, arenaInteriorTop);
             carveAntechamber(matrix, antechamberLeft, antechamberBottomRow, antechamberRight, antechamberTopRow);
+            dressStaging(matrix, antechamberLeft, antechamberBottomRow, antechamberRight);
             matrix[doorRow][centerColumn] = DOOR_TILE;
             alcoveTiles = carveAlcoves(matrix, arenaInteriorLeft, arenaInteriorRight, leftAlcoveRow, rightAlcoveRow);
 
@@ -177,6 +182,8 @@ public final class BossArenaGenerator implements ILevelGenerator {
 
         this.layout = new BossArenaLayout(centerColumn, doorRow, exitColumn, exitRow,
                 bossColumn, bossRow, alcoveTiles);
+        LevelLayoutReport report = layoutReport(matrix, arenaInteriorLeft, arenaInteriorBottom, arenaInteriorRight,
+                arenaInteriorTop, antechamberLeft, antechamberBottomRow, antechamberRight, centerColumn, doorRow);
 
         // SUPPLY (balance-overhaul order 2, S1/S10): the arena's ammo plan is R-BOSS-AMMO's arena budget,
         // placed by the shared pipeline; the boss marker is never priced and never a carrier.
@@ -185,10 +192,52 @@ public final class BossArenaGenerator implements ILevelGenerator {
                         LevelGenConstants.SPECIAL_ROOM_SUPPLY_POCKET_SIZE),
                 spawnPoints, new FloorPopulator.EncounterFacts(-1, 0f, 0f, 0, 0), config,
                 FloorPopulator.specOf(config, ge.tbegvadze.toon3d.route.RouteNodeType.BOSS), dungeonDepth, seed);
-        return populated.attachTo(new Level(matrix, populated.spawnPoints, populated.weaponSpawnPoints,
+        Level level = populated.attachTo(new Level(matrix, populated.spawnPoints, populated.weaponSpawnPoints,
                          LevelFinisher.request(matrix, seed).config(config)
                                  .floorGroup(ge.tbegvadze.toon3d.tileset.WallGroup.SIGNATURE)
                                  .basePalette(LevelPalettes.legacy()).finish()));
+        level.attachLayoutReport(report);
+        return level;
+    }
+
+    /**
+     * The layout as the audit instrument reads it (level-generation-overhaul G4): the arena (its rectangle takes in
+     * the two side alcoves, so they are interior rather than shell gaps) and the antechamber, both sharing the one
+     * door as their socket (R14). Neither is a special room (owner exception).
+     */
+    private LevelLayoutReport layoutReport(char[][] matrix, int arenaLeft, int arenaBottom, int arenaRight, int arenaTop,
+                                           int antechamberLeft, int antechamberBottom, int antechamberRight,
+                                           int doorColumn, int doorRow) {
+        int alcoveDepth = LevelGenConstants.BOSS_ARENA_ALCOVE_DEPTH;
+        LayoutRoom arena = new LayoutRoom(arenaLeft - alcoveDepth - 1, doorRow, arenaRight + alcoveDepth + 1,
+                arenaTop + 1, LevelLayoutReport.Role.REGULAR, ARENA_ROOM_ID);
+        LayoutRoom antechamber = new LayoutRoom(antechamberLeft - 1, antechamberBottom - 1, antechamberRight + 1,
+                doorRow, LevelLayoutReport.Role.REGULAR, ANTECHAMBER_ROOM_ID);
+        for (LayoutRoom room : new LayoutRoom[]{ arena, antechamber }) {
+            DoorSocket socket = new DoorSocket(doorColumn, doorRow, room.sideOf(doorColumn, doorRow));
+            socket.setLeaf(DoorSocket.Leaf.DOOR);
+            room.addSocket(socket);
+        }
+        // The lanes (R18 b). The arena's cover scatter is the fight's design and stays as it is (G4); what it must
+        // leave open is the door mouth's keep-clear approach, so that is the arena's lane. The antechamber's lane is
+        // the start tile's straight walk up the centre column to the door, a tile either side.
+        int keepClear = LevelGenConstants.BOSS_ARENA_KEEP_CLEAR_RADIUS;
+        List<int[]> arenaLane = new ArrayList<>();
+        for (int tileRow = doorRow + 1; tileRow < doorRow + 1 + keepClear; tileRow++) {
+            for (int tileColumn = doorColumn - keepClear + 1; tileColumn < doorColumn + keepClear; tileColumn++) {
+                if (arena.containsInterior(tileColumn, tileRow)) arenaLane.add(new int[]{ tileColumn, tileRow });
+            }
+        }
+        List<int[]> stagingLane = new ArrayList<>();
+        for (int tileRow = antechamberBottom; tileRow < doorRow; tileRow++) {
+            for (int tileColumn = doorColumn - 1; tileColumn <= doorColumn + 1; tileColumn++) {
+                stagingLane.add(new int[]{ tileColumn, tileRow });
+            }
+        }
+        arena.recordDressing(ARENA_ROOM_ID, false, arenaLane);
+        antechamber.recordDressing(ANTECHAMBER_ROOM_ID, false, stagingLane);
+        List<LayoutRoom> rooms = java.util.Arrays.asList(arena, antechamber);
+        return LayoutSupport.report(rooms, null, 0, DoorwayRules.validate(matrix, rooms));
     }
 
     // -------------------------------------------------------------------------
@@ -230,6 +279,16 @@ public final class BossArenaGenerator implements ILevelGenerator {
                 matrix[tileRow][tileColumn] = NORMAL_FLOOR_TILE;
             }
         }
+    }
+
+    /**
+     * The antechamber's fixed STAGING dressing (G4): one 'L' locker flush on each side wall at the middle row — far
+     * outside the start tile's straight lane up the centre column to the door and its clearance zone.
+     */
+    private void dressStaging(char[][] matrix, int left, int bottom, int right) {
+        int lockerRow = bottom + LevelGenConstants.BOSS_ARENA_ANTECHAMBER_HEIGHT / 2;
+        matrix[lockerRow][left]  = STAGING_LOCKER_TILE;
+        matrix[lockerRow][right] = STAGING_LOCKER_TILE;
     }
 
     /**

@@ -3,11 +3,10 @@ package ge.tbegvadze.toon3d.tileset;
 import ge.tbegvadze.toon3d.level.RoomBlueprint;
 import ge.tbegvadze.toon3d.level.RoomBlueprintRegistry;
 import ge.tbegvadze.toon3d.level.RoomBlueprints;
-import ge.tbegvadze.toon3d.level.RoomContext;
-import ge.tbegvadze.toon3d.util.LevelGenConstants;
+import ge.tbegvadze.toon3d.level.SpecialRoomPlanner;
 import org.junit.jupiter.api.Test;
 
-import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -18,10 +17,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *   <li>RECIPE A (walls, since generated-wall-art order 2) — a region wall set is ONE registry row (a real
  *       set, or an alias that borrows one). This test proves a row added by registration alone reaches a
  *       floor's palette: every wall symbol and the column resolve to the set it names.</li>
- *   <li>RECIPE B — "supply_cache" was added by registration alone (one RoomBlueprint, no RoomType
- *       constant, no bespoke generator helper). This test proves it can be SELECTED: it is registered,
- *       eligible on an ordinary room, and carries a positive selection weight, so it competes in the
- *       generator's seeded roulette.</li>
+ *   <li>RECIPE B — "supply_cache" was added by registration alone (one RoomBlueprint row). This test proves
+ *       that row alone puts it in the equal-chance special pool every combat floor draws from, with its size
+ *       window and kit, claiming exactly its kit's sprites (level-generation-overhaul).</li>
  * </ul>
  *
  * Headless — no LibGDX render calls (the allocator and blueprints are pure/headless).
@@ -62,34 +60,23 @@ class TilesetExtensibilityAcceptanceTest {
     }
 
     @Test
-    void recipeB_supplyCacheIsRegisteredEligibleAndSelectable() {
+    void recipeB_supplyCacheIsRegisteredAndInTheSpecialPool() {
         RoomBlueprints.bootstrap();
         RoomBlueprintRegistry registry = RoomBlueprints.rooms();
 
-        // Registered by RECIPE B (one blueprint) and classified GENERIC.
+        // Registered by RECIPE B (one row) — which, since level-generation-overhaul, is all it takes to join the
+        // equal-chance special pool every combat floor draws from (no eligibility gate, weight or cap).
         assertTrue(registry.contains(RoomBlueprints.ID_SUPPLY_CACHE));
         RoomBlueprint supplyCache = registry.get(RoomBlueprints.ID_SUPPLY_CACHE);
+        assertTrue(SpecialRoomPlanner.specialPool(registry).contains(supplyCache),
+                "supply_cache must be in the special pool");
 
-        // A room comfortably above the cache's minimum, none placed yet: eligible with a positive weight,
-        // so it competes in the generator's seeded roulette (selectBlueprint) — i.e. it CAN be selected.
-        RoomContext ordinaryRoom = new RoomContext(
-                LevelGenConstants.LEVEL_GEN_SUPPLY_CACHE_MIN_WIDTH + 2,
-                LevelGenConstants.LEVEL_GEN_SUPPLY_CACHE_MIN_HEIGHT + 2,
-                3, 0);
-        assertTrue(supplyCache.eligible(ordinaryRoom), "supply_cache should be eligible on an ordinary room");
-        assertTrue(supplyCache.selectionWeight(ordinaryRoom) > 0f, "supply_cache needs a positive weight");
-
-        // EQUAL-CHANCE removed all per-level room caps: supply_cache stays eligible even with instances
-        // already placed (only its size gate still applies), so a floor may roll it more than once.
-        RoomContext manyPlaced = new RoomContext(
-                LevelGenConstants.LEVEL_GEN_SUPPLY_CACHE_MIN_WIDTH + 2,
-                LevelGenConstants.LEVEL_GEN_SUPPLY_CACHE_MIN_HEIGHT + 2,
-                3, LevelGenConstants.LEVEL_GEN_SUPPLY_CACHE_MAX);
-        assertTrue(supplyCache.eligible(manyPlaced), "supply_cache is no longer capped per level");
-
-        // It claims no specific sprite (GENERIC): its look is fully allocator-driven from free symbols.
-        assertTrue(supplyCache.symbolDemand().requiredSprites().isEmpty(),
-                "supply_cache (GENERIC) must reserve no sprite");
+        // The row carries its size window and its kit, and claims exactly what its kit can stamp (R29).
+        assertTrue(supplyCache.sizeWindow() != null, "supply_cache needs a size window");
+        assertTrue(supplyCache.kit() != null && supplyCache.signatureSymbol() != null,
+                "supply_cache needs a signature kit");
+        assertEquals(supplyCache.kit().spriteDemand(), supplyCache.symbolDemand().requiredSprites(),
+                "supply_cache claims exactly its kit's sprites");
     }
 
 }

@@ -2125,6 +2125,8 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
     private VendingMachine tryMakeMachineCandidate(Level targetLevel, int tileColumn, int tileRow) {
         if (!isPlainFloorTile(targetLevel, tileColumn, tileRow)) return null;
         if (isTileOccupiedForMachine(targetLevel, tileColumn, tileRow)) return null;
+        // R27 (level-generation-overhaul): never inside a door's clearance zone.
+        if (ge.tbegvadze.toon3d.level.DoorwayRules.isInDoorClearance(targetLevel, tileColumn, tileRow)) return null;
 
         int wallCount    = 0;
         int firstOpenCol = 0, firstOpenRow = 0;

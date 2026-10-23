@@ -48,7 +48,6 @@ public final class NodeAffixDefinition {
     private final int     extraArmourShards;
 
     private final float  budgetScaleMultiplier;
-    private final float  radioactiveBarrelWeightBonus;
     private final int    extraRadioactiveBarrels;
     private final int    extraExplosiveBarrels;
     private final int    extraColumns;
@@ -71,7 +70,6 @@ public final class NodeAffixDefinition {
         this.extraStims                   = builder.extraStims;
         this.extraArmourShards            = builder.extraArmourShards;
         this.budgetScaleMultiplier        = builder.budgetScaleMultiplier;
-        this.radioactiveBarrelWeightBonus = builder.radioactiveBarrelWeightBonus;
         this.extraRadioactiveBarrels      = builder.extraRadioactiveBarrels;
         this.extraExplosiveBarrels        = builder.extraExplosiveBarrels;
         this.extraColumns                 = builder.extraColumns;
@@ -194,14 +192,10 @@ public final class NodeAffixDefinition {
         return budgetScaleMultiplier;
     }
 
-    /** Folds this affix's config biases into the ELITE floor config (hazard weight, in place). */
+    /** Folds this affix's config biases into the ELITE floor config (in place). */
     public void applyToConfig(LevelGenConfig config) {
         if (config == null) {
             return;
-        }
-        if (radioactiveBarrelWeightBonus > 0f) {
-            config.radioactiveBarrels    = true;
-            config.radioactiveBarrelWeight += radioactiveBarrelWeightBonus;
         }
         if (extraColumns > 0) {
             config.columns = true;
@@ -257,7 +251,6 @@ public final class NodeAffixDefinition {
         private int     extraStims          = 0;
         private int     extraArmourShards   = 0;
         private float budgetScaleMultiplier        = 1f;
-        private float radioactiveBarrelWeightBonus = 0f;
         private int   extraRadioactiveBarrels      = 0;
         private int   extraExplosiveBarrels        = 0;
         private int   extraColumns                 = 0;
@@ -271,7 +264,6 @@ public final class NodeAffixDefinition {
 
         public Builder weight(float value)                       { this.weight = value; return this; }
         public Builder budgetScaleMultiplier(float value)        { this.budgetScaleMultiplier = value; return this; }
-        public Builder radioactiveBarrelWeightBonus(float value) { this.radioactiveBarrelWeightBonus = value; return this; }
         public Builder extraRadioactiveBarrels(int value)        { this.extraRadioactiveBarrels = value; return this; }
         public Builder extraExplosiveBarrels(int value)          { this.extraExplosiveBarrels = value; return this; }
         public Builder extraColumns(int value)                   { this.extraColumns = value; return this; }

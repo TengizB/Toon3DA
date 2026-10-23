@@ -778,8 +778,6 @@ public final class BalanceConfig {
     // medkits, armour, ammo and weapons appear.
     // =====================================================================================
 
-    /** Chance any interior floor tile in a non-entrance room receives a prop. Range: 0.05–0.25. */
-    public static final float LEVEL_GEN_PROP_CHANCE          = 0.13f;
     /** Hard cap on enemies spawned per room. Range: 1–5. */
     public static final int   LEVEL_GEN_MAX_ENEMIES_PER_ROOM = 3;
 
@@ -1947,8 +1945,6 @@ public final class BalanceConfig {
     public static final int   AFFIX_OVERCLOCKED_VAULT_AMMO_BOXES = 2;
     /** SWARM vault premium: extra owned-ammo boxes that pay for its raised threat. */
     public static final int   AFFIX_SWARM_VAULT_AMMO_BOXES       = 9;
-    /** IRRADIATED: extra radioactive-barrel weight on top of the ELITE base. */
-    public static final float AFFIX_IRRADIATED_BARREL_WEIGHT_BONUS = 0.12f;
     /** IRRADIATED: extra 'g' radioactive barrels stamped as hazard pools. */
     public static final int   AFFIX_IRRADIATED_EXTRA_BARRELS = 3;
     /** FORTIFIED: extra cover columns 'P' (a slugfest of angles). */

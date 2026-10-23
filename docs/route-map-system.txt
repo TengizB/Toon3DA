@@ -343,8 +343,9 @@ REST_* / HEAL_STATION_SYMBOL) and LevelGenConstants (MED_BAY_*).
 
 SUPPLY CACHE  (RouteNodeType.CACHE, profile "supply_cache", CacheProfile)
   A UAC forward depot. Reuses a STANDARD generator (fixed to ROOMS_MST for a tidy depot read) with a
-  bright, hazard-free config (no unlit/flicker floors, no radioactive barrels; crates + lockers + one
-  cargo bay + columns). Threat + supply = the CACHE NodeSupplySpec (balance-overhaul order 2): a light
+  bright config (no unlit/flicker floors, columns on) whose regular rooms lean the STOREROOM kit — crates +
+  lockers (LevelGenConfig.preferredRegularKit counts double in the uniform kit draw; level-generation-overhaul
+  R31). Threat + supply = the CACHE NodeSupplySpec (balance-overhaul order 2): a light
   roster (0.30x threat, 0.35x bodies — never zero, a cache is not a free heal) and a net-GAIN plan of
   ammo (split 70/30 by the weapons the player carries), heals, armour, chips and a 50% weapon at the
   floor's level, all placed by the shared FloorPopulator. The profile only adds set dressing:
@@ -366,12 +367,14 @@ SUPPLY CACHE  (RouteNodeType.CACHE, profile "supply_cache", CacheProfile)
 
 MED-BAY / REST  (RouteNodeType.REST, profile "rest_medbay", RestProfile + MedBayGenerator)
   A bespoke curated clinic (GeneratorId.MED_BAY) — chosen over random rooms because legibility IS the
-  sanctuary read. Layout: approach corridor -> central ward (auto-doc at centre) -> 1-2 cryo-pod
-  alcoves -> exit a few tiles PAST the auto-doc so the heal is on the natural path out. Deterministic
-  from floorSeed; only the alcove side and whether a second alcove appears vary. Tiles (all from
-  tile-symbols.txt): 'M' medical walls dominant, 'N' reinforced-glass viewing window, 'Z' cryo-wall
-  alcove frames, 'S' emergency-strip approach; '&' bio-pods, 'I' specimen tanks, 'T' terminals, '%'
-  generator; sparse 'm'/'O'/'f' decals. Emits ZERO enemy spawn points — the honest sanctuary.
+  sanctuary read. Layout: approach corridor -> the clinic's entrance DOOR socket -> central ward (auto-doc
+  at centre, the ward's claimed centre so every lane runs around it) -> 1-2 cryo-pod bays, each opening
+  through one open socket -> exit a few tiles PAST the auto-doc so the heal is on the natural path out.
+  Deterministic from floorSeed; only the bay side and whether a second bay appears vary. Walls: the
+  floor's region set, MEDICAL family. Dressing (level-generation-overhaul G5): the fixed flush CLINIC kits
+  — 'T' consoles on the ward's top / bottom walls, 'I' tanks and a '%' generator in ward corners, '&' beds
+  spaced on each bay's far wall; one 'm', the approach's 'O' and 'f'. Emits ZERO enemy spawn points — the
+  honest sanctuary.
 
   THE CLINIC'S STOCK (new-game-balancr order-7): on top of the auto-doc, the profile stamps take-away
   supplies near the exit — REST_MEDKITS 'H', REST_STIMS '+', REST_ARMOUR 'a'/'A' — and their COUNT
@@ -411,8 +414,8 @@ FloorEffects — the headless-profile → World seam:
 ELITE HOTZONE  (RouteNodeType.ELITE, profile "elite_hotzone", EliteProfile)
   A containment breach — fewer bodies but MEANER, hazards live, red alert pulsing. Uses the node's
   pre-rolled combat generator (the SHAPE is a normal floor; the danger is budget + affix + hazards).
-  Config: radioactive barrels up (ELITE_RADIOACTIVE_BARREL_WEIGHT), an arena room, flicker/unlit dread,
-  lock-and-key ON so clearing the floor can literally unlock the vault. FloorEffects = redAlert +
+  Config: flicker/unlit dread, cover columns, regular rooms leaning the AFTERMATH kit (preferredRegularKit,
+  level-generation-overhaul R31), lock-and-key ON so clearing the floor can literally unlock the vault. FloorEffects = redAlert +
   ELITE_STING_TEXT. Threat + reward = the ELITE NodeSupplySpec (balance-overhaul order 2): 1.6x threat
   through the shared encounter planner (a WARBAND anchor), a vault ammo share, the guaranteed vest, and
   ONE reward weapon at level d+1..d+2 with a tier floor one above the region minimum, placed IN OR PAST
@@ -427,7 +430,8 @@ ELITE HOTZONE  (RouteNodeType.ELITE, profile "elite_hotzone", EliteProfile)
     is NO bespoke per-affix code path; each modifier routes through an existing system. EliteProfile
     looks the definition back up by id and folds it in (applyToConfig + budgetScaleMultiplier +
     extraGuarantees). v1 catalog (register one line in RouteRegistries.registerAffixes to add more):
-      - IRRADIATED  : + radioactive-barrel weight + extra 'g' barrels (hazard pools).
+      - IRRADIATED  : + extra 'g' barrels (hazard pools). (Its radioactive-barrel WEIGHT bonus fed the per-tile
+                      prop scatter and was deleted with it by level-generation-overhaul CP14.)
       - OVERCLOCKED : budget ×AFFIX_OVERCLOCKED_BUDGET_MULT (enemies "hit harder" ≈ more Threat spent)
                       + AFFIX_OVERCLOCKED_VAULT_AMMO_BOXES extra vault boxes — the REWARD that pays for
                       the threat it adds (R-RISK-PREMIUM; an affix may never be a sucker bet).
@@ -480,7 +484,7 @@ MYSTERY  (RouteNodeType.MYSTERY, profile "mystery", MysteryProfile — a META-pr
   registered profile (so MYSTERY inherits every special level in the pool, now and future) or builds the
   outcome's floor directly, then stamps MYSTERY_STING_TEXT + logs the resolved outcome. Table:
       VAULT_JACKPOT (18) : built — bright lightly-guarded super-cache (MYSTERY_VAULT_AMMO_BOXES + armour).
-      SECRET_WARREN (18) : built — server rooms + lock-and-key + gated loot (rewards searching).
+      SECRET_WARREN (18) : built — lock-and-key + gated loot (rewards searching).
       TRAP_GAUNTLET (18) : built — dense hazards (traps degrade to 'E'/'g' barrels), loot NEAR_EXIT.
       AMBUSH        (18) : delegates → "elite_hotzone" (combat-heavy lockdown; keeps its red alert).
       LORE_SIGNAL   (14) : delegates → "rest_medbay" (near-combat-free; EVENT profile order-10 degrade).
@@ -512,7 +516,7 @@ MYSTERY  (RouteNodeType.MYSTERY, profile "mystery", MysteryProfile — a META-pr
       survivable. Delegated outcomes re-stamp MYSTERY's sting/log but preserve a delegate's own redAlert.
 
   GRACEFUL DEGRADATION: where a referenced system isn't implemented yet the outcome falls back to the
-  nearest available effect (traps → barrels, secret rooms → server rooms + lock-and-key, lockdown waves →
+  nearest available effect (traps → barrels, secret rooms → lock-and-key + gated loot, lockdown waves →
   the ELITE combat delegate, relics/EVENT → loot/rest). Each degrade is noted in-code so it can be
   upgraded when the real system ships, without changing the table shape.
 
@@ -830,7 +834,8 @@ EVENT NODES (RouteNodeType.EVENT, profile "event", EventProfile)
   A small curated NON-COMBAT beat — the map's "? room": a distress beacon, an abandoned stash, a
   surviving tech, a corrupted shrine, a data terminal. Routing here trades a combat reward for a
   DECISION. EventProfile builds the bespoke EventRoomGenerator floor (GeneratorId.EVENT_ROOM): a
-  tight room around one central interactable ('W' holo-workstation, reused — NO new tile symbol),
+  tight room around one central interactable ('W' holo-workstation, reused — NO new tile symbol), entered
+  through a door socket, with 'T' and '%' flush to its walls (the EVENT kit, level-generation-overhaul G6),
   the exit set a couple of tiles past it, ZERO enemy spawns (EVENT_BUDGET_SCALE is near-zero too).
   The profile rolls one FacilityEvent from the node seed and attaches its id to the LevelPlan
   (LevelPlan.withEventId — the order-10 plan seam), plus an entry sting + the event id as a
@@ -901,9 +906,10 @@ REGION THEMING / ACTS (RegionAmbienceRegistry)
 REGION_GATE (RouteNodeType.REGION_GATE, profile "region_gate", GateProfile)
   The forced convergence node at a region boundary that ISN'T a boss depth (RouteMapGenerator injects
   it at region.lastDepth() when !isBossFloor). GateProfile builds the bespoke GateAirlockGenerator
-  floor (GeneratorId.GATE_AIRLOCK): a 3-wide approach, a 1-tile 'B' blue-door bulkhead with a blue
-  keycard 'b' waiting on the approach (so the airlock ALWAYS opens — reuses DoorManager, never a
-  soft-lock), a threshold room, then the exit; near-zero budget, ZERO enemy spawns. A pacing breath +
+  floor (GeneratorId.GATE_AIRLOCK): a 3-wide approach up to the threshold room's wall, where the 'B'
+  blue-door bulkhead is the room's single socket, flanked by shell (level-generation-overhaul G7), with a
+  blue keycard 'b' waiting on the approach (so the airlock ALWAYS opens — reuses DoorManager, never a
+  soft-lock), the threshold room ('T' and '%' flush), then the exit; near-zero budget, ZERO enemy spawns. A pacing breath +
   a visible chapter break. (Boss depths still defer to the arena — GameMath.isBossFloor is the single
   authority, matching every profile.)
 

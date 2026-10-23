@@ -589,8 +589,6 @@ public final class RouteMapConstants {
     public static final int   ELITE_WEAPON_RACKS       = 1;
     /** Column ('P') cover props scattered so the arena reads as a defensible set-piece. */
     public static final int   ELITE_COVER_COLUMNS      = 2;
-    /** Radioactive-barrel weight the ELITE config bumps to (hazard-forward vs the default 0.22). */
-    public static final float ELITE_RADIOACTIVE_BARREL_WEIGHT = 0.34f;
     /** Whether an ELITE floor arrives with the emergency red-alert pulse already lit. */
     public static final boolean ELITE_RED_ALERT        = true;
     /** First-frame sting shown on entering an ELITE floor. */
@@ -612,9 +610,6 @@ public final class RouteMapConstants {
     public static final String AFFIX_HINT_SEPARATOR   = " — ";
     // BALANCE SHIMS (order 7): an affix's budget multiplier is priced threat and its vault bonus is
     // the reward that must pay for it (R-RISK-PREMIUM) — both live in BalanceConfig SECTION 19.
-    /** IRRADIATED: extra radioactive-barrel weight on top of the ELITE base. */
-    public static final float AFFIX_IRRADIATED_BARREL_WEIGHT_BONUS =
-            BalanceConfig.AFFIX_IRRADIATED_BARREL_WEIGHT_BONUS;
     /** IRRADIATED: extra 'g' radioactive barrels stamped as hazard pools. */
     public static final int   AFFIX_IRRADIATED_EXTRA_BARRELS = BalanceConfig.AFFIX_IRRADIATED_EXTRA_BARRELS;
     /** OVERCLOCKED: budget multiplier (enemies "hit harder" — approximated as more Threat spent). */

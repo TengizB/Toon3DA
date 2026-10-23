@@ -8,17 +8,16 @@ public final class LevelGenConstants {
     // Grid dimensions match the 80×45 tile layout that fills the 1280×720 world exactly.
     public static final int   LEVEL_GEN_GRID_WIDTH            = Constants.WORLD_WIDTH  / Constants.CELL_SIZE; // 80
     public static final int   LEVEL_GEN_GRID_HEIGHT           = Constants.WORLD_HEIGHT / Constants.CELL_SIZE; // 45
-    // Interior tile count, excluding the 1-tile perimeter wall on each side.
-    public static final int   LEVEL_GEN_ROOM_MIN_WIDTH        = 3;
-    public static final int   LEVEL_GEN_ROOM_MIN_HEIGHT       = 3;
-    public static final int   LEVEL_GEN_ROOM_MAX_WIDTH        = 20;
-    public static final int   LEVEL_GEN_ROOM_MAX_HEIGHT       = 14;
+    // REGULAR room interior window (level-generation-overhaul R7), excluding the 1-tile shell on each side. Big
+    // spaces come from the special rooms' windows and 3-wide halls, not from regular rooms.
+    public static final int   LEVEL_GEN_ROOM_MIN_WIDTH        = 4;
+    public static final int   LEVEL_GEN_ROOM_MIN_HEIGHT       = 4;
+    public static final int   LEVEL_GEN_ROOM_MAX_WIDTH        = 12;
+    public static final int   LEVEL_GEN_ROOM_MAX_HEIGHT       = 10;
     // Minimum gap between room bounding boxes so rooms never share a wall tile.
     public static final int   LEVEL_GEN_ROOM_MARGIN           = 2;
     public static final int   LEVEL_GEN_TARGET_ROOMS          = 16;
     public static final int   LEVEL_GEN_PLACEMENT_TRIES       = 600;
-    // Probability that any interior floor tile in a non-entrance room receives a prop.
-    public static final float LEVEL_GEN_PROP_CHANCE           = BalanceConfig.LEVEL_GEN_PROP_CHANCE;
     public static final int   LEVEL_GEN_MAX_ENEMIES_PER_ROOM  = BalanceConfig.LEVEL_GEN_MAX_ENEMIES_PER_ROOM;
     // Cumulative thresholds for enemy type selection (each range maps to a spawn digit):
     //   [0.00, 0.25) → '1' PLAGUE_HULK   25 % slow tank melee
@@ -33,37 +32,122 @@ public final class LevelGenConstants {
     // Probability that a corridor-room boundary 'l' tile becomes a door ('d').
     // 0.75 = roughly 3 out of 4 room entries get a door; some stay open for flow variety.
     public static final float LEVEL_GEN_DOOR_CHANCE           = 0.75f;
-    // Probability that a wall tile adjacent to an explosive barrel ('E') becomes a hazard wall ('h').
-    public static final float LEVEL_GEN_HAZARD_WALL_CHANCE    = 0.45f;
+
+    // --- DOORWAYS AND CORRIDORS (level-generation-overhaul R9-R14) ---
+    // Door clearance zone of a socket: Chebyshev radius around it, plus this many tiles straight out along its
+    // passage axis on both sides. No solid prop or column may stand inside it (R18a, R26, R27).
+    public static final int   LEVEL_GEN_DOOR_CLEARANCE_RADIUS      = 1;
+    public static final int   LEVEL_GEN_DOOR_AXIS_CLEARANCE        = 2;
+    // A socket is >= this many tiles from either corner of its side, so both flank tiles are straight shell (R10).
+    public static final int   LEVEL_GEN_SOCKET_CORNER_MIN_DISTANCE = 2;
+    // Sockets on the same side of a room are at least this many tiles apart (R10).
+    public static final int   LEVEL_GEN_SOCKET_MIN_SPACING         = 3;
+    public static final int   LEVEL_GEN_MAX_SOCKETS_PER_ROOM       = 3;
+    public static final int   LEVEL_GEN_ENTRANCE_MAX_SOCKETS       = 2;
+    // A SPECIAL room's sockets always get a door leaf; every other socket rolls LEVEL_GEN_DOOR_CHANCE (R14).
+    public static final float LEVEL_GEN_SPECIAL_DOOR_CHANCE        = 1.0f;
+    // CorridorRouter step costs (R12): a tile beside another room's shell, an existing corridor tile (merging),
+    // and the per-tile tie-break jitter that makes the route seeded without biasing it.
+    public static final float LEVEL_GEN_ROUTE_SHELL_HUG_COST       = 4f;
+    public static final float LEVEL_GEN_ROUTE_MERGE_COST           = 0.5f;
+    public static final float LEVEL_GEN_ROUTE_BASE_COST            = 1f;
+    public static final float LEVEL_GEN_ROUTE_TIE_JITTER           = 0.001f;
+    // Added on every change of direction, so corridors run as straight L / Z legs instead of staircases (a
+    // staircase reads badly in first person, and its widened shoulders would touch only diagonally).
+    public static final float LEVEL_GEN_ROUTE_TURN_COST            = 3f;
+    // A 3-wide hall narrows to 1 wide for this many tiles before a socket (R13).
+    public static final int   LEVEL_GEN_WIDE_HALL_TAPER_TILES      = 2;
+
+    // --- THE SPECIAL ROOM PLANNER (level-generation-overhaul R1-R5) ---
+    // The floor's special types come from the floor seed ^ this salt (NOT a footprint attempt seed, R3).
+    public static final long  SPECIAL_ROOM_SEED_SALT                 = 0x5BEC1A15L;
+    // One special per this many walkable footprint tiles, clamped to [MIN, MAX] (R2, GameMath).
+    public static final int   LEVEL_GEN_WALKABLE_TILES_PER_SPECIAL_ROOM = 260;
+    public static final int   LEVEL_GEN_SPECIAL_ROOMS_MIN            = 2;
+    public static final int   LEVEL_GEN_SPECIAL_ROOMS_MAX            = 4;
+    // Best-candidate sampling: random positions tried per special, keeping the one farthest from those placed (R5).
+    public static final int   LEVEL_GEN_SPECIAL_PLACEMENT_CANDIDATES = 12;
+
+    // --- THE PROP ENGINE (level-generation-overhaul R15-R22) ---
+    // The dresser's own stream: floor seed ^ this salt ^ the room's index mix, so dressing never shifts layout draws.
+    public static final long  ROOM_DRESSING_SEED_SALT              = 0x5EEDD8E55L;
+    // Lane band half-width around each socket->HUB lane (1 = a 3-wide clear lane); a DENSE room keeps 0.
+    public static final int   LEVEL_GEN_LANE_BAND_HALF_WIDTH       = 1;
+    // Solid fill caps per room (solids / open interior tiles, R21).
+    public static final float LEVEL_GEN_ROOM_FILL_CAP_REGULAR      = 0.12f;
+    public static final float LEVEL_GEN_ROOM_FILL_CAP_SPECIAL      = 0.22f;
+    public static final float LEVEL_GEN_ROOM_FILL_CAP_DENSE        = 0.40f;
+    // At most this many rooms per floor are dressed DENSE (TIGHT); a further dense special goes RELAXED.
+    public static final int   LEVEL_GEN_MAX_TIGHT_ROOMS_PER_FLOOR  = 1;
+    // A non-signature CENTRE row needs an interior at least this big on both axes; a signature one falls back
+    // to BACK_WALL below it (R17).
+    public static final int   LEVEL_GEN_CENTRE_ROW_MIN_INTERIOR    = 7;
+    // TRAIL decals: each lane tile from the HUB outward takes a decal at this chance until the count is met.
+    public static final float LEVEL_GEN_TRAIL_STEP_CHANCE          = 0.6f;
+    // Walkable decals in halls (corridor tiles outside every room), per hall tile (R28).
+    public static final float LEVEL_GEN_HALL_DECAL_CHANCE          = 0.02f;
+
+    // --- ROOM SIZE WINDOWS (level-generation-overhaul R4): interior W x H, min -> max; rotatable unless square.
+    // Every minimum fits the room's signature row with three sockets present.
+    public static final int LEVEL_GEN_SIZE_SERVER_ROOM_MIN_WIDTH          = 6;
+    public static final int LEVEL_GEN_SIZE_SERVER_ROOM_MIN_HEIGHT         = 5;
+    public static final int LEVEL_GEN_SIZE_SERVER_ROOM_MAX_WIDTH          = 10;
+    public static final int LEVEL_GEN_SIZE_SERVER_ROOM_MAX_HEIGHT         = 8;
+    public static final int LEVEL_GEN_SIZE_MEDICAL_BAY_MIN_WIDTH          = 7;
+    public static final int LEVEL_GEN_SIZE_MEDICAL_BAY_MIN_HEIGHT         = 5;
+    public static final int LEVEL_GEN_SIZE_MEDICAL_BAY_MAX_WIDTH          = 10;
+    public static final int LEVEL_GEN_SIZE_MEDICAL_BAY_MAX_HEIGHT         = 8;
+    public static final int LEVEL_GEN_SIZE_ARMORY_MIN_WIDTH               = 6;
+    public static final int LEVEL_GEN_SIZE_ARMORY_MIN_HEIGHT              = 5;
+    public static final int LEVEL_GEN_SIZE_ARMORY_MAX_WIDTH               = 9;
+    public static final int LEVEL_GEN_SIZE_ARMORY_MAX_HEIGHT              = 7;
+    public static final int LEVEL_GEN_SIZE_CRYO_CHAMBER_MIN_WIDTH         = 7;
+    public static final int LEVEL_GEN_SIZE_CRYO_CHAMBER_MIN_HEIGHT        = 6;
+    public static final int LEVEL_GEN_SIZE_CRYO_CHAMBER_MAX_WIDTH         = 11;
+    public static final int LEVEL_GEN_SIZE_CRYO_CHAMBER_MAX_HEIGHT        = 8;
+    public static final int LEVEL_GEN_SIZE_POWER_PLANT_MIN_WIDTH          = 8;
+    public static final int LEVEL_GEN_SIZE_POWER_PLANT_MIN_HEIGHT         = 8;
+    public static final int LEVEL_GEN_SIZE_POWER_PLANT_MAX_WIDTH          = 12;
+    public static final int LEVEL_GEN_SIZE_POWER_PLANT_MAX_HEIGHT         = 10;
+    public static final int LEVEL_GEN_SIZE_COMMAND_CENTER_MIN_WIDTH       = 8;
+    public static final int LEVEL_GEN_SIZE_COMMAND_CENTER_MIN_HEIGHT      = 6;
+    public static final int LEVEL_GEN_SIZE_COMMAND_CENTER_MAX_WIDTH       = 12;
+    public static final int LEVEL_GEN_SIZE_COMMAND_CENTER_MAX_HEIGHT      = 9;
+    public static final int LEVEL_GEN_SIZE_CONTAINMENT_BLOCK_MIN_WIDTH    = 8;
+    public static final int LEVEL_GEN_SIZE_CONTAINMENT_BLOCK_MIN_HEIGHT   = 6;
+    public static final int LEVEL_GEN_SIZE_CONTAINMENT_BLOCK_MAX_WIDTH    = 12;
+    public static final int LEVEL_GEN_SIZE_CONTAINMENT_BLOCK_MAX_HEIGHT   = 8;
+    public static final int LEVEL_GEN_SIZE_RESEARCH_LAB_MIN_WIDTH         = 7;
+    public static final int LEVEL_GEN_SIZE_RESEARCH_LAB_MIN_HEIGHT        = 6;
+    public static final int LEVEL_GEN_SIZE_RESEARCH_LAB_MAX_WIDTH         = 10;
+    public static final int LEVEL_GEN_SIZE_RESEARCH_LAB_MAX_HEIGHT        = 8;
+    public static final int LEVEL_GEN_SIZE_STELLAR_OBSERVATORY_MIN_SIDE   = 13;
+    public static final int LEVEL_GEN_SIZE_STELLAR_OBSERVATORY_MAX_SIDE   = 14;
+    public static final int LEVEL_GEN_SIZE_GORE_NEST_MIN_WIDTH            = 6;
+    public static final int LEVEL_GEN_SIZE_GORE_NEST_MIN_HEIGHT           = 6;
+    public static final int LEVEL_GEN_SIZE_GORE_NEST_MAX_WIDTH            = 10;
+    public static final int LEVEL_GEN_SIZE_GORE_NEST_MAX_HEIGHT           = 8;
+    public static final int LEVEL_GEN_SIZE_ATMOSPHERIC_PLANT_MIN_WIDTH    = 7;
+    public static final int LEVEL_GEN_SIZE_ATMOSPHERIC_PLANT_MIN_HEIGHT   = 6;
+    public static final int LEVEL_GEN_SIZE_ATMOSPHERIC_PLANT_MAX_WIDTH    = 10;
+    public static final int LEVEL_GEN_SIZE_ATMOSPHERIC_PLANT_MAX_HEIGHT   = 8;
+    public static final int LEVEL_GEN_SIZE_SALVAGE_BAY_MIN_WIDTH          = 7;
+    public static final int LEVEL_GEN_SIZE_SALVAGE_BAY_MIN_HEIGHT         = 7;
+    public static final int LEVEL_GEN_SIZE_SALVAGE_BAY_MAX_WIDTH          = 10;
+    public static final int LEVEL_GEN_SIZE_SALVAGE_BAY_MAX_HEIGHT         = 9;
+    public static final int LEVEL_GEN_SIZE_SUPPLY_CACHE_MIN_WIDTH         = 5;
+    public static final int LEVEL_GEN_SIZE_SUPPLY_CACHE_MIN_HEIGHT        = 5;
+    public static final int LEVEL_GEN_SIZE_SUPPLY_CACHE_MAX_WIDTH         = 8;
+    public static final int LEVEL_GEN_SIZE_SUPPLY_CACHE_MAX_HEIGHT        = 6;
+    // The entrance room's interior, each axis (R6).
+    public static final int LEVEL_GEN_ENTRANCE_MIN_DIM                    = 5;
+    public static final int LEVEL_GEN_ENTRANCE_MAX_DIM                    = 7;
+    // A room whose interior holds at least this many tiles is a LARGE supply region (may host two groups, E3).
+    public static final int LEVEL_GEN_LARGE_ROOM_INTERIOR_AREA            = 81;
     // Maximum Manhattan distance (room-center to room-center) for optional loop corridors.
     // Keeps loop connections local so they add shortcuts rather than crossing the entire dungeon.
     public static final int   LEVEL_GEN_LOOP_MAX_DISTANCE     = 25;
-    // Guaranteed floor: at least this many non-entrance rooms roll a SPECIAL blueprint (any id
-    // other than "entrance"/"standard" — themed SIGNATURE rooms plus GENERIC flavour rooms like
-    // SALVAGE_BAY/SUPPLY_CACHE). The normal seeded weighted roll can naturally exceed this count;
-    // a backstop pass only ever ADDS specials when the roll comes up short, never removes any.
-    public static final int   LEVEL_GEN_MIN_SPECIAL_ROOMS     = 3;
 
-    // --- Room type system ---
-    // LARGE is now a size MODIFIER (not a room type/blueprint): every non-entrance room
-    // independently rolls a small chance to be stamped significantly larger than a standard
-    // room, while keeping whatever blueprint styling it would have received anyway (Room.isLarge,
-    // rolled in LevelGenerator.placeRooms() / LinearCorridorGenerator's side-room placement).
-    // LEVEL_GEN_LARGE_MIN_DIM is reused as: (a) the floor for a large-modified room's interior
-    // width AND height, and (b) the size gate for LARGE-class SIGNATURE rooms (e.g. POWER_PLANT).
-    public static final int   LEVEL_GEN_LARGE_MIN_DIM              = 9;
-    // Probability any non-entrance room independently rolls the large size modifier.
-    // This is the intended vehicle for the big set-piece rooms (STELLAR_OBSERVATORY, POWER_PLANT,
-    // COMMAND_CENTER) — see the STELLAR_OBSERVATORY size-gate note: the shared standard-room height
-    // cap (LEVEL_GEN_ROOM_MAX_HEIGHT) never produces a 13x13+ near-square footprint, so those rooms
-    // can only be hosted by a large-modified room. At the old 0.05 an oversized room was so rare that
-    // the observatory appeared in ~1% of standard levels and 0% of linear levels; raised so a couple
-    // of oversized rooms occur per level and the set-pieces have somewhere to live.
-    public static final float LEVEL_GEN_LARGE_MODIFIER_CHANCE      = 0.16f;
-    // Ceiling for a large-modified room's interior size — deliberately well above the standard
-    // room max (LEVEL_GEN_ROOM_MAX_WIDTH/HEIGHT) so the modifier reads as genuinely oversized.
-    public static final int   LEVEL_GEN_LARGE_MODIFIER_MAX_WIDTH   = 28;
-    public static final int   LEVEL_GEN_LARGE_MODIFIER_MAX_HEIGHT  = 20;
     // The linear generator's ENTRANCE room is always a small room of at most this interior side
     // (balance-overhaul order 2, E5): from its centre the spine — and the floor's first fight — must be
     // within FIRST_CONTACT_FIRST_FLOOR_MAX_WALK_TILES walk tiles.
@@ -97,16 +181,10 @@ public final class LevelGenConstants {
     /** Max Chebyshev radius from a pack's first member that the rest of the pack may spawn within. Range: 2–5. */
     public static final int   LEVEL_GEN_PACK_CLUSTER_RADIUS = 3;
 
-    // Probability that a SERVER_ROOM perimeter wall tile is converted to terminal wall 't'.
-    public static final float LEVEL_GEN_SERVER_WALL_TERMINAL_CHANCE = 0.80f;
-    // Probability that any small/medium room becomes a SERVER_ROOM (data vault).
-    public static final float LEVEL_GEN_SERVER_ROOM_CHANCE         = 0.18f;
-    // Hard cap: at most this many SERVER_ROOMs per level so they feel special.
-    public static final int   LEVEL_GEN_SERVER_ROOM_MAX_PER_LEVEL  = 2;
     // Probability a floor tile in a server room becomes a flickering tile.
     public static final float LEVEL_GEN_SERVER_FLICKER_CHANCE      = 0.12f;
     // Ratio of rack props that are lockers vs terminals in a server room.
-    public static final float LEVEL_GEN_SERVER_LOCKER_RATIO        = 0.30f;
+    public static final float LEVEL_GEN_SERVER_LOCKER_RATIO        = 0.35f;
     // Boosted pickup chances for special rooms (loot hubs / set-piece arenas).
     // Base probability that any non-entrance room contains at least one ammo box pickup.
 
@@ -115,11 +193,6 @@ public final class LevelGenConstants {
     public static final int   LEVEL_GEN_WIDE_HALLWAY_COUNT          = 3;
     // Spine column spacing for wide-hall 'P' columns (place one every N eligible spine tiles).
     public static final int   LEVEL_GEN_WIDE_HALLWAY_COLUMN_SPACING = 3;
-
-    // Procedural wall placement chances — post-pass reskin probability for new atmospheric walls.
-    public static final float LEVEL_GEN_RUST_WALL_CHANCE      = 0.60f; // 'x' near unlit tiles
-    public static final float LEVEL_GEN_RUST_OIL_CHANCE       = 0.40f; // 'x' near oil/blood decals
-    public static final float LEVEL_GEN_GORE_WALL_CHANCE      = 0.35f; // 'x' near enemy dens / corpses
 
     // -------------------------------------------------------------------------
     // DEPTH-AWARE DIFFICULTY & LOOT GRADIENT
@@ -154,110 +227,13 @@ public final class LevelGenConstants {
     // NEW ROOM TYPES — level generator configuration
     // -------------------------------------------------------------------------
 
-    // MEDICAL_BAY — guaranteed once per level (reliable heal stop)
-    public static final int   LEVEL_GEN_MEDICAL_BAY_MIN_WIDTH    = 7;
-    public static final int   LEVEL_GEN_MEDICAL_BAY_MIN_HEIGHT   = 6;
-    public static final float LEVEL_GEN_MEDICAL_WALL_CHANCE      = 0.70f; // 'M' dominant
-    public static final float LEVEL_GEN_MEDICAL_BIO_WALL_CHANCE  = 0.10f; // 'Q' accent
-    public static final float LEVEL_GEN_MEDICAL_PROP_CHANCE      = 0.16f;
-    public static final int   LEVEL_GEN_MEDICAL_BAY_MAX          = 1;
-
-    // ARMORY — present in ~80% of levels, at most once
-    public static final float LEVEL_GEN_ARMORY_CHANCE            = 0.80f;
-    public static final int   LEVEL_GEN_ARMORY_MIN_WIDTH         = 6;
-    public static final int   LEVEL_GEN_ARMORY_MIN_HEIGHT        = 6;
-    public static final float LEVEL_GEN_ARMORY_BLAST_WALL_CHANCE = 0.50f; // 'X' dominant
-    public static final float LEVEL_GEN_ARMORY_PROP_CHANCE       = 0.22f;
-    public static final int   LEVEL_GEN_ARMORY_MIN_WEAPON_RACKS  = 2;
-    public static final int   LEVEL_GEN_ARMORY_MAX               = 1;
-    // Probability that a LARGE room (when no ARMORY weapon was placed) gets a weapon pickup
-    // Probability that a STANDARD room gets a random weapon spawn.
-
-    // CRYO_CHAMBER — ~25% of levels, at most 2
-    public static final float LEVEL_GEN_CRYO_CHANCE              = 0.25f;
-    public static final int   LEVEL_GEN_CRYO_MIN_WIDTH           = 7;
-    public static final int   LEVEL_GEN_CRYO_MIN_HEIGHT          = 7;
-    public static final float LEVEL_GEN_CRYO_WALL_CHANCE         = 0.70f; // 'Z' dominant
-    public static final float LEVEL_GEN_CRYO_GLASS_WALL_CHANCE   = 0.15f; // 'N' accent
-    public static final float LEVEL_GEN_CRYO_PROP_CHANCE         = 0.20f;
-    public static final int   LEVEL_GEN_CRYO_MAX                 = 2;
-
-    // POWER_PLANT — ~45% of LARGE-eligible rooms, at most 1
-    public static final float LEVEL_GEN_POWERPLANT_CHANCE        = 0.45f;
-    public static final float LEVEL_GEN_POWERPLANT_RAD_WALL_CHANCE = 0.40f; // 'U' near core
-    public static final float LEVEL_GEN_POWERPLANT_EMERG_WALL_CHANCE = 0.20f; // 'S' approach
-    public static final float LEVEL_GEN_POWERPLANT_PROP_CHANCE   = 0.18f;
-    public static final int   LEVEL_GEN_POWERPLANT_MIN_GENERATORS = 2;
-    public static final int   LEVEL_GEN_POWERPLANT_MAX_GENERATORS = 4;
-    public static final int   LEVEL_GEN_POWERPLANT_MAX           = 1;
-
-    // COMMAND_CENTER — ~50% of levels, deepest large room, at most 1
-    public static final float LEVEL_GEN_COMMAND_CHANCE           = 0.50f;
-    public static final int   LEVEL_GEN_COMMAND_MIN_WIDTH        = 8;
-    public static final int   LEVEL_GEN_COMMAND_MIN_HEIGHT       = 7;
-    public static final float LEVEL_GEN_COMMAND_GLASS_WALL_CHANCE = 0.30f; // 'N' one wall band
-    public static final float LEVEL_GEN_COMMAND_EMERG_WALL_CHANCE = 0.15f; // 'S' accent
-    public static final float LEVEL_GEN_COMMAND_PROP_CHANCE      = 0.15f;
-    public static final int   LEVEL_GEN_COMMAND_MIN_TERMINALS    = 3;
-    public static final int   LEVEL_GEN_COMMAND_MAX_TERMINALS    = 5;
-    public static final int   LEVEL_GEN_COMMAND_MAX              = 1;
-
-    // CONTAINMENT_BLOCK — ~16% of levels, at most 2
-    public static final float LEVEL_GEN_CONTAINMENT_CHANCE       = 0.16f;
-    public static final int   LEVEL_GEN_CONTAINMENT_MIN_WIDTH    = 8;
-    public static final int   LEVEL_GEN_CONTAINMENT_MIN_HEIGHT   = 6;
-    public static final float LEVEL_GEN_CONTAINMENT_GLASS_CHANCE = 0.40f; // 'N' cell fronts
-    public static final float LEVEL_GEN_CONTAINMENT_BIO_CHANCE   = 0.15f; // 'Q' approach
-    public static final float LEVEL_GEN_CONTAINMENT_PROP_CHANCE  = 0.18f;
-    public static final int   LEVEL_GEN_CONTAINMENT_MAX          = 2;
-
-    // RESEARCH_LAB — uncommon sci-fi set-piece; at most 1 per level
-    public static final float LEVEL_GEN_RESEARCH_LAB_CHANCE         = 0.40f;
-    public static final int   LEVEL_GEN_RESEARCH_LAB_MIN_WIDTH      = 6;
-    public static final int   LEVEL_GEN_RESEARCH_LAB_MIN_HEIGHT     = 5;
-    public static final float LEVEL_GEN_RESEARCH_LAB_HOLO_WALL_CHANCE = 0.55f; // 'D' far-wall band
-    public static final float LEVEL_GEN_RESEARCH_LAB_FIELD_WALL_CHANCE = 0.80f; // 'F' alcove barrier (placed directly)
-    public static final int   LEVEL_GEN_RESEARCH_LAB_MIN_TANKS      = 2;
-    public static final int   LEVEL_GEN_RESEARCH_LAB_MAX_TANKS      = 4;
-    public static final float LEVEL_GEN_RESEARCH_LAB_CRACKED_CHANCE = 0.30f; // per 'I' tank: cracked variant
-    public static final int   LEVEL_GEN_RESEARCH_LAB_SCORCH_MIN     = 2;
+    // RESEARCH_LAB architecture
     public static final int   LEVEL_GEN_RESEARCH_LAB_SCORCH_MAX     = 5;
-    public static final int   LEVEL_GEN_RESEARCH_LAB_MAX            = 1;
 
     // -------------------------------------------------------------------------
-    // STELLAR_OBSERVATORY — true-circle rotunda landmark room. RARE set-piece; at most 1 per
-    // level (assignRoomTypes() only ever attempts this once per generate() call). See the
-    // design doc for the full spec: .claude/agents/ideas/stellar-observatory-gravity-well-room.txt
+    // STELLAR_OBSERVATORY — true-circle rotunda landmark room (a special in the equal-chance pool, at most one
+    // per floor like every special). See .claude/agents/ideas/stellar-observatory-gravity-well-room.txt
     // -------------------------------------------------------------------------
-
-    // Rarity / depth gate (design doc PLACEMENT RULES: floors 2+). Lowered from 3 so the room is
-    // reachable in normal play instead of only on deep runs the player rarely survives to.
-    public static final float LEVEL_GEN_STELLAR_OBSERVATORY_CHANCE          = 0.14f;
-    public static final int   LEVEL_GEN_STELLAR_OBSERVATORY_MIN_DEPTH       = 2;
-    // At most one observatory per level — it is a landmark. Enforced via RoomContext.alreadyPlacedOfThisKind.
-    public static final int   LEVEL_GEN_STELLAR_OBSERVATORY_MAX            = 1;
-    // Selection weight when eligible. The observatory's eligibility is the rarest of any room (needs a
-    // large near-square footprint AND depth), so a high weight here is self-limiting — it only wins the
-    // scarce oversized rooms it actually fits, rather than losing them to STANDARD (weight 5) or the many
-    // equal-weight small specials that are ALSO eligible in a big room. This is what makes it actually appear.
-    public static final float LEVEL_GEN_STELLAR_OBSERVATORY_SELECTION_WEIGHT = 20.0f;
-
-    // Size gate: near-square interior, minimum 13x13 (design doc GENERATOR ALGORITHM step 1).
-    // NOTE: the design doc's target radius (R = 6..8, from 15x15/17x17 interiors) assumes rooms
-    // up to 17 tiles tall, but LEVEL_GEN_ROOM_MAX_HEIGHT caps every room's interior height at 14
-    // — so a 15x15+ interior is never produced by placeRooms(). Rather than raising that shared
-    // cap (which would perturb every other room type's size balance), the observatory uses the
-    // biggest near-square footprint the existing cap allows; see MIN_RADIUS/MAX_RADIUS below.
-    public static final int   LEVEL_GEN_STELLAR_OBSERVATORY_MIN_INTERIOR   = 13;
-    // Relaxed from 1.25 to 1.4: the rotunda build centres its circle on min(interiorWidth, interiorHeight),
-    // so a mildly rectangular room still renders a correct radius-5 rotunda (the extra length is just floor
-    // around it). Relaxing the aspect window roughly doubles the pool of oversized rooms that qualify.
-    public static final float LEVEL_GEN_STELLAR_OBSERVATORY_MAX_ASPECT    = 1.4f;
-    // Minimum Manhattan room-centre distance from the Research Lab landmark (tonal-opposite
-    // spacing rule from PLACEMENT RULES). The doc's other spacing partners — boss arena,
-    // shop/safe room, EXCAVATION_SITE — are route-level or sibling-doc concepts that don't
-    // exist as a RoomType in this generator, so they have no analogous check here.
-    public static final int   LEVEL_GEN_STELLAR_OBSERVATORY_LANDMARK_SPACING = 20;
 
     // Circle carve geometry (GENERATOR ALGORITHM step 2). RADIUS_MARGIN keeps a 1-tile gap
     // between the rasterized circle and the interior bounds; MIN/MAX_RADIUS clamp the radius
@@ -271,18 +247,6 @@ public final class LevelGenConstants {
     // do not widen; BALANCE NOTES: "the exposure is the point").
     public static final float LEVEL_GEN_STELLAR_OBSERVATORY_CATWALK_RATIO            = 0.5f;
     public static final float LEVEL_GEN_STELLAR_OBSERVATORY_CATWALK_BAND_HALF_WIDTH  = 0.5f;
-
-    // Shell variety (step 3): angular half-widths (radians) of the viewport-dome hero arc
-    // (opposite the entrance) and the two magrail-conduit side arcs; everything else in the
-    // SHELL ring stays the default hull-plate wall. DOOR_KEEPOUT_RADIANS excludes ring tiles
-    // near any entrance bearing from hero/magrail reskinning, so a door's immediate neighbours
-    // are always a clean opening (never converted away from it).
-    public static final float LEVEL_GEN_STELLAR_OBSERVATORY_HERO_ARC_HALF_WIDTH_RADIANS    = 0.35f;
-    public static final float LEVEL_GEN_STELLAR_OBSERVATORY_MAGRAIL_ARC_HALF_WIDTH_RADIANS  = 0.20f;
-    public static final float LEVEL_GEN_STELLAR_OBSERVATORY_DOOR_KEEPOUT_RADIANS            = 0.18f;
-
-    // Radial spokes (step 6): always 4 (cardinal directions).
-    public static final int   LEVEL_GEN_STELLAR_OBSERVATORY_SPOKE_COUNT = 4;
 
     // Prop scatter (step 7) — solid-prop budget stays <= 6 total (pylons + table + crates +
     // the single core) per BALANCE NOTES, so the ring and inner disc are never sealed off.
@@ -305,10 +269,6 @@ public final class LevelGenConstants {
     // distance from the (primary) entrance bearing before a tile counts as "far".
     public static final int   LEVEL_GEN_STELLAR_OBSERVATORY_UNLIT_MAX             = 2;
     public static final float LEVEL_GEN_STELLAR_OBSERVATORY_FAR_QUADRANT_RADIANS  = 2.0f;
-
-    // Global accent wall chances (post-pass, any room type)
-    public static final float LEVEL_GEN_EMERG_STRIP_CORRIDOR_CHANCE = 0.25f; // 'S' near keycard doors
-    public static final float LEVEL_GEN_BLAST_NEAR_CORPSE_CHANCE    = 0.10f; // 'X' near corpse clusters
 
     // -------------------------------------------------------------------------
     // LINEAR CORRIDOR generator (generator 2) — spine constants
@@ -338,53 +298,11 @@ public final class LevelGenConstants {
     public static final float LEVEL_GEN_SPINE_BEND_LENGTH_MIN_FRAC = 0.70f;
     public static final float LEVEL_GEN_SPINE_BEND_LENGTH_MAX_FRAC = 0.92f;
 
-    // --- Spine wall character cumulative distribution (checked in order; remainder → 'x') ---
-    public static final float LEVEL_GEN_SPINE_WALL_CONDUIT_CHANCE          = 0.30f; // 'c'
-    public static final float LEVEL_GEN_SPINE_WALL_VENT_CUMULATIVE         = 0.50f; // 'v'
-    public static final float LEVEL_GEN_SPINE_WALL_DAMAGED_CUMULATIVE      = 0.62f; // 'w'
-    public static final float LEVEL_GEN_SPINE_WALL_HAZARD_CUMULATIVE       = 0.70f; // 'h'
-    public static final float LEVEL_GEN_SPINE_WALL_TECH_CUMULATIVE         = 0.75f; // 't'
-
     // -------------------------------------------------------------------------
     // LINEAR CORRIDOR generator — side-room size & special-room enrichment
     // -------------------------------------------------------------------------
     // Side rooms branching off the spine. The upper bounds give an occasional room a bigger
     // footprint independent of the (now shared, registry-driven) room-type roll.
-    public static final int   LEVEL_GEN_SPINE_ROOM_MIN_WIDTH        = 4;
-    public static final int   LEVEL_GEN_SPINE_ROOM_MAX_WIDTH        = 12;
-    public static final int   LEVEL_GEN_SPINE_ROOM_MIN_HEIGHT       = 4;
-    public static final int   LEVEL_GEN_SPINE_ROOM_MAX_HEIGHT       = 11;
-    // Probability a side-room slot rolls for the oversized size band (independent of, and rolled
-    // before, the LEVEL_GEN_LARGE_MODIFIER_CHANCE size modifier — see LevelGenConstants room type
-    // system section above).
-    public static final float LEVEL_GEN_SPINE_BIG_ROOM_CHANCE       = 0.28f;
-
-    // RESEARCH_LAB, CRYO_CHAMBER, CONTAINMENT_BLOCK, SERVER_ROOM, MEDICAL_BAY, ARMORY, POWER_PLANT,
-    // COMMAND_CENTER selection now goes through the shared RoomBlueprintRegistry (RoomBlueprints.java)
-    // — the same seeded weighted roll LevelGenerator uses — so this generator no longer carries its
-    // own duplicate selection chance/size-gate constants for those types.
-    // RESEARCH_LAB decoration (holo-data wall band, specimen tank count, scorch decal count):
-    public static final float LEVEL_GEN_SPINE_RESEARCH_HOLO_WALL_CHANCE = 0.55f; // 'D' back wall band
-    public static final int   LEVEL_GEN_SPINE_RESEARCH_MIN_TANKS    = 2;
-    public static final int   LEVEL_GEN_SPINE_RESEARCH_MAX_TANKS    = 4;
-    public static final int   LEVEL_GEN_SPINE_RESEARCH_SCORCH_MIN   = 2;
-    public static final int   LEVEL_GEN_SPINE_RESEARCH_SCORCH_MAX   = 5;
-
-    // STORAGE_BAY — cargo hold: stacked crate 'C' aisles + locker 'L' loot racks, ammo-dense.
-    public static final float LEVEL_GEN_SPINE_STORAGE_CHANCE        = 0.24f;
-    public static final int   LEVEL_GEN_SPINE_STORAGE_MAX           = 2;
-    public static final int   LEVEL_GEN_SPINE_STORAGE_MIN_WIDTH     = 5;
-    public static final int   LEVEL_GEN_SPINE_STORAGE_MIN_HEIGHT    = 4;
-    public static final float LEVEL_GEN_SPINE_STORAGE_LOCKER_RATIO  = 0.35f; // locker vs crate per aisle tile
-
-    // REACTOR — hazard field: explosive 'E' + radioactive 'g' barrels, generator '%' core,
-    // radiation 'U' walls, dark flickering floor. Volatile risk/reward room.
-    public static final float LEVEL_GEN_SPINE_REACTOR_CHANCE        = 0.18f;
-    public static final int   LEVEL_GEN_SPINE_REACTOR_MAX           = 1;
-    public static final int   LEVEL_GEN_SPINE_REACTOR_MIN_WIDTH     = 6;
-    public static final int   LEVEL_GEN_SPINE_REACTOR_MIN_HEIGHT    = 6;
-    public static final float LEVEL_GEN_SPINE_REACTOR_RAD_WALL_CHANCE = 0.45f; // 'U'
-    public static final float LEVEL_GEN_SPINE_REACTOR_BARREL_CHANCE   = 0.16f; // per interior tile
 
     // -------------------------------------------------------------------------
     // LINEAR CORRIDOR generator — interior architecture
@@ -394,14 +312,10 @@ public final class LevelGenConstants {
     // -------------------------------------------------------------------------
     // Probability a qualifying STANDARD room receives a structural interior layout
     // (otherwise it falls back to the legacy sparse prop scatter).
-    public static final float LEVEL_GEN_INTERIOR_LAYOUT_CHANCE      = 0.62f;
     // Minimum interior dimension (both axes) for any structural interior layout.
     public static final int   LEVEL_GEN_INTERIOR_MIN_DIM            = 5;
     // Column spacing for centre-avenue / cross-spar layouts.
     public static final int   LEVEL_GEN_INTERIOR_COLUMN_SPACING     = 2;
-    // Crate-cover layout: number of cover clusters and crates per cluster.
-    public static final int   LEVEL_GEN_INTERIOR_CRATE_CLUSTERS     = 3;
-    public static final int   LEVEL_GEN_INTERIOR_CRATE_PER_CLUSTER  = 3;
 
     // -------------------------------------------------------------------------
     // LINEAR CORRIDOR generator — spine junction plaza
@@ -411,29 +325,6 @@ public final class LevelGenConstants {
     public static final float LEVEL_GEN_SPINE_PLAZA_CHANCE          = 0.65f;
     // Half-extent (tiles) of the square opening carved around the plaza centre.
     public static final int   LEVEL_GEN_SPINE_PLAZA_RADIUS          = 2;
-
-    // --- Shared per-room-type floor lighting probabilities ---
-    // Standard room lighting — cumulative thresholds (checked in order; remainder = ' ').
-    // Probabilities: flicker 5 %, unlit 10 %, dim 25 %, lit 60 %.
-    public static final float LEVEL_GEN_ROOM_STANDARD_FLICKER_CUMULATIVE   = 0.05f;
-    public static final float LEVEL_GEN_ROOM_STANDARD_UNLIT_CUMULATIVE     = 0.15f;
-    public static final float LEVEL_GEN_ROOM_STANDARD_NORMAL_CUMULATIVE    = 0.40f;
-    // SERVER_ROOM lighting — after flicker budget, remainder split unlit / dim
-    public static final float LEVEL_GEN_ROOM_SERVER_UNLIT_THRESHOLD        = 0.55f;
-    // ARMORY lighting
-    public static final float LEVEL_GEN_ROOM_ARMORY_CORNER_DARK_CHANCE     = 0.60f;
-    public static final float LEVEL_GEN_ROOM_ARMORY_DIM_CHANCE             = 0.12f;
-    // CRYO_CHAMBER lighting
-    public static final float LEVEL_GEN_ROOM_CRYO_UNLIT_CHANCE             = 0.15f;
-    // POWER_PLANT lighting
-    public static final float LEVEL_GEN_ROOM_POWERPLANT_NEAR_FLICKER_CHANCE = 0.40f;
-    // COMMAND_CENTER lighting
-    public static final float LEVEL_GEN_ROOM_COMMAND_EDGE_DIM_CHANCE       = 0.35f;
-    // CONTAINMENT_BLOCK lighting
-    public static final float LEVEL_GEN_ROOM_CONTAINMENT_FLICKER_CHANCE    = 0.08f;
-
-    // --- Shared per-room-type pickup chances (LOOT ROOM BUDGETS — see BalanceConfig) ---
-    // POWER_PLANT / CRYO_CHAMBER / CONTAINMENT_BLOCK — hazardous/dark rooms (reduced loot)
 
     // -------------------------------------------------------------------------
     // START ROOM generator — staging room for weapon selection at run start
@@ -451,6 +342,9 @@ public final class LevelGenConstants {
     public static final boolean START_ROOM_USE_COLUMNS          = true;
     // Tile distance from the room centre at which the four framing columns are placed.
     public static final int     START_ROOM_COLUMN_OFFSET        = 4;
+    // STAGING_ARMORY (level-generation-overhaul G8): the two north-wall weapon racks sit this many columns either side
+    // of the portal (G8 asks for >= 2).
+    public static final int     START_ROOM_RACK_PORTAL_OFFSET   = 3;
 
     // -------------------------------------------------------------------------
     // CAVERN generator (generator 3) — cellular automata constants
@@ -473,39 +367,47 @@ public final class LevelGenConstants {
     // Probability per drunkard-walk step that the step moves toward the target.
     public static final float LEVEL_GEN_CAVE_TUNNEL_STRAIGHTNESS  = 0.70f;
 
-    // Rectangular chambers stamped into the cave (the Room-type bridge).
-    public static final int   LEVEL_GEN_CAVE_CHAMBER_MIN          = 2;
-    public static final int   LEVEL_GEN_CAVE_CHAMBER_MAX          = 4;
+    // Walled chambers stamped into the cave (level-generation-overhaul G3): the planned specials first, then the
+    // entrance, then 0..REGULAR_CHAMBERS_MAX regular chambers sized from the CHAMBER_* window below. Each chamber
+    // samples up to CHAMBER_TRIES positions.
+    public static final int   LEVEL_GEN_CAVE_REGULAR_CHAMBERS_MAX = 2;
     public static final int   LEVEL_GEN_CAVE_CHAMBER_TRIES        = 40;
+    // Each chamber gets SOCKETS_MIN..MAX sockets on the sides nearest cave floor, each joined to it by a straight
+    // 1-wide tunnel of at most SOCKET_TUNNEL_MAX carved tiles.
+    public static final int   LEVEL_GEN_CAVE_SOCKETS_MIN          = 1;
+    public static final int   LEVEL_GEN_CAVE_SOCKETS_MAX          = 3;
+    public static final int   LEVEL_GEN_CAVE_SOCKET_TUNNEL_MAX    = 6;
+    // The regular chamber a cave must hold when no planned special's kit places a terminal (R20): at least this
+    // interior on each side, one socket, so the OFFICE kit always finds a wall for its terminal.
+    public static final int   LEVEL_GEN_CAVE_TERMINAL_CHAMBER_MIN_DIM = 5;
+    // Seed salt for the bypass tunnels that rejoin cave the forced shells cut off (R9).
+    public static final long  LEVEL_GEN_CAVE_BYPASS_SEED_SALT     = 0x5C0FFEE1L;
     public static final int   LEVEL_GEN_CAVE_CHAMBER_MIN_WIDTH    = 4;
     public static final int   LEVEL_GEN_CAVE_CHAMBER_MAX_WIDTH    = 7;
     public static final int   LEVEL_GEN_CAVE_CHAMBER_MIN_HEIGHT   = 4;
     public static final int   LEVEL_GEN_CAVE_CHAMBER_MAX_HEIGHT   = 6;
     // Minimum fraction of the chamber footprint that must already be cave floor.
     public static final float LEVEL_GEN_CAVE_CHAMBER_FLOOR_OVERLAP  = 0.65f;
-    // Probability a chamber opening is ragged floor instead of a door.
-    public static final float LEVEL_GEN_CAVE_CHAMBER_BREACH_CHANCE  = 0.40f;
 
-    // Cave body wall distribution (applied to walls bordering cave floor, evaluated in order;
-    // the remaining ~0.54 fraction stays plain 'x' rock).
-    public static final float LEVEL_GEN_CAVE_GORE_WALL_CHANCE       = 0.18f; // 'G' flesh-wall
-    public static final float LEVEL_GEN_CAVE_RUST_WALL_CHANCE       = 0.22f; // 'j' corroded
-    public static final float LEVEL_GEN_CAVE_BULKHEAD_WALL_CHANCE   = 0.06f; // 'k' armour plate
-
-    // Cave floor lighting — individual proportions (sum to 0.84; remainder ~0.16 stays lit ' ').
-    // Implementation computes running cumulative thresholds: unlit → unlit+normal → +flicker.
-    public static final float LEVEL_GEN_CAVE_FLOOR_UNLIT_CHANCE     = 0.45f; // 'u' deep dark
-    public static final float LEVEL_GEN_CAVE_FLOOR_NORMAL_CHANCE    = 0.35f; // 'l' dim
-    public static final float LEVEL_GEN_CAVE_FLOOR_FLICKER_CHANCE   = 0.04f; // 'f' failing light
     // Total budget of flickering floor tiles in the entire cave.
     public static final int   LEVEL_GEN_CAVE_FLICKER_BUDGET         = 6;
 
     // Probability per cave floor tile of receiving a decal (blood, oil, scorch, corpse).
     public static final float LEVEL_GEN_CAVE_DECAL_CHANCE           = 0.05f;
-    // Probability per eligible open-cave tile of receiving a stalagmite column 'P'.
-    public static final float LEVEL_GEN_CAVE_STALAGMITE_CHANCE      = 0.03f;
-    // Probability per level of placing a small radioactive barrel cluster.
-    public static final float LEVEL_GEN_CAVE_BARREL_CLUSTER_CHANCE  = 0.50f;
+    // Cave body solids (G3) come from two rules only. FORMATIONS: 'P' stalagmite clusters of 1..CLUSTER_MAX, only
+    // where the 5x5 window holds >= MIN_OPEN open tiles, never within SOCKET_DISTANCE of a socket, at most
+    // PER_BIOME_MAX clusters per biome (x GROTTO_MULTIPLIER in a crystal grotto). DEBRIS: the biome feature
+    // clusters below, 1..DEBRIS_CLUSTER_MAX props flush against cave wall. Neither may sit where the open width
+    // across it, on either axis, is under MIN_PASSAGE_WIDTH.
+    public static final int   LEVEL_GEN_CAVE_FORMATION_MIN_OPEN       = 20;
+    public static final int   LEVEL_GEN_CAVE_FORMATIONS_PER_BIOME_MAX = 3;
+    public static final int   LEVEL_GEN_CAVE_FORMATION_GROTTO_MULTIPLIER = 2;
+    public static final int   LEVEL_GEN_CAVE_FORMATION_CLUSTER_MAX    = 3;
+    public static final int   LEVEL_GEN_CAVE_FORMATION_SOCKET_DISTANCE = 3;
+    public static final int   LEVEL_GEN_CAVE_DEBRIS_CLUSTER_MAX       = 3;
+    public static final int   LEVEL_GEN_CAVE_SOLID_MIN_PASSAGE_WIDTH  = 3;
+    // Placement attempts per formation / debris cluster before it is skipped.
+    public static final int   LEVEL_GEN_CAVE_SOLID_CLUSTER_TRIES      = 60;
     // Minimum Chebyshev distance from player spawn at which cave-body enemies may appear.
     public static final int   LEVEL_GEN_CAVE_SPAWN_SAFE_RADIUS      = 6;
     // Supply regions in a cave (balance-overhaul order 2): the open cave body is cut into fixed pockets
@@ -532,18 +434,9 @@ public final class LevelGenConstants {
     // Number of distinct biome regions seeded into one cave level.
     public static final int   LEVEL_GEN_CAVE_BIOME_MIN              = 3;
     public static final int   LEVEL_GEN_CAVE_BIOME_MAX              = 5;
-    // Probability a cave-body wall bordering floor is reskinned with a biome wall.
-    public static final float LEVEL_GEN_CAVE_BIOME_WALL_CHANCE      = 0.55f;
-    // Probability per eligible open cave tile of receiving a scattered biome prop.
-    public static final float LEVEL_GEN_CAVE_BIOME_PROP_CHANCE      = 0.035f;
-    // Minimum walkable cardinal neighbours a tile needs before a solid biome prop
-    // may be stamped there (pinch-guard so winding tunnels never seal shut).
-    public static final int   LEVEL_GEN_CAVE_BIOME_PROP_MIN_OPEN    = 3;
-    // Feature clusters (pod nests, barrel piles, console banks) stamped per biome.
+    // Debris clusters (pod nests, barrel piles, console banks) stamped per biome, flush against cave wall (G3).
     public static final int   LEVEL_GEN_CAVE_BIOME_FEATURE_MIN      = 1;
     public static final int   LEVEL_GEN_CAVE_BIOME_FEATURE_MAX      = 2;
-    // Maximum props stamped per feature cluster.
-    public static final int   LEVEL_GEN_CAVE_BIOME_CLUSTER_SIZE     = 4;
     // Probability a feature cluster upgrades its anchor to a rare set-piece prop.
     public static final float LEVEL_GEN_CAVE_BIOME_LANDMARK_CHANCE  = 0.45f;
     // Minimum Chebyshev distance from player spawn before any solid biome prop appears.
@@ -632,126 +525,17 @@ public final class LevelGenConstants {
     // Minimum distinct open cardinal escape routes required from the arena centre (fairness F5).
     public static final int   BOSS_ARENA_MIN_ESCAPE_ROUTES = 2;
 
-    // --- Symbol/sprite-reuse order-5: RoomBlueprint selection weights ---
-    // RoomBlueprint.selectionWeight() reuses the existing *_CHANCE constants for the chance-rolled
-    // rooms; these cover the rooms that lack a natural chance gate. They are DECLARED in order-5 and
-    // CONSUMED by the registry-driven selection order-8 introduces (which defines how weights combine).
-    // ENTRANCE is assigned to room 0 by position, never rolled → zero weight.
-    public static final float LEVEL_GEN_ROOM_ENTRANCE_SELECTION_WEIGHT = 0f;
-    // STANDARD is the residual fallback for any room no specialty claims. order-8 makes this the roulette
-    // weight for plain rooms; kept well above the summed specialty weights so most rooms stay plain and
-    // corridors/rooms read legibly (PLAIN-WALL discipline at the room level).
-    public static final float LEVEL_GEN_ROOM_STANDARD_SELECTION_WEIGHT = 5.0f;
-    // MEDICAL_BAY roulette weight (order-8): the guaranteed-once finder is gone, so eligibility caps it
-    // to one and this above-baseline weight keeps a heal-stop room common across a run.
-    public static final float LEVEL_GEN_ROOM_MEDICAL_BAY_SELECTION_WEIGHT = 2.5f;
-
-    // EQUAL-CHANCE SPECIAL ROOMS: every SPECIAL room (any registered blueprint that is not ENTRANCE or
-    // STANDARD) shares this single roulette weight, so no special room is rarer than any other — the
-    // former per-room weight disparity (e.g. STELLAR_OBSERVATORY 0.14 vs ARMORY 0.80) is gone. STANDARD
-    // stays well above this so plain rooms remain the majority and specials appear at a lower, but
-    // EQUAL-across-specials, rate; the LEVEL_GEN_MIN_SPECIAL_ROOMS backstop still guarantees a floor
-    // never falls below its special-room minimum. Both generators (ROOMS_MST and LINEAR_CORRIDOR) read
-    // this same weight through RoomBlueprint.selectionWeight(), so the equal-chance rule holds for both.
-    public static final float LEVEL_GEN_SPECIAL_ROOM_SELECTION_WEIGHT = 1.0f;
-
-    // SET-PIECE ROOMS: the under-served themed signature rooms whose eligibility is narrowed by a bigger
-    // footprint and/or a depth gate — GORE_NEST and ATMOSPHERIC_PLANT (depth-gated, so invisible on the
-    // early floors most players see) and POWER_PLANT / COMMAND_CENTER (need a large footprint that is
-    // itself rare). At the flat equal-chance weight of 1.0 these were routinely out-rolled by STANDARD
-    // (weight 5) and the many small specials that share the same rooms, so they appeared in well under a
-    // third of levels even where eligible. This above-baseline weight lets such a set-piece claim a room
-    // it actually fits so the player reliably encounters it, while STANDARD stays the majority. Read by
-    // BOTH generators through RoomBlueprint.selectionWeight(), so the boost holds for each. (RESEARCH_LAB
-    // is deliberately NOT in this tier: it already appeared often enough at the baseline weight; the
-    // rarest room of all, STELLAR_OBSERVATORY, gets its own even-higher dedicated weight above.)
-    public static final float LEVEL_GEN_SETPIECE_ROOM_SELECTION_WEIGHT = 3.0f;
-
-    // --- Symbol/sprite-reuse order-8: registry-driven selection + variety tuning ---
-    // order-8 replaces the hardcoded probability-band switch in assignRoomTypes() with a per-candidate
-    // seeded weighted pick over the RoomBlueprintRegistry (RoomBlueprint.selectionWeight). The roulette
-    // weighs each eligible specialty room (its existing *_CHANCE) against STANDARD's baseline weight, so
-    // a higher STANDARD weight keeps plain rooms dominant and specialties occasional — the mix the old
-    // bands produced. The STANDARD and MEDICAL_BAY roulette weights live with the order-5 selection
-    // weights above; the salvage-bay and STEP-C accent tunables follow.
-
-    // SALVAGE_BAY — order-8 REQUIREMENT PROOF 1: a brand-new GENERIC room with a distinct central
-    // scrap-heap architecture, composed entirely from FREE (unreserved) flexible symbols so its look is
-    // allocator-driven. Eligible on ordinary floors at a modest size; capped so it stays a flavour room.
-    public static final int   LEVEL_GEN_SALVAGE_BAY_MIN_WIDTH  = 6;
-    public static final int   LEVEL_GEN_SALVAGE_BAY_MIN_HEIGHT = 6;
-    public static final int   LEVEL_GEN_SALVAGE_BAY_MAX        = 2;
-    public static final float LEVEL_GEN_ROOM_SALVAGE_BAY_SELECTION_WEIGHT = 0.30f;
     // Salvage-bay interior tuning (all rates seeded through the generator's Random).
-    public static final float LEVEL_GEN_SALVAGE_HEAP_DENSITY        = 0.55f; // solid-prop fill of the central heap
-    public static final float LEVEL_GEN_SALVAGE_PERIMETER_RACK_CHANCE = 0.30f; // lockers/racks along interior walls
-    public static final float LEVEL_GEN_SALVAGE_WALL_ACCENT_CHANCE  = 0.22f; // perimeter wall → salvage accent symbol
-    public static final float LEVEL_GEN_SALVAGE_DECAL_CHANCE        = 0.14f; // oil/scrap decals on open floor
     public static final float LEVEL_GEN_SALVAGE_DARK_FLOOR_CHANCE   = 0.30f; // dingy 'u' patches over the 'l' floor
 
-    // SUPPLY_CACHE — order-9 RECIPE B acceptance room: a compact ancillary storeroom, added by
-    // REGISTRATION ALONE. Its build() COMPOSES the existing per-room steps (standard floor + standard
-    // columns + a double standard-prop pass for cluttered density) — no bespoke generator helper — and
-    // its accent walls are allocator-driven per level via the generic-variety pass. Modest size window,
-    // capped so it stays occasional. See docs/environment-tileset-system.txt §9 (RECIPE B).
-    public static final int   LEVEL_GEN_SUPPLY_CACHE_MIN_WIDTH  = 5;
-    public static final int   LEVEL_GEN_SUPPLY_CACHE_MIN_HEIGHT = 5;
-    public static final int   LEVEL_GEN_SUPPLY_CACHE_MAX        = 2;
-    public static final float LEVEL_GEN_ROOM_SUPPLY_CACHE_SELECTION_WEIGHT = 0.30f;
-
-    // GORE_NEST — a SIGNATURE "aftermath" room where the demonic incursion physically won. Its identity is
-    // built from WALLS + ENVIRONMENT DECALS only, all reused art (zero new symbols/sprites): a flesh-
-    // membrane gore wall 'G' fringed by rusted steel 'j', a ruptured bio-pod '&' at the centre, and a dense
-    // carpet of corpse/blood/bile decals. Depth-gated so corruption is a deeper-floor dread beat; one per
-    // level (a set-piece, like the armory/research lab). Roulette weight sits between containment and
-    // research. See .claude/agents/ideas/gore-nest-corruption-room.txt and RECIPE B in
-    // docs/environment-tileset-system.txt §9.
-    // Depth gate lowered from 3 to 2 so the corruption beat is reachable in normal play, not only on
-    // deep runs the player rarely survives to; still absent from the floor-1 intro.
-    public static final int   LEVEL_GEN_GORE_NEST_MIN_DEPTH  = 2;
-    public static final int   LEVEL_GEN_GORE_NEST_MIN_WIDTH  = 6;
-    public static final int   LEVEL_GEN_GORE_NEST_MIN_HEIGHT = 6;
-    public static final int   LEVEL_GEN_GORE_NEST_MAX        = 1;
-    public static final float LEVEL_GEN_GORE_NEST_CHANCE     = 0.35f;
     // Gore-nest interior tuning (all rates seeded through the generator's Random).
-    public static final float LEVEL_GEN_GORE_NEST_WALL_FILL_CHANCE  = 0.75f; // interior-facing wall → gore 'G' (mostly consumed)
-    public static final float LEVEL_GEN_GORE_NEST_RUST_CHANCE       = 0.20f; // rust 'j' breaks among the gore membrane
     public static final float LEVEL_GEN_GORE_NEST_DECAL_CHANCE      = 0.35f; // per-tile corpse/blood/bile carpet density
     public static final float LEVEL_GEN_GORE_NEST_DARK_FLOOR_CHANCE = 0.55f; // unlit 'u' bias over the dim 'l' floor (dread)
     public static final float LEVEL_GEN_GORE_NEST_FLICKER_CHANCE    = 0.10f; // flickering 'f' at the flesh seams
 
-    // ATMOSPHERIC_PLANT — a SIGNATURE "industrial utility / hazardous-materials" room: the facility's
-    // air-and-coolant scrubbing hub. Its identity is built from WALLS + ENVIRONMENT DECALS + a few reused
-    // props only (zero new symbols/sprites): a hazard-striped bulkhead wall 'h' broken by ventilation
-    // grille 'v' banks, scrubber pumps '%', a cluster of LIVE pressurized gas cylinders 'E' (the
-    // chain-reaction hazard that distinguishes it from the energy-focused power plant), leaking coolant
-    // drums 'g', and a floor slick with coolant 'O' and thermal scorch 'e'. Depth-gated so the industrial
-    // guts appear past the entrance floor; one per level (a hazard set-piece). Roulette weight sits between
-    // containment (0.16) and research (0.40), just under the gore nest (0.35). See
-    // .claude/agents/ideas/atmospheric-processing-plant-room.txt and RECIPE B in
-    // docs/environment-tileset-system.txt §12.
-    public static final int   LEVEL_GEN_ATMO_PLANT_MIN_DEPTH  = 2;
-    public static final int   LEVEL_GEN_ATMO_PLANT_MIN_WIDTH  = 6;
-    public static final int   LEVEL_GEN_ATMO_PLANT_MIN_HEIGHT = 6;
-    public static final int   LEVEL_GEN_ATMO_PLANT_MAX        = 1;
-    public static final float LEVEL_GEN_ATMO_PLANT_CHANCE     = 0.28f;
     // Atmospheric-plant interior tuning (all scatter rates seeded through the generator's Random; the
     // signature look is guaranteed by deterministic minimums so every seed stamps the full demand set).
-    public static final float LEVEL_GEN_ATMO_PLANT_WALL_FILL_CHANCE = 0.70f; // interior-facing perimeter → hazard 'h' (corners always 'h')
-    public static final int   LEVEL_GEN_ATMO_PLANT_VENT_PER_WALL    = 1;     // guaranteed 'v' grille at each wall-run midpoint
-    public static final int   LEVEL_GEN_ATMO_PLANT_PUMP_COUNT       = 2;     // '%' scrubber stacks along the back interior row
-    public static final int   LEVEL_GEN_ATMO_PLANT_GAS_CYLINDER_COUNT = 3;   // 'E' live explosive gas cylinders — the hazard core
-    public static final int   LEVEL_GEN_ATMO_PLANT_DRUM_MIN         = 1;     // 'g' coolant drum(s) in a fixed near-corner slot
-    public static final float LEVEL_GEN_ATMO_PLANT_COOLANT_CHANCE   = 0.35f; // 'O' coolant-slick scatter per interior tile
     public static final float LEVEL_GEN_ATMO_PLANT_SCORCH_CHANCE    = 0.20f; // 'e' scorch scatter near the machinery
-
-    // STEP C — generic rooms & halls get per-level variety. A sparse pass stamps FREED flexible accent
-    // symbols (those NO placed signature room reserved this level) into GENERIC room perimeters and
-    // corridor walls, so the allocator's per-level sprite for those symbols makes two seeds visibly
-    // differ AND the freed symbols concretely appear. 'x' stays dominant (accents are sparse).
-    public static final float LEVEL_GEN_GENERIC_ACCENT_ROOM_CHANCE  = 0.60f; // chance a generic room gets an accent theme
-    public static final float LEVEL_GEN_GENERIC_ACCENT_WALL_CHANCE  = 0.14f; // per perimeter wall tile, if themed
-    public static final float LEVEL_GEN_CORRIDOR_ACCENT_WALL_CHANCE = 0.05f; // per corridor-context wall tile
 
     // ── REGION WALL SETS: THE PLACEMENT RULES P1-P9 (generated-wall-art order 2; guide section 7) ──
     // The LevelFinisher dresses every floor's walls by rule on its OWN seeded stream (GameMath.wallSetSeed),

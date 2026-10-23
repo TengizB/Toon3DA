@@ -5,7 +5,6 @@ import ge.tbegvadze.toon3d.tileset.LevelPalettes;
 import ge.tbegvadze.toon3d.tileset.SymbolBudget;
 import ge.tbegvadze.toon3d.tileset.TileCategory;
 import ge.tbegvadze.toon3d.tileset.TilesetRegistries;
-import ge.tbegvadze.toon3d.util.LevelGenConstants;
 import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
@@ -20,10 +19,11 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Contract for the order-5 {@link RoomBlueprintRegistry} + {@link RoomBlueprints} catalog: every existing
- * {@code LevelGenerator.RoomType} is registered exactly once with the right tier; the SIGNATURE rooms'
- * {@link RoomBlueprint#symbolDemand()} names real, correctly-categorised sprites that match today's legacy
- * palette; GENERIC rooms claim nothing; and the eligibility/weight gates mirror the generator's constants.
+ * Contract for the {@link RoomBlueprintRegistry} + {@link RoomBlueprints} catalog: every room is registered exactly
+ * once with the right tier; every special room's {@link RoomBlueprint#symbolDemand()} names real, correctly-categorised
+ * sprites that match the legacy palette; the entrance and the standard room claim nothing; and (since
+ * level-generation-overhaul, which replaced the eligibility gates and weight tiers) every special room carries a size
+ * window and a signature kit, and the special pool is every room but the entrance and the standard room.
  */
 class RoomBlueprintRegistryTest {
 
@@ -36,15 +36,9 @@ class RoomBlueprintRegistryTest {
     @Test
     void registryHoldsEveryV1RoomPlusTheRegistrationOnlyAcceptanceRoom() {
         RoomBlueprintRegistry registry = freshRegistry();
-        // 15 blueprints: order-8 added SALVAGE_BAY; LARGE was removed — it is now a size MODIFIER, not a
-        // blueprint; order-9 added SUPPLY_CACHE by REGISTRATION ALONE, carrying NO RoomType constant via
-        // the seam fix; the GORE_NEST and ATMOSPHERIC_PLANT signature rooms are bespoke-prop RECIPE B rooms
-        // that each carry their OWN RoomType tag (their themed walls must survive the STANDARD-only STEP-C
-        // generic-accent pass). So the registry has exactly one MORE entry than the enum has values
-        // (SUPPLY_CACHE remains the sole RoomType-less blueprint), all ids distinct (LinkedHashMap keys).
+        // 15 blueprints: ENTRANCE + STANDARD + the thirteen special rooms (level-generation-overhaul R1). There is
+        // no RoomType enum any more: a row's behaviour is its window, kit and architecture.
         assertEquals(15, registry.size());
-        assertEquals(LevelGenerator.RoomType.values().length + 1, registry.size(),
-                "SUPPLY_CACHE registers without a RoomType constant");
         assertEquals(4, registry.allGeneric().size(),
                 "ENTRANCE/STANDARD/SALVAGE_BAY/SUPPLY_CACHE are GENERIC");
         assertEquals(11, registry.allSignature().size(), "the eleven specialty rooms are SIGNATURE");
@@ -72,11 +66,12 @@ class RoomBlueprintRegistryTest {
     }
 
     @Test
-    void genericRoomsClaimNoSprites() {
+    void entranceAndStandardClaimNoSprites() {
+        // A regular room's kit is chosen per room, so the dresser pins exactly what it placed (R29); the entrance
+        // is bare (R22). Every other row — the GENERIC salvage bay and supply cache included — claims its kit.
         RoomBlueprintRegistry registry = freshRegistry();
-        for (RoomBlueprint blueprint : registry.allGeneric()) {
-            assertTrue(blueprint.symbolDemand().requiredSprites().isEmpty(),
-                    blueprint.id() + " (GENERIC) must claim no sprites — its look is allocator-driven");
+        for (String id : new String[]{ RoomBlueprints.ID_ENTRANCE, RoomBlueprints.ID_STANDARD }) {
+            assertTrue(registry.get(id).symbolDemand().requiredSprites().isEmpty(), id + " must claim no sprites");
         }
     }
 
@@ -87,9 +82,9 @@ class RoomBlueprintRegistryTest {
         SymbolBudget budget = SymbolBudget.standard();
         RoomBlueprintRegistry registry = freshRegistry();
 
-        for (RoomBlueprint blueprint : registry.allSignature()) {
+        for (RoomBlueprint blueprint : SpecialRoomPlanner.specialPool(registry)) {
             Map<Character, String> demand = blueprint.symbolDemand().requiredSprites();
-            assertFalse(demand.isEmpty(), blueprint.id() + " (SIGNATURE) must claim at least one sprite");
+            assertFalse(demand.isEmpty(), blueprint.id() + " (special) must claim at least one sprite");
             for (Map.Entry<Character, String> entry : demand.entrySet()) {
                 char symbol = entry.getKey();
                 String spriteId = entry.getValue();
@@ -114,105 +109,37 @@ class RoomBlueprintRegistryTest {
     }
 
     @Test
-    void eligibilityGatesMirrorTheGeneratorConstants() {
+    void everySpecialRoomHasASizeWindowAndASignatureKit() {
         RoomBlueprintRegistry registry = freshRegistry();
-
-        // A tiny 3x3 candidate is eligible only for the size-gateless rooms (ENTRANCE/STANDARD/SERVER).
-        RoomContext tiny = new RoomContext(3, 3, 1, 0);
-        List<RoomBlueprint> tinySelectable = registry.selectable(tiny);
-        assertTrue(containsId(tinySelectable, RoomBlueprints.ID_ENTRANCE));
-        assertTrue(containsId(tinySelectable, RoomBlueprints.ID_STANDARD));
-        assertTrue(containsId(tinySelectable, RoomBlueprints.ID_SERVER_ROOM));
-        assertFalse(containsId(tinySelectable, RoomBlueprints.ID_MEDICAL_BAY), "3x3 too small for medical bay");
-
-        // Medical bay turns eligible exactly at its minimum footprint.
-        RoomContext medicalFit = new RoomContext(
-                LevelGenConstants.LEVEL_GEN_MEDICAL_BAY_MIN_WIDTH,
-                LevelGenConstants.LEVEL_GEN_MEDICAL_BAY_MIN_HEIGHT, 1, 0);
-        assertTrue(registry.get(RoomBlueprints.ID_MEDICAL_BAY).eligible(medicalFit));
-        // ...and STILL eligible with one already placed — EQUAL-CHANCE removed all per-level caps, so a
-        // floor may roll a second medical bay (only the size gate remains).
-        RoomContext medicalSecond = new RoomContext(
-                LevelGenConstants.LEVEL_GEN_MEDICAL_BAY_MIN_WIDTH,
-                LevelGenConstants.LEVEL_GEN_MEDICAL_BAY_MIN_HEIGHT, 1, 1);
-        assertTrue(registry.get(RoomBlueprints.ID_MEDICAL_BAY).eligible(medicalSecond),
-                "medical bay is no longer capped per level");
-
-        // Stellar observatory is depth-gated: a big near-square room below MIN_DEPTH is ineligible.
-        int bigInterior = LevelGenConstants.LEVEL_GEN_STELLAR_OBSERVATORY_MIN_INTERIOR;
-        RoomBlueprint observatory = registry.get(RoomBlueprints.ID_STELLAR_OBSERVATORY);
-        assertFalse(observatory.eligible(new RoomContext(bigInterior, bigInterior,
-                LevelGenConstants.LEVEL_GEN_STELLAR_OBSERVATORY_MIN_DEPTH - 1, 0)), "below min depth");
-        assertTrue(observatory.eligible(new RoomContext(bigInterior, bigInterior,
-                LevelGenConstants.LEVEL_GEN_STELLAR_OBSERVATORY_MIN_DEPTH, 0)), "at min depth + near-square");
-
-        // Gore nest stays depth+size-gated (below MIN_DEPTH ineligible, at MIN_DEPTH with a fitting size
-        // eligible) and is capped at GORE_NEST_MAX per level — once that many are placed it turns ineligible.
-        RoomBlueprint goreNest = registry.get(RoomBlueprints.ID_GORE_NEST);
-        int goreWidth  = LevelGenConstants.LEVEL_GEN_GORE_NEST_MIN_WIDTH;
-        int goreHeight = LevelGenConstants.LEVEL_GEN_GORE_NEST_MIN_HEIGHT;
-        assertFalse(goreNest.eligible(new RoomContext(goreWidth, goreHeight,
-                LevelGenConstants.LEVEL_GEN_GORE_NEST_MIN_DEPTH - 1, 0)), "gore nest below min depth");
-        assertTrue(goreNest.eligible(new RoomContext(goreWidth, goreHeight,
-                LevelGenConstants.LEVEL_GEN_GORE_NEST_MIN_DEPTH, 0)), "gore nest at min depth + min size");
-        assertFalse(goreNest.eligible(new RoomContext(goreWidth, goreHeight,
-                LevelGenConstants.LEVEL_GEN_GORE_NEST_MIN_DEPTH, LevelGenConstants.LEVEL_GEN_GORE_NEST_MAX)),
-                "gore nest is capped at GORE_NEST_MAX per level");
-
-        // Atmospheric plant stays depth+size-gated and is likewise capped at ATMO_PLANT_MAX per level.
-        RoomBlueprint atmosphericPlant = registry.get(RoomBlueprints.ID_ATMOSPHERIC_PLANT);
-        int plantWidth  = LevelGenConstants.LEVEL_GEN_ATMO_PLANT_MIN_WIDTH;
-        int plantHeight = LevelGenConstants.LEVEL_GEN_ATMO_PLANT_MIN_HEIGHT;
-        assertFalse(atmosphericPlant.eligible(new RoomContext(plantWidth, plantHeight,
-                LevelGenConstants.LEVEL_GEN_ATMO_PLANT_MIN_DEPTH - 1, 0)), "atmospheric plant below min depth");
-        assertTrue(atmosphericPlant.eligible(new RoomContext(plantWidth, plantHeight,
-                LevelGenConstants.LEVEL_GEN_ATMO_PLANT_MIN_DEPTH, 0)), "atmospheric plant at min depth + min size");
-        assertFalse(atmosphericPlant.eligible(new RoomContext(plantWidth, plantHeight,
-                LevelGenConstants.LEVEL_GEN_ATMO_PLANT_MIN_DEPTH, LevelGenConstants.LEVEL_GEN_ATMO_PLANT_MAX)),
-                "atmospheric plant is capped at ATMO_PLANT_MAX per level");
-
-        // Stellar observatory is likewise capped at STELLAR_OBSERVATORY_MAX per level (a landmark).
-        assertFalse(observatory.eligible(new RoomContext(bigInterior, bigInterior,
-                LevelGenConstants.LEVEL_GEN_STELLAR_OBSERVATORY_MIN_DEPTH,
-                LevelGenConstants.LEVEL_GEN_STELLAR_OBSERVATORY_MAX)),
-                "stellar observatory is capped at STELLAR_OBSERVATORY_MAX per level");
+        for (RoomBlueprint blueprint : SpecialRoomPlanner.specialPool(registry)) {
+            RoomSizeWindow window = blueprint.sizeWindow();
+            assertTrue(window != null, blueprint.id() + " needs a size window (R4)");
+            assertTrue(window.minWidth <= window.maxWidth && window.minHeight <= window.maxHeight,
+                    blueprint.id() + " window min must not exceed max");
+            assertTrue(blueprint.kit() != null && blueprint.signatureSymbol() != null,
+                    blueprint.id() + " needs a kit whose row 1 is its SIGNATURE (R16)");
+        }
+        assertTrue(registry.get(RoomBlueprints.ID_ENTRANCE).kit() == null, "the entrance is bare (R22)");
+        assertEquals(5, registry.get(RoomBlueprints.ID_STANDARD).regularKits().size(),
+                "the standard row carries the five regular kits (R23)");
+        // The stellar observatory is the one SQUARE window.
+        assertTrue(registry.get(RoomBlueprints.ID_STELLAR_OBSERVATORY).sizeWindow().square);
     }
 
     @Test
-    void selectionWeightsFollowTheRarityTiers() {
+    void theSpecialPoolIsEveryRoomButTheEntranceAndTheStandardRoom() {
+        // R1: no depth input, no weight, no cap — every registered special is in the equal-chance pool.
         RoomBlueprintRegistry registry = freshRegistry();
-        RoomContext any = new RoomContext(16, 16, 5, 0);
-        // Selection weights are tiered by how hard a room is to place, so the size/depth-scarce set-pieces
-        // aren't drowned out by STANDARD and the many small specials that share the same rooms:
-        //   ENTRANCE                                       — 0 (never rolled; assigned to room 0 by position)
-        //   STANDARD                                       — high baseline (plain rooms stay the majority)
-        //   STELLAR_OBSERVATORY                            — dedicated high weight (rarest eligibility of all)
-        //   GORE_NEST/ATMO/POWER_PLANT/COMMAND_CENTER      — above-baseline set-piece weight
-        //   every other special                            — the equal special-room baseline
-        float baseline  = LevelGenConstants.LEVEL_GEN_SPECIAL_ROOM_SELECTION_WEIGHT;
-        float setpiece  = LevelGenConstants.LEVEL_GEN_SETPIECE_ROOM_SELECTION_WEIGHT;
-        Set<String> setpieceIds = new HashSet<>(Arrays.asList(
-                RoomBlueprints.ID_GORE_NEST, RoomBlueprints.ID_ATMOSPHERIC_PLANT,
-                RoomBlueprints.ID_POWER_PLANT, RoomBlueprints.ID_COMMAND_CENTER));
-        for (RoomBlueprint blueprint : registry.all()) {
-            float weight = blueprint.selectionWeight(any);
-            if (blueprint.id().equals(RoomBlueprints.ID_ENTRANCE)) {
-                assertEquals(LevelGenConstants.LEVEL_GEN_ROOM_ENTRANCE_SELECTION_WEIGHT, weight,
-                        "entrance is never rolled");
-            } else if (blueprint.id().equals(RoomBlueprints.ID_STANDARD)) {
-                assertEquals(LevelGenConstants.LEVEL_GEN_ROOM_STANDARD_SELECTION_WEIGHT, weight,
-                        "standard keeps its baseline weight");
-            } else if (blueprint.id().equals(RoomBlueprints.ID_STELLAR_OBSERVATORY)) {
-                assertEquals(LevelGenConstants.LEVEL_GEN_STELLAR_OBSERVATORY_SELECTION_WEIGHT, weight,
-                        "observatory carries its dedicated high weight");
-            } else if (setpieceIds.contains(blueprint.id())) {
-                assertEquals(setpiece, weight,
-                        blueprint.id() + " (set-piece) must carry the above-baseline set-piece weight");
-            } else {
-                assertEquals(baseline, weight,
-                        blueprint.id() + " (special) must carry the equal special-room baseline weight");
-            }
-        }
+        List<RoomBlueprint> pool = SpecialRoomPlanner.specialPool(registry);
+        assertEquals(13, pool.size());
+        assertFalse(containsId(pool, RoomBlueprints.ID_ENTRANCE));
+        assertFalse(containsId(pool, RoomBlueprints.ID_STANDARD));
+        Set<String> expected = new HashSet<>(Arrays.asList(RoomBlueprints.ID_SERVER_ROOM, RoomBlueprints.ID_MEDICAL_BAY,
+                RoomBlueprints.ID_ARMORY, RoomBlueprints.ID_CRYO_CHAMBER, RoomBlueprints.ID_POWER_PLANT,
+                RoomBlueprints.ID_COMMAND_CENTER, RoomBlueprints.ID_CONTAINMENT_BLOCK, RoomBlueprints.ID_RESEARCH_LAB,
+                RoomBlueprints.ID_STELLAR_OBSERVATORY, RoomBlueprints.ID_GORE_NEST, RoomBlueprints.ID_ATMOSPHERIC_PLANT,
+                RoomBlueprints.ID_SALVAGE_BAY, RoomBlueprints.ID_SUPPLY_CACHE));
+        for (RoomBlueprint blueprint : pool) assertTrue(expected.contains(blueprint.id()), blueprint.id());
     }
 
     private static boolean containsId(List<RoomBlueprint> blueprints, String id) {

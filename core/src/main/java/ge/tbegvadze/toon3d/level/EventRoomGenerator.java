@@ -22,10 +22,18 @@ import java.util.Random;
  * so {@code World} can open the choice overlay when the player steps adjacent (the 'W' tile is solid,
  * exactly like the MED-BAY auto-doc it mirrors).
  *
+ * <p>Since level-generation-overhaul G6 the chamber is a real room: the approach enters through a DOOR socket,
+ * the station is the room's claimed centre, and the fixed EVENT kit ({@link #eventKit}) is placed flush by the
+ * {@link RoomDresser}.
+ *
  * <p>Deterministic from the floor seed (only small decal placement varies). Every tile is from
  * {@code docs/tile-symbols.txt}. Grid convention: (0,0) = bottom-left tile, Y-up. No LibGDX imports.
  */
 public class EventRoomGenerator implements ILevelGenerator {
+
+    /** The kit id (the audit's terminal rooms include it) and the layout report's room id. */
+    static final String EVENT_KIT_ID  = "event";
+    private static final String EVENT_ROOM_ID = "event_room";
 
     private final Random random;
     // Raw floor seed: the LevelFinisher's own wall-dressing stream derives from it (independent of
@@ -74,16 +82,26 @@ public class EventRoomGenerator implements ILevelGenerator {
         int roomTop    = roomBottom + LevelGenConstants.EVENT_ROOM_HEIGHT - 1;
         carveFloor(grid, roomLeft, roomBottom, roomRight, roomTop);
 
-        // --- Approach corridor (3-tile-wide, running left into the room's mid row) ---
+        // --- Approach corridor (3 tiles wide), ending one tile short of the room: the room's left wall stays shell
+        //     and the corridor's mid row enters through a DOOR socket (G6, R14) ---
         int approachHalf  = LevelGenConstants.EVENT_ROOM_APPROACH_HALF_WIDTH;
-        int approachRight = roomLeft - 1;
+        int approachRight = roomLeft - 2;
         int approachLeft  = approachRight - LevelGenConstants.EVENT_ROOM_APPROACH_LENGTH + 1;
         carveFloor(grid, approachLeft, centerRow - approachHalf, approachRight, centerRow + approachHalf);
+        LayoutRoom room = new LayoutRoom(roomLeft - 1, roomBottom - 1, roomRight + 1, roomTop + 1,
+                LevelLayoutReport.Role.REGULAR, EVENT_ROOM_ID);
+        List<LayoutRoom> rooms = new ArrayList<>();
+        rooms.add(room);
+        DoorwayRules.hangDoor(grid, DoorwayRules.openSocket(grid, room, roomLeft - 1, centerRow));
 
-        // --- The central interactable ('W' holo-workstation) — the event station, solid ---
+        // --- The central interactable ('W' holo-workstation) — the event station, solid, the room's CENTRE
+        //     feature so the lanes end on the ring around it ---
         int stationColumn = centerColumn - 1;
         int stationRow    = centerRow;
         grid[stationRow][stationColumn] = RouteMapConstants.EVENT_STATION_SYMBOL; // 'W'
+        List<int[]> station = new ArrayList<>();
+        station.add(new int[]{ stationColumn, stationRow });
+        room.claimCentre(station);
 
         // --- Exit a couple of tiles PAST the interactable so the beat is on the path out ---
         int exitColumn = roomRight - 1;
@@ -93,17 +111,14 @@ public class EventRoomGenerator implements ILevelGenerator {
         int startColumn = approachLeft;
         grid[centerRow][startColumn] = 'p';
 
-        // --- Set dressing (solid props / decals, never over p / > / W) ---
-        placeProp(grid, roomLeft + 1, roomBottom + 1, 'T');      // a monitoring terminal
-        placeProp(grid, roomRight - 1, roomTop - 1, '%');        // a humming generator
+        // --- Set dressing: the fixed EVENT kit, flush (G6); one flickering light by the console; optional oil ---
+        new RoomDresser(grid, rooms, seed).dress(room, eventKit(), null);
         placeDecal(grid, stationColumn - 1, centerRow + 1, 'f'); // one flickering light by the console
         // A little deterministic-from-seed clutter so two event rooms are never quite identical.
         if (random.nextBoolean()) {
-            placeDecal(grid, roomLeft + 2, roomTop - 1, 'm');    // a lone corpse
-        }
-        if (random.nextBoolean()) {
             placeDecal(grid, approachLeft + 2, centerRow, 'O');  // oil at the entrance
         }
+        DoorwayRules.Validation validation = DoorwayRules.validate(grid, rooms);
 
         List<EnemySpawnPoint>  enemySpawnPoints  = new ArrayList<>(); // ZERO enemies — a story beat.
         List<WeaponSpawnPoint> weaponSpawnPoints = new ArrayList<>();
@@ -119,7 +134,17 @@ public class EventRoomGenerator implements ILevelGenerator {
                                         .floorGroup(ge.tbegvadze.toon3d.tileset.WallGroup.SIGNATURE)
                                         .basePalette(LevelPalettes.legacy()).finish()));
         level.markEventStation(stationColumn, stationRow);
+        level.attachLayoutReport(LayoutSupport.report(rooms, null, 0, validation));
         return level;
+    }
+
+    /** The room's fixed EVENT kit (G6): a 'T' terminal and a '%' generator flush to walls, an optional corpse. */
+    static PropKit eventKit() {
+        return PropKit.plain(EVENT_KIT_ID)
+                .row(PropKitRow.place('T').at(PropAnchor.SIDE_WALL).count(1))
+                .row(PropKitRow.place('%').at(PropAnchor.CORNER).count(1))
+                .row(PropKitRow.place('m').at(PropAnchor.ANY_WALL).count(1).chance(0.5f))
+                .build();
     }
 
     /** Carves an inclusive rectangle of lit floor 'l'. */
@@ -133,16 +158,11 @@ public class EventRoomGenerator implements ILevelGenerator {
         }
     }
 
-    /** Places a solid prop only on open lit floor, so it never overwrites the start/exit/station. */
-    private void placeProp(char[][] grid, int tileColumn, int tileRow, char prop) {
-        if (inBounds(grid, tileColumn, tileRow) && grid[tileRow][tileColumn] == 'l') {
-            grid[tileRow][tileColumn] = prop;
-        }
-    }
-
-    /** Places a walkable decal only on open lit floor (same guard as {@link #placeProp}). */
+    /** Places a walkable decal (or floor light) only on open lit floor, so it never overwrites p / > / W. */
     private void placeDecal(char[][] grid, int tileColumn, int tileRow, char decal) {
-        placeProp(grid, tileColumn, tileRow, decal);
+        if (inBounds(grid, tileColumn, tileRow) && grid[tileRow][tileColumn] == 'l') {
+            grid[tileRow][tileColumn] = decal;
+        }
     }
 
     private boolean inBounds(char[][] grid, int tileColumn, int tileRow) {

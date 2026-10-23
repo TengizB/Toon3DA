@@ -138,7 +138,7 @@ before any balance number, `docs/sound-system.txt` before audio. If a doc and th
 | `math-expert` | sonnet | any new `GameMath` formula, geometry, DDA, interpolation, synthesis math, balance-bearing formulas |
 | `weapon-creator` | opus | a weapon end-to-end, or a weapon's procedural sprite |
 | `weapon-creator-fable` | fable | **only** when the owner explicitly asks for Fable by name |
-| `game-level-designer` | opus | any hand-crafted level `.txt` file |
+| `level-generation-engineer` | opus | any level generator, room blueprint, size window or prop kit, doorway/corridor/prop rule, the LevelQualityAudit, or a hand-made level `.txt` file |
 | `code-reviewer` | haiku | runs automatically per `.java` edit (PostToolUse hook); a per-file lint, not the gate |
 | `reviewer` | opus | **always, last** — the full-lane acceptance gate |
 
@@ -167,7 +167,7 @@ others. Do not add a `tools:` line to this file.
 3.  DATA      java-architect   enums, registry rows, constants, persistence keys
 4.  LOGIC     java-architect / math-expert   simulation, tick subscribers, GameMath formulas
 5.  RENDER    libgdx-specialist   renderers, procedural sprites, HUD, touch buttons
-6.  CONTENT   weapon-creator / game-level-designer / java-architect   levels, story strings,
+6.  CONTENT   weapon-creator / level-generation-engineer / java-architect   levels, story strings,
               catalog rows, sounds
 7.  TESTS     only per the CLAUDE.md Testing Policy: balance-bearing → the owning spoke extends
               BalanceAuditTest / BalanceSimTest. Everything else → NO new tests; say so.

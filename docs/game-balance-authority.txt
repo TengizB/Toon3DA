@@ -1500,6 +1500,11 @@ THE CHECKLISTS (copy the block for each item an idea adds into its BALANCE ADMIS
                slots the planners may use).
       BAND     building it in isolation emits no pickup or enemy-spawn symbol.
       DONE     C-ROOM green. (A neutral blueprint may stay short-lane, G4.)
+      NOTE     (level-generation-overhaul) a blueprint is architecture + size window + PROP KIT; C-ROOM builds it
+               through the shared RoomDresser (RoomBlueprints.symbolsStampedInIsolation), so the kit is inside the
+               isolation check. A kit places furniture and walkable decals only — never supply — and no
+               blueprint carries an eligibility gate, weight, cap or depth input; the per-tile prop chance
+               (LEVEL_GEN_PROP_CHANCE) is gone (CHANGELOG).
   K13 LEVEL GENERATOR (GeneratorId)
       DECLARE  SupplySlotProvider implementation; footprint band per region;
                the node types it serves.
@@ -2544,6 +2549,16 @@ THE TUNING LOOP the whole series was built to enable:
   Numbers chase feel; the schema keeps them honest.
 
 CHANGELOG
+  level-generation-overhaul / CP14 — BalanceConfig.AFFIX_IRRADIATED_BARREL_WEIGHT_BONUS (0.12) DELETED with its
+    BalanceSchema GRANDFATHERED name. It raised LevelGenConfig.radioactiveBarrelWeight, which only the per-tile prop
+    scatter read; that scatter left at CP6, so the bonus has had no effect since then, and R31 deletes the weight.
+    IRRADIATED keeps its real effect (AFFIX_IRRADIATED_EXTRA_BARRELS 'g' hazard pools). NO other number, band or
+    waiver moved.
+  level-generation-overhaul / CP7 — BalanceConfig.LEVEL_GEN_PROP_CHANCE (0.13, SECTION 6) DELETED with its
+    BalanceSchema GRANDFATHERED name (the list shrinks by one, as C-CONSTANT allows). Its last reader, the per-tile
+    random prop scatter, is gone: rooms are furnished by prop kits under hard fill caps (level/RoomDresser,
+    LevelGenConstants.LEVEL_GEN_ROOM_FILL_CAP_*), which place no supply and no spawn. NO other number, band or waiver
+    moved.
   balance-overhaul order 8 — THE CONTENT BALANCE CONTRACT. New RuleKind.ADMISSION with eighteen C-rules (C-ENEMY ...
     C-CONSTANT, one per content kind K1-K18) and one BalanceAuditTest method each; RuleKind.COVERAGE RETIRED (folded
     into C-WEAPON / C-ITEM / C-AMMO / C-ENEMY / C-VERB; its relic line moved to R-RELIC-SOURCE). SECTION 5's

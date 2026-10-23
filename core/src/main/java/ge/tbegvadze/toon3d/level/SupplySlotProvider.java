@@ -20,4 +20,13 @@ public interface SupplySlotProvider {
 
     /** Whether that region is LARGE (it may host two encounter groups, E3). */
     boolean isLargeSupplyRegion(int regionId);
+
+    /**
+     * Whether a tile must stay free of solids for the layout's sake (level-generation-overhaul R26): a door
+     * clearance zone of one of the generator's sockets or a room's lane band. Generators without a lane model
+     * keep the default (nothing reserved beyond the grid's own door clearance).
+     */
+    default boolean isKeepClearTile(int tileColumn, int tileRow) {
+        return false;
+    }
 }

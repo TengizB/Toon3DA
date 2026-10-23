@@ -206,6 +206,6 @@ splash ~1 frame after it fires. For other state, add a step to `capture/CaptureL
 
 - **orchestrator / main thread**: every checkpoint whose DONE WHEN says "holds on run", and the screens the owner
   asks for. Record what was and was NOT seen on screen in the checkpoint handover.
-- **libgdx-specialist, weapon-creator, game-level-designer**: verify renders and levels on screen before
+- **libgdx-specialist, weapon-creator, level-generation-engineer**: verify renders and levels on screen before
   reporting done; say "not run" honestly if you did not.
 - **reviewer**: read the captured PNGs the hub hands over; ask for a specific capture when a criterion is visual.

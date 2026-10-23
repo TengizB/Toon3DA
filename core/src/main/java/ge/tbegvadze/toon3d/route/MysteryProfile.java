@@ -86,10 +86,6 @@ public final class MysteryProfile implements NodeLevelProfile {
         LevelGenConfig config = new LevelGenConfig();
         config.unlitFloors      = false;
         config.flickeringFloors = false;
-        config.radioactiveBarrels = false;
-        config.crates  = true;
-        config.lockers = true;
-        config.enableLargeRooms = true;
         List<GuaranteedContent> guarantees = new ArrayList<>();
         guarantees.add(Guarantees.brightenFloors());
         guarantees.add(Guarantees.pickup('A', RouteMapConstants.ELITE_ARMOUR, Placement.FARTHEST_ROOM, seed));
@@ -101,12 +97,10 @@ public final class MysteryProfile implements NodeLevelProfile {
                 EnemyBudgetOverride.light(), loot);
     }
 
-    /** SECRET WARREN: server rooms + lock-and-key — rewards those who search. */
+    /** SECRET WARREN: lock-and-key — rewards those who search. */
     private LevelPlan buildSecretWarren(long seed) {
         LevelGenConfig config = new LevelGenConfig();
-        config.enableServerRooms = true;
         config.enableLockAndKey  = true;
-        config.enableLargeRooms  = true;
         List<GuaranteedContent> guarantees = new ArrayList<>();
         guarantees.add(Guarantees.pickup('H', RouteMapConstants.MYSTERY_WARREN_MEDKITS, Placement.GATED_ROOM, seed));
         AmmoCacheRequest gatedLoot =
@@ -118,8 +112,6 @@ public final class MysteryProfile implements NodeLevelProfile {
     /** TRAP GAUNTLET: dense hazards (traps degrade to barrels), loot at the end — a patience test. */
     private LevelPlan buildTrapGauntlet(long seed) {
         LevelGenConfig config = new LevelGenConfig();
-        config.radioactiveBarrels      = true;
-        config.radioactiveBarrelWeight = RouteMapConstants.ELITE_RADIOACTIVE_BARREL_WEIGHT;
         config.unlitFloors = true;
         List<GuaranteedContent> guarantees = new ArrayList<>();
         // Traps are not implemented yet — degrade to a dense barrel field (explosive + radioactive).
@@ -137,7 +129,6 @@ public final class MysteryProfile implements NodeLevelProfile {
     /** MALFUNCTION / HAZARD: a failing sector — hazards, unlit, no reward. The bad-but-survivable pull. */
     private LevelPlan buildMalfunction(long seed) {
         LevelGenConfig config = new LevelGenConfig();
-        config.radioactiveBarrels = true;
         config.unlitFloors      = true;
         config.flickeringFloors = true;
         config.normalFloors     = false;

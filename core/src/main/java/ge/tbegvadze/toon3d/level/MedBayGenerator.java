@@ -23,13 +23,21 @@ import java.util.Random;
  * <p>The layout is fixed-ish and DETERMINISTIC from the floor seed: only the alcove side and whether a
  * second (bottom) alcove appears vary, so the clinic feels hand-made yet never identical. Every tile
  * is from {@code docs/tile-symbols.txt}. Its walls are plain 'x' mass; the LevelFinisher dresses the whole
- * floor in its region set's MEDICAL family (generated-wall-art order 2, rule P3);
- * '&amp;' bio-pods, 'I' specimen tanks, 'T' terminals and a '%' generator dress the ward; the auto-doc
- * reuses the holo-workstation 'W' (no new symbol — the heal interactivity is layered on by World).
+ * floor in its region set's MEDICAL family (generated-wall-art order 2, rule P3). Since
+ * level-generation-overhaul G5 the ward and its pod bays are real rooms: the approach ends at the clinic's
+ * entrance DOOR socket, each bay opens through one open socket, and the fixed CLINIC kits ({@link #clinicKit},
+ * {@link #clinicPodsKit}) are placed flush by the {@link RoomDresser}; the auto-doc reuses the holo-workstation
+ * 'W' as the ward's claimed centre (no new symbol — the heal interactivity is layered on by World).
  *
  * <p>Grid convention: (0,0) = bottom-left tile, Y-up. No LibGDX imports — pure Java.
  */
 public class MedBayGenerator implements ILevelGenerator {
+
+    /** The kit ids (the audit's terminal rooms include the clinic) and the layout report's room ids. */
+    static final String CLINIC_KIT_ID      = "clinic";
+    static final String CLINIC_PODS_KIT_ID = "clinic_pods";
+    private static final String WARD_ROOM_ID = "clinic_ward";
+    private static final String PODS_ROOM_ID = "clinic_pods";
 
     private final Random random;
     // Raw floor seed: the LevelFinisher's own wall-dressing stream derives from it (independent of
@@ -78,39 +86,47 @@ public class MedBayGenerator implements ILevelGenerator {
         int wardTop    = wardBottom + LevelGenConstants.MED_BAY_WARD_HEIGHT - 1;
         carveFloor(grid, wardLeft, wardBottom, wardRight, wardTop);
 
-        // --- Approach corridor (3-tile-wide, running left into the ward's mid row) ---
+        // --- Approach corridor (3 tiles wide), ending one tile short of the ward: its left wall stays shell and
+        //     the corridor's mid row meets the ward through the clinic's entrance DOOR socket (G5, R14). ---
         int approachHalf   = LevelGenConstants.MED_BAY_APPROACH_HALF_WIDTH;
-        int approachRight  = wardLeft - 1;
+        int approachRight  = wardLeft - 2;
         int approachLeft   = approachRight - LevelGenConstants.MED_BAY_APPROACH_LENGTH + 1;
         carveFloor(grid, approachLeft, centerRow - approachHalf, approachRight, centerRow + approachHalf);
+        LayoutRoom ward = new LayoutRoom(wardLeft - 1, wardBottom - 1, wardRight + 1, wardTop + 1,
+                LevelLayoutReport.Role.REGULAR, WARD_ROOM_ID);
+        List<LayoutRoom> rooms = new ArrayList<>();
+        rooms.add(ward);
+        DoorwayRules.hangDoor(grid, DoorwayRules.openSocket(grid, ward, wardLeft - 1, centerRow));
 
-        // --- Cryo-pod alcove(s) carved off the ward ---
+        // --- Cryo-pod alcove(s) off the ward, each opening through ONE open socket in the shared wall ---
         int alcoveSize = LevelGenConstants.MED_BAY_ALCOVE_SIZE;
         boolean alcoveOnLeft = random.nextBoolean();
         int alcoveLeft = alcoveOnLeft ? centerColumn - alcoveSize - 1 : centerColumn + 2;
-        // Clamp the alcove within the ward's column span so its doorway always lands on ward floor.
+        // Clamp the alcove within the ward's column span so its socket always lands on ward floor.
         alcoveLeft = Math.max(wardLeft + 1, Math.min(alcoveLeft, wardRight - alcoveSize));
         int alcoveRight = alcoveLeft + alcoveSize - 1;
 
         // Top alcove (always present).
         int topAlcoveBottom = wardTop + 2;
         int topAlcoveTop    = topAlcoveBottom + alcoveSize - 1;
-        carveAlcove(grid, alcoveLeft, topAlcoveBottom, alcoveRight, topAlcoveTop, wardTop + 1);
-        lineAlcovePods(grid, alcoveLeft, alcoveRight, topAlcoveTop);
+        rooms.add(carveAlcove(grid, ward, alcoveLeft, topAlcoveBottom, alcoveRight, topAlcoveTop, wardTop + 1));
 
         // Optional bottom alcove (a second pod bay) — the deterministic pod-count variation.
         boolean secondAlcove = random.nextBoolean();
         if (secondAlcove) {
             int bottomAlcoveTop    = wardBottom - 2;
             int bottomAlcoveBottom = bottomAlcoveTop - alcoveSize + 1;
-            carveAlcove(grid, alcoveLeft, bottomAlcoveBottom, alcoveRight, bottomAlcoveTop, wardBottom - 1);
-            lineAlcovePods(grid, alcoveLeft, alcoveRight, bottomAlcoveBottom);
+            rooms.add(carveAlcove(grid, ward, alcoveLeft, bottomAlcoveBottom, alcoveRight, bottomAlcoveTop, wardBottom - 1));
         }
 
-        // --- The auto-doc heal station at the ward centre (solid; player heals when adjacent) ---
+        // --- The auto-doc heal station at the ward centre (solid; player heals when adjacent): the ward's CENTRE
+        //     feature, so the dresser routes every lane to the ring around it ---
         int stationColumn = centerColumn;
         int stationRow    = centerRow;
         grid[stationRow][stationColumn] = RouteMapConstants.HEAL_STATION_SYMBOL; // 'W' holo-workstation
+        List<int[]> station = new ArrayList<>();
+        station.add(new int[]{ stationColumn, stationRow });
+        ward.claimCentre(station);
 
         // --- Exit a few tiles PAST the auto-doc so the heal is on the natural path out ---
         int exitColumn = wardRight - 1;
@@ -120,19 +136,15 @@ public class MedBayGenerator implements ILevelGenerator {
         int startColumn = approachLeft;
         grid[centerRow][startColumn] = 'p';
 
-        // --- Ward monitoring stations + bio ambience (solid props; never over p/>/W) ---
-        placeProp(grid, wardLeft + 1, wardBottom + 1, '%');      // humming generator in a corner
-        placeProp(grid, wardLeft + 1, wardTop - 1, 'T');         // monitoring terminal
-        placeProp(grid, wardRight - 1, wardBottom + 1, 'T');     // monitoring terminal
-        placeProp(grid, wardLeft + 3, wardBottom + 1, '&');      // bio-pod
-        placeProp(grid, wardRight - 3, wardBottom + 1, 'I');     // specimen tank
-        placeProp(grid, wardLeft + 3, wardTop - 1, 'I');         // specimen tank
-        placeProp(grid, wardRight - 3, wardTop - 1, '&');        // bio-pod
+        // --- The fixed CLINIC dressing, every prop flush (G5): the ward's kit and the pod bays' beds ---
+        RoomDresser dresser = new RoomDresser(grid, rooms, seed);
+        dresser.dress(ward, clinicKit(), null);
+        for (int roomIndex = 1; roomIndex < rooms.size(); roomIndex++) dresser.dress(rooms.get(roomIndex), clinicPodsKit(), null);
 
-        // --- Sparse decals: the staff didn't all make it (walkable, never on p/>/W) ---
-        placeDecal(grid, wardLeft + 4, centerRow - 2, 'm');      // a lone corpse
+        // --- The approach's one decal (walkable) and one flickering light at the mouth ---
         placeDecal(grid, approachLeft + 2, centerRow - approachHalf, 'O'); // oil at the entrance
-        placeDecal(grid, approachLeft + 1, centerRow, 'f');      // one flickering light at the mouth
+        placeDecal(grid, approachLeft + 1, centerRow, 'f');               // one flickering light at the mouth
+        DoorwayRules.Validation validation = DoorwayRules.validate(grid, rooms);
 
         List<EnemySpawnPoint>  enemySpawnPoints  = new ArrayList<>(); // ZERO enemies — the sanctuary.
         List<WeaponSpawnPoint> weaponSpawnPoints = new ArrayList<>();
@@ -148,7 +160,29 @@ public class MedBayGenerator implements ILevelGenerator {
                                         .floorGroup(ge.tbegvadze.toon3d.tileset.WallGroup.MEDICAL)
                                         .basePalette(LevelPalettes.legacy()).finish()));
         level.markHealStation(stationColumn, stationRow);
+        level.attachLayoutReport(LayoutSupport.report(rooms, null, 0, validation));
         return level;
+    }
+
+    /**
+     * The ward's fixed CLINIC kit (G5): two 'T' consoles flush on the side walls (the ward's top and bottom walls —
+     * its entry is the left wall), two 'I' tanks in ward corners, one '%' generator flush in another corner, and the
+     * one staff member who did not make it. The auto-doc is the room's claimed centre, not a kit row.
+     */
+    static PropKit clinicKit() {
+        return PropKit.plain(CLINIC_KIT_ID)
+                .row(PropKitRow.place('T').at(PropAnchor.SIDE_WALL).count(2))
+                .row(PropKitRow.place('I').at(PropAnchor.CORNER).count(2))
+                .row(PropKitRow.place('%').at(PropAnchor.CORNER).count(1))
+                .row(PropKitRow.place('m').at(PropAnchor.ANY_WALL).count(1))
+                .build();
+    }
+
+    /** A pod bay's beds (G5): '&' SPACED along the far wall, opposite its socket. */
+    static PropKit clinicPodsKit() {
+        return PropKit.plain(CLINIC_PODS_KIT_ID)
+                .row(PropKitRow.place('&').at(PropAnchor.BACK_WALL).count(2).as(PropKitRow.Mode.SPACED))
+                .build();
     }
 
     // -------------------------------------------------------------------------
@@ -167,34 +201,24 @@ public class MedBayGenerator implements ILevelGenerator {
     }
 
     /**
-     * Carves an alcove rectangle, then punches a 2-tile doorway through
-     * the {@code doorRow} wall that separates it from the ward so it stays connected.
+     * Carves a pod bay and returns it as a room whose ONE open socket sits in the wall row it shares with the ward
+     * ({@code socketRow}), centred on the bay; the ward holds the same socket. Both shells keep the flanks (R14).
      */
-    private void carveAlcove(char[][] grid, int left, int bottom, int right, int top, int doorRow) {
+    private LayoutRoom carveAlcove(char[][] grid, LayoutRoom ward, int left, int bottom, int right, int top, int socketRow) {
         carveFloor(grid, left, bottom, right, top);
-        // Doorway through the separating wall row (2 tiles wide, centred).
-        int doorColumn = left + 1;
-        carveFloor(grid, doorColumn, doorRow, doorColumn + 1, doorRow);
+        LayoutRoom alcove = new LayoutRoom(left - 1, bottom - 1, right + 1, top + 1,
+                LevelLayoutReport.Role.SPECIAL, PODS_ROOM_ID);
+        int socketColumn = left + LevelGenConstants.MED_BAY_ALCOVE_SIZE / 2;
+        DoorSocket socket = DoorwayRules.openSocket(grid, alcove, socketColumn, socketRow);
+        ward.addSocket(new DoorSocket(socket.tileColumn, socket.tileRow, ward.sideOf(socket.tileColumn, socket.tileRow)));
+        return alcove;
     }
 
-    /** Lines an alcove's far wall row with alternating bio-pods '&' and specimen tanks 'I'. */
-    private void lineAlcovePods(char[][] grid, int left, int right, int wallRow) {
-        for (int tileColumn = left; tileColumn <= right; tileColumn++) {
-            char prop = ((tileColumn - left) % 2 == 0) ? '&' : 'I';
-            placeProp(grid, tileColumn, wallRow, prop);
-        }
-    }
-
-    /** Places a solid prop only on open lit floor, so it never overwrites the start/exit/auto-doc. */
-    private void placeProp(char[][] grid, int tileColumn, int tileRow, char prop) {
-        if (inBounds(grid, tileColumn, tileRow) && grid[tileRow][tileColumn] == 'l') {
-            grid[tileRow][tileColumn] = prop;
-        }
-    }
-
-    /** Places a walkable decal only on open lit floor (same guard as {@link #placeProp}). */
+    /** Places a walkable decal only on open lit floor, so it never overwrites the start. */
     private void placeDecal(char[][] grid, int tileColumn, int tileRow, char decal) {
-        placeProp(grid, tileColumn, tileRow, decal);
+        if (inBounds(grid, tileColumn, tileRow) && grid[tileRow][tileColumn] == 'l') {
+            grid[tileRow][tileColumn] = decal;
+        }
     }
 
     private boolean inBounds(char[][] grid, int tileColumn, int tileRow) {

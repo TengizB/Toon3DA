@@ -4,8 +4,8 @@
 # (Specifically: fixed per-room wall symbols like 'v'/'c'/'t'/'w' below become per-level palette
 #  choices; the wall MEANING stays, its sprite is assigned per level.)
 
-# Moved from: .claude/agents/game-level-designer.md
-# Background context for game-level-designer agent — not needed at runtime.
+# Moved from the old level-file agent (deleted by level-generation-overhaul CP1).
+# Background context for the level-generation-engineer agent — not needed at runtime.
 
 === DOOM RPG DNA ===
 
@@ -50,9 +50,9 @@ Brogue — elegant, minimal. Rooms feel hand-sculpted. Pillars, alcoves, irregul
 
 Long straight corridors → dramatic vanishing-point perspective. Use for grand entrances or final approaches.
 90° corners → sudden reveals; player cannot see around. Gate information, create tension.
-Open rooms → walls feel distant, ceiling/floor dominate. Use 'v' tiles on room walls to break repetition.
-Narrow corridors with 'c' tiles → industrial, cramped, utilitarian. Perfect for maintenance passages.
-Terminal alcoves with 't' tiles → visual reward for exploration (terminal glows conceptually).
+LEGACY (walls are now chosen by the LevelFinisher by slot — see docs/wall-art-creation-guide.txt): Open rooms → walls feel distant, ceiling/floor dominate. Use 'v' tiles on room walls to break repetition.
+LEGACY: Narrow corridors with 'c' tiles → industrial, cramped, utilitarian. Perfect for maintenance passages.
+LEGACY: Terminal alcoves with 't' tiles → visual reward for exploration (terminal glows conceptually).
 Distance shading → walls >~5 tiles away fade toward black. Put important things in well-lit (close) spaces;
   put secrets and rewards in darker far corners.
 
@@ -66,6 +66,6 @@ Minimal test level structure:
   xxxxxxxx...
   (rooms connected by corridors, each room 4×6+ interior, dead ends with purpose)
 
-Accent tile usage:
+Accent tile usage (LEGACY — the LevelFinisher dresses walls; see docs/wall-art-creation-guide.txt):
   xvx  [room interior]  x   ← 'v' vent on room wall
   xwxxxxxxxxxxxxxxxxcccx    ← 'w' wires near equipment, 'c' conduit run in utility corridor
