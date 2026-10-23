@@ -1,0 +1,72 @@
+STATUS: IN PROGRESS
+CATEGORY: Visual
+TITLE: Generated props 4 - barrels, fire and toxic hazards
+CREATED: 2026-10-23
+IMPLEMENTED: -
+---
+
+Order 4 of the generated-prop-art series. Read generated-prop-art.txt (brief, PS1-PS8, D1-D4) and
+docs/sprite-art-creation-guide.txt section 14 first. Requested by the owner 2026-10-23: "Now do both barrels
+and fire and toxic effect."
+
+
+OVERVIEW
+--------
+Four objects that mean DANGER, rebuilt with the kit and animated: the explosive barrel ('E', sprite
+prop_explosive_barrel, pinned on every floor), the radioactive barrel ('g', prop_radioactive_barrel), and the two
+dynamic floor hazards - fire ('i') and the toxic pool ('q') - which HazardManager spawns, spreads and expires at
+runtime (and which the Plague Hulk / Sump Wretch leave behind). Their meaning and every rule are unchanged; only
+the picture is new.
+
+
+SCOPE
+-----
+IN   props.py: make_explosive_barrel, make_radioactive_barrel, make_fire, make_toxic + PROPS rows; one painted-
+     paint material appended to kit.MATERIALS if needed; four sheets. GeneratedPropRegistry rows: the two barrel
+     sprite ids and the FIXED chars 'i' and 'q'. PropRenderer: the DYNAMIC-prop pass (runtime fire/toxic tiles)
+     learns the sheet path too. Deleted: generateBarrelTexture, the hazard frame generators and arrays, their
+     generator rows, and the old image asset textures/lab/barrel_radioactive.png (PS6). Docs.
+OUT  Explosion, spread, damage, chain rules (HazardManager / ExplosiveBarrelManager) - untouched (V4).
+     Heights unchanged (barrels 0.65, fire 0.30, toxic 0.16). Hazards stay full-tile-wide and ungraded.
+
+
+VISUAL DESIGN
+-------------
+EXPLOSIVE BARREL ('E', 0.65, canvas 112 x 168, 16 frames @ 0.1 s)
+  A steel drum in a dull oxide-red hazard paint (no saturated red) with darkmetal rib bands and a lid. What makes
+  it read VOLATILE is HOT IRON (master D4): pressure-relief slots round its belly glowing hot iron and breathing,
+  a hot seam at the lid, a blinking hot-iron warning lamp, stencil VOLATILE.
+RADIOACTIVE BARREL ('g', 0.65, canvas 112 x 168, 16 frames @ 0.1 s)
+  A lab-grey steel drum with a RAD LIME band and a dark trefoil, glowing rad-lime cracks at a dented seam, a
+  glowing drip running down its flank once per loop into a small glowing puddle at its foot that pulses.
+FIRE ('i', 0.30, canvas 160 x 72, 16 frames @ 1/12 s)
+  A bed of charred debris with glowing cracks, and flames rising from it painted from a seamless looping noise
+  field in the hot-iron ramp (dark red at the tips, orange, a white-hot base), sparks lifting. Fully emissive.
+TOXIC POOL ('q', 0.16, canvas 160 x 48, 16 frames @ 0.1 s)
+  A low pool of glowing TOXIN green (the POISONED status green - V5's own semantic colour, the right one here)
+  with a dark crust at its rim, slow caustic ripples, bubbles that swell and pop, and a faint vapour lifting.
+
+
+ACCEPTANCE CRITERIA
+-------------------
+  A1 deterministic bake; the earlier sheets unchanged.  A2 in game all four are the new animated art,
+  including fire and toxic tiles spawned at runtime; no old picture left in code or assets.  A3 build green
+  (StoryBarkTest aside).  A4 docs.  A5 owner approval in DECISIONS.
+
+
+CHECKPOINTS
+-----------
+  CP0 idea + checkpoint.  CP1 bake + previews.  CP2 wiring (incl. the dynamic pass) + deletions + build.
+  CP3 screenshots + docs.  CP4 approval.
+
+
+DECISIONS
+---------
+  (default) Fire uses the hot-iron ramp (fire IS hot); toxic uses the existing toxin ink (the POISONED green).
+  (default) The explosive barrel is NOT saturated red - oxide paint + hot-iron glow - so it never collides
+    with the keycard red or the damage red.
+
+
+OPEN QUESTIONS
+--------------
+  (none)

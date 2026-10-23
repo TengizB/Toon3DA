@@ -55,6 +55,8 @@ DECISIONS
 ---------
   (owner, 2026-10-23) Generator only; hot-iron red accent (master D4).
   (default) Keep the cyan status lamps as a cold counterpoint, so the red reads as heat, not alarm.
+  (owner, 2026-10-23) Shown; the owner moved straight on to the barrels and hazards without changes - taken as
+    approval, and said so.
 
 
 OPEN QUESTIONS

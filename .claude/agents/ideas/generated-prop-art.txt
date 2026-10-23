@@ -86,3 +86,4 @@ ORDERS
   order 1  generated-prop-art-order-1.txt  the kit's prop bake + the runtime + terminal, bio-pod, portal
   order 2  generated-prop-art-order-2.txt  the AI core node ('J') as the floor-to-ceiling pattern archive
   order 3  generated-prop-art-order-3.txt  the generator ('%') with the HOT IRON red ink
+  order 4  generated-prop-art-order-4.txt  both barrels ('E', 'g') + the fire and toxic floor hazards ('i', 'q')
