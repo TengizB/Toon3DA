@@ -66,12 +66,29 @@ Invariant checklist (a generator change must keep every line true; the audit mea
 - [ ] `T` only in terminal-allowed kits and bespoke dressings, flush to a wall (except server racks), never in a hall,
       cave body, entrance or clearance zone; every combat floor has >= 1 usable `T` (R20, story LOG_FOUND).
 - [ ] The entrance room is bare: no solid, no decal (R22).
+- [ ] Regular rooms draw one kit uniformly from OFFICE / STOREROOM / MAINTENANCE / AFTERMATH / BARE;
+      `LevelGenConfig.preferredRegularKit` (CACHE storeroom, ELITE aftermath) counts double (R23/R31).
+- [ ] Every planned special is placed (never swapped or dropped); an attempt that cannot seat one returns null and the
+      last resort builds at scale 1.0 with window minimums (R5/R8).
 - [ ] Halls carry no solid except the spaced 3-wide-hall columns; hall decals only at `LEVEL_GEN_HALL_DECAL_CHANCE`
       (R28).
 - [ ] Every placed kit's symbol -> sprite demand is pinned in the palette request, plus `T`->prop_terminal and
       `E`->prop_explosive_barrel (R29).
 - [ ] Connectivity repairs open a socket, never a raw gap, and should never fire (R30).
 - [ ] No switch or if-chain over room types: behaviour comes from the blueprint row (R32).
+- [ ] CAVERN (G3): chambers are walled rooms (shell forced to wall) inside the footprint window; each has 1..3 sockets
+      whose straight tunnels reach cave floor in <= 6 carved tiles; cave a shell cut off is erased (tiny) or rejoined
+      by a router bypass that never touches a shell; one regular chamber is always kept (R20). The cave body's only
+      solids are FORMATIONS ('P' 1-3, 5x5 window >= 20 open, > 3 from any socket, <= 3 per biome, x2 grotto) and
+      wall-anchored DEBRIS (biome props flush against CAVE wall) - outside clearance zones and tunnels, never where
+      the open width across the tile is < 3 on either axis, never plugging or stranding. No `T` in the cave body.
+- [ ] Bespoke floors (G4-G8): every entrance is a socket in a shell wall (the arena door, the clinic / event door,
+      the airlock's `B`); their dressings are fixed kits through the `RoomDresser` (or, for the arena's STAGING and
+      the start room's STAGING_ARMORY, fixed flush tiles outside the reported lanes).
+- [ ] EVERY generator attaches a `LevelLayoutReport` (rooms with shell bounds, role, ids, sockets, lane band; planned
+      specials; repair carves; validation counts) - it is the audit's only view of the rooms.
+- [ ] `GroupBarrelPlacer` (balance-owned) never puts a barrel in a door clearance zone or a lane band, prefers a flush
+      tile, and never takes a terminal's last open side (R26).
 - [ ] Same seed + config -> byte-identical grid, spawns, palette (R33). Every draw from a seeded stream; dressing uses
       its own salted stream.
 
@@ -81,6 +98,7 @@ Invariant checklist (a generator change must keep every line true; the audit mea
   automatically; adding one dilutes every type's share. Keep it SUPPLY_NEUTRAL (C-ROOM). Full lane (new content).
 - **ADD / TUNE A KIT ROW:** one `PropKitRow` in the kit (symbol, anchor, count range, chance, mode). Non-balance;
   short lane when it touches no balance file. Run the audit before and after.
+- The copy-pasteable versions: `docs/environment-tileset-system.txt` RECIPE B and ADD A PROP KIT.
 
 ## 6. THE AUDIT - `level/LevelQualityAudit`
 A dev-only measuring instrument (no assertion, no Gradle task, never run by a gate - like `sim/LadderReport`).
@@ -88,10 +106,13 @@ Command (from the run-game mirror; confirmed at level-generation-overhaul CP2 â€
 ```
 cd /tmp/toon3d-runtime/mirror && ./gradlew -q :core:compileJava && java -cp \
   "core/build/classes/java/main:core/build/resources/main:$(find ~/.gradle -name 'gdx-1.*.jar' ! -name '*sources*' | head -1)" \
-  ge.tbegvadze.toon3d.level.LevelQualityAudit [--seeds N] [--depths 1,5,10] [--generators ROOMS_MST,CAVERN,START_ROOM] [--dump K]
+  ge.tbegvadze.toon3d.level.LevelQualityAudit [--seeds N] [--depths 1,5,10] [--generators ROOMS_MST,CAVERN,START_ROOM] [--dump K] [--explain K]
 ```
+`--explain K` prints the first K violation locations per generator (I9 lists the floor's rooms) and dumps those
+floors to `dumps/explain/`.
 It writes `core/build/reports/level-audit/summary.txt` (+ `dumps/`) and echoes the summary. Read I1-I16: every
 "violation" counter must be 0, I10/I11 show the special plan and spread, I12 fill, I14 repair carves (target 0).
+Baseline (level-generation-overhaul CP14, 200 seeds x 6 depths): I1-I9, I13, I14, I16 = 0 on every generator.
 Run it before and after any generator change and quote the before/after lines in your report.
 
 ## 7. HAND-MADE LEVELS (`assets/levels/*.txt`)
@@ -114,7 +135,8 @@ purpose. Report the layout in 3-5 sentences.
 ## 8. THE BALANCE CONTRACT (K12 / K13)
 Generated content never hand-places supply or spawns: blueprints and kits place props and decals only, and leave
 pickups and enemies to the SupplyPlanner / encounter planner (C-ROOM / C-GENERATOR fail the build otherwise). Hazard
-`g` is owned by `level.RoomBlueprints`; `E` by `GroupBarrelPlacer` + the atmospheric plant's three cylinders. The
+`g` comes from kits (`level.RoomBlueprints`), the cave's REACTOR_SUMP debris and the IRRADIATED affix's guarantee;
+`E` from `GroupBarrelPlacer`, the atmospheric plant's cylinders, the boss arena and the cave's REACTOR / GORE debris. The
 footprint target, R-SUPPLY, R-DENSITY, R-HAZARD and S-NAVIGATION are the gates a generator change must keep green:
 run `./gradlew test` AND `./gradlew balanceSim` (from the mirror) on any combat-generator change. Never move a band
 to make a layout pass - fix the generator. See `docs/game-balance-authority.txt` SECTION 5 ADD CONTENT.

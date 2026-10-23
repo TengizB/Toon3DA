@@ -112,7 +112,13 @@ THE OTHER BALANCE-BEARING CONSTANT FILES (all re-export from BalanceConfig):
                               health-bar geometry (cosmetic).
   util/WeaponConstants.java   Per-weapon stats (re-exported), HUD/timing/cosmetic.
   util/ItemConstants.java     Heal/armour values (re-exported), stack caps, ammo.
-  util/LevelGenConstants.java Loot/enemy density + per-room budgets (re-exported).
+  util/LevelGenConstants.java Loot/enemy density + per-room budgets (re-exported). The room / prop
+                              numbers here (size windows, kits' fill caps, sockets, router costs)
+                              are NOT balance-bearing: since level-generation-overhaul rooms are
+                              furnished by prop kits that place no supply and no spawn, and the old
+                              per-tile prop chance (BalanceConfig.LEVEL_GEN_PROP_CHANCE) is deleted.
+                              Layouts still MOVE the sim (who reaches which depth), so a generator
+                              change runs both gates (see game-balance-authority K12 / K13).
   util/EffectConstants.java   Now COSMETIC ONLY plus re-export shims: the shared
                               status magnitudes (BURN/POISON, EMPOWERED/VULNERABLE/
                               WEAK/EXPOSED/BACKSTAB, SLOW/BLIND/STUN, poison-apply
@@ -969,6 +975,8 @@ SECTION 13 — TERRAIN HAZARDS (two-sided danger folded into the TP contract)
 ================================================================================
 File: BalanceConfig SECTION 12 + SECTION 23 (HAZARD_*); hazard/HazardManager.java, hazard/ExplosiveBarrelManager.java,
       level/GroupBarrelPlacer.java; GameMath.hazardTileThreatPoints / barrelBlastDamage / groupBarrelRoomCount.
+      (level-generation-overhaul R26: a group barrel never stands in a door clearance zone or a room lane band,
+      prefers a flush tile, and never takes a terminal's last open side — placement only, its counts unchanged.)
 (balance-overhaul order 4 CP6: hazards are FRACTIONS now — see "ORDER 4 HAZARDS" below; the flat numbers in this
 section's older text are superseded.)
 

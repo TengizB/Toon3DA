@@ -1500,6 +1500,11 @@ THE CHECKLISTS (copy the block for each item an idea adds into its BALANCE ADMIS
                slots the planners may use).
       BAND     building it in isolation emits no pickup or enemy-spawn symbol.
       DONE     C-ROOM green. (A neutral blueprint may stay short-lane, G4.)
+      NOTE     (level-generation-overhaul) a blueprint is architecture + size window + PROP KIT; C-ROOM builds it
+               through the shared RoomDresser (RoomBlueprints.symbolsStampedInIsolation), so the kit is inside the
+               isolation check. A kit places furniture and walkable decals only — never supply — and no
+               blueprint carries an eligibility gate, weight, cap or depth input; the per-tile prop chance
+               (LEVEL_GEN_PROP_CHANCE) is gone (CHANGELOG).
   K13 LEVEL GENERATOR (GeneratorId)
       DECLARE  SupplySlotProvider implementation; footprint band per region;
                the node types it serves.

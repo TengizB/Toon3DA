@@ -78,7 +78,7 @@ into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
       enableLargeRooms / enableServerRooms deleted, preferredRegularKit set by Cache/Elite profiles (R31); dead
       constants gone (A9); full audit A3-A8 across ALL generators, AFTER figures recorded beside BEFORE; both gates
       green; A14 captures taken.
-- [ ] **CP15** — DONE WHEN: docs listed in the idea's CP15 match the code; agent invariant list matches final rules.
+- [x] **CP15** — DONE WHEN: docs listed in the idea's CP15 match the code; agent invariant list matches final rules.
 - [ ] **CP16** — DONE WHEN: reviewer PASS (or PASS WITH FIXES applied); STATUS: IMPLEMENTED + date.
 
 ## NOTES CARRIED FORWARD
@@ -304,3 +304,18 @@ into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
   NEXT (CP15): docs — procedural-level-generation.txt rewrite (HISTORICAL removed), environment-tileset-system.txt
   RECIPE B + ADD A PROP KIT, tile-symbols.txt, route-map-system.txt (IRRADIATED line 430, R31 profiles),
   game-balance-knowledge.txt / -authority.txt K12, CLAUDE.md, the agent's invariant list.
+- CP15 (docs): procedural-level-generation.txt REWRITTEN (generators table, pipeline A, special rooms R1-R8,
+  doorways + router R9-R14, the prop engine R15-R29, G1-G8 in detail, the layout report + audit command and
+  counters, the shared floor pipeline incl. R26 barrels, passages R30, lock-and-key, the finisher without the R1
+  ledger, constants) — every HISTORICAL section removed. environment-tileset-system.txt: a current-state banner
+  (selection / dressing rebuilt; the order-5/8/10 sections are history), the RoomBlueprint class entry, RECIPE B
+  rewritten (architecture + size window + kit, the equal-chance pool, audit check), a new ADD A PROP KIT recipe,
+  the RetiredWallDressing note. tile-symbols.txt: generated placement notes for P, T, # and the solid-props header.
+  route-map-system.txt: CACHE / ELITE configs (R31), MED_BAY / EVENT / GATE layouts (G5-G7), IRRADIATED's deleted
+  weight, SECRET_WARREN. game-balance-authority.txt K12 note; game-balance-knowledge.txt (level numbers not
+  balance-bearing, the prop chance gone, R26 barrels). wall-art-creation-guide.txt lesson 15.20 note. CLAUDE.md:
+  the level/ tree, the generators key-class entry, the recipe lines, the RoomBlueprintRegistry line, the tileset
+  row, the docs table (counts + descriptions). The agent's invariant list gained R23/R31, R5/R8, CAVERN G3,
+  bespoke G4-G8, the layout report, R26 barrels, `--explain`, the CP14 audit baseline and the g/E ownership.
+  `grep -rn game-level-designer` over .claude/ (minus ideas) and docs/ is empty.
+  NEXT (CP16): reviewer gate.

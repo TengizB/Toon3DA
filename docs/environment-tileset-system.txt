@@ -8,6 +8,14 @@ STATUS: LIVE (migration complete — orders 0-9 shipped)
 >>> base-wall alternates or "wall_*" / "column_*" sprites is SUPERSEDED (kept as history); the prop and decal
 >>> half of those sections is still live.
 
+>>> ROOM SELECTION AND ROOM DRESSING WERE REBUILT (level-generation-overhaul, 2026-10-23). There is no RoomContext,
+>>> no eligible() / selectionWeight(), no RoomType tag, no per-tile prop roll and no RetiredWallDressing: specials
+>>> are drawn from an equal-chance pool by level/SpecialRoomPlanner, every room is furnished from a PROP KIT by
+>>> level/RoomDresser, and a blueprint row is architecture + size window + kit. What the order-5 / order-8 /
+>>> order-10 / weight-tier sections below say about selection, weights, caps, depth gates, *ForRoom prop helpers
+>>> or categoryCounts is HISTORY. The live recipes are RECIPE B and ADD A PROP KIT (section 9); the generator
+>>> pipeline is docs/procedural-level-generation.txt.
+
 Single source of truth for the symbol/sprite decoupling subsystem. The migration that built it is
 COMPLETE: every order (0-9) has shipped, and this doc now describes SHIPPED behaviour, not a target.
 It was created in order-0 (before any code changed) and filled section-by-section, in-commit, by each
@@ -423,13 +431,11 @@ SECTION PLACEHOLDERS (each filled by its order, in the same commit that ships th
 
    CLASSES (all in …toon3d.level, headless — no LibGDX):
      * RoomKind — SIGNATURE | GENERIC.
-     * RoomContext — the immutable query struct eligible()/selectionWeight() read: candidate interior
-       width/height, the floor's dungeonDepth, and alreadyPlacedOfThisKind (for per-level hard caps). It
-       mirrors exactly the facts LevelGenerator.assignRoomTypes()'s gates read today.
-     * RoomBlueprint (interface) — id() (stable registry key, never renamed), kind(), eligible(RoomContext)
-       (the LevelGenConstants min-size / depth-window / hard-cap gates), selectionWeight(RoomContext) (the
-       *_CHANCE roll weight; consumed by order-8, declared here), symbolDemand() (RoomSymbolDemand — the
-       sprite ids reserved when placed), and build(RoomBuildContext) (stamps the room's architecture).
+     * RoomBlueprint (interface) — id() (stable registry key, never renamed), kind(), supplyStance(),
+       wallGroup(), symbolDemand() (RoomSymbolDemand — the sprite ids reserved when placed: architecture +
+       kit, R29), build(RoomBuildContext) (the room's ARCHITECTURE only), and sizeWindow() / kit() /
+       relaxedKit() / regularKits() / signatureSymbol() (level-generation-overhaul). RoomContext,
+       eligible() and selectionWeight() were deleted by level-generation-overhaul CP7.
      * RoomBuildContext — the build facade: wraps a LevelGenerator + the target grid + the one Room, and
        exposes that room type's architecture steps as thin package-private delegators to the generator's
        EXISTING per-room helpers (a per-type pass scoped to a single-room list, or a `*ForRoom` helper for
@@ -463,10 +469,8 @@ SECTION PLACEHOLDERS (each filled by its order, in the same commit that ships th
      * Pickups, weapon spawns, and enemy placement are NOT owned by build() in order-5: they place FIXED
        symbols (not part of any symbolDemand) and remain generator passes until order-8 rewires generate().
 
-   THE RECIPE (add a room, once order-8 lands the selection wiring): write one RoomBlueprint (id, kind,
-   eligible, selectionWeight, symbolDemand, build) + one register() line in RoomBlueprints.registerAll().
-   No LevelGenerator switch edits. order-5 makes rooms REGISTERED; order-8 makes the generator SELECT from
-   the registry; order-9 documents the full end-to-end RECIPE B.
+   THE RECIPE (order-5's; SUPERSEDED): eligible / selectionWeight / RoomType are gone since
+   level-generation-overhaul — the current recipe is RECIPE B below (one row: architecture + size window + kit).
 
    V1 BLUEPRINT CATALOG (id — kind — claimed sprites; GENERIC rooms claim nothing). Snapshot as of
    order-5; order-8/order-9 added salvage_bay/supply_cache (see their sections) and order-10 REMOVED
@@ -792,36 +796,52 @@ SECTION PLACEHOLDERS (each filled by its order, in the same commit that ships th
       loops, or Level. No new level-file symbol is consumed.
 
    ---------------------------------------------------------------------------------------------------
-   RECIPE B — ADD A NEW ROOM
+   RECIPE B — ADD A NEW ROOM   (level-generation-overhaul: size window + kit; no eligibility, no weight)
    ---------------------------------------------------------------------------------------------------
-   1. Write a RoomBlueprint — id (stable), RoomKind (GENERIC or SIGNATURE), eligible(RoomContext),
-      selectionWeight(RoomContext), symbolDemand(), build(RoomBuildContext) — and register() it in
-      level/RoomBlueprints.registerAll(). New constants (min size, per-level cap, selection weight) go in
-      LevelGenConstants.
-        - GENERIC room: empty requiredSprites; its look is allocator-driven (optionally declare
-          categoryCounts as intent). A GENERIC room whose build() COMPOSES the existing RoomBuildContext
-          steps (assignFloorLighting / placeStandardColumns / placeStandardProps / …) needs NO new
-          generator code AND NO RoomType enum constant — roomTypeForBlueprint() tags an id
-          with no matching enum as the generic STANDARD tag (the order-9 seam fix). THIS is the pure
-          "one blueprint + one register() line" case.
-        - SIGNATURE room: requiredSprites pins each flexible symbol its build() stamps to that symbol's
-          sprite (so the allocator reserves its exact look, order-4 Step 2).
-        - A room that needs a BESPOKE architecture (its own rows/rings/heap, not a composition of existing
-          steps) also adds a *ForRoom helper in LevelGenerator + a delegator in RoomBuildContext, and — if
-          it wants its own type tag — a RoomType constant. salvage_bay (order-8) is the worked example.
-          That is a bigger change than pure registration, but it is still driven entirely by the blueprint
-          seam: the generator's SELECTION code is never edited.
-        - BALANCE (balance-overhaul order 8, K12): every blueprint declares supplyStance() (no default —
-          forgetting it does not compile). SUPPLY_NEUTRAL = build() stamps NO pickup and NO enemy-spawn
-          symbol (every room shipped today); SLOT_PROVIDER = it offers tagged supply/group slots to the
-          planners. C-ROOM stamps each neutral room in isolation over a seed sweep and fails the build if it
-          places supply itself. A neutral room may stay short-lane; anything else is full lane and follows
-          docs/game-balance-authority.txt → ADD CONTENT (K12).
-   2. That's it. selectBlueprint() already iterates the registry with a seeded weighted roll, so the new
-      room competes in generation automatically. ZERO edits to the generator's room-SELECTION code.
-   => Registering a room changes the generated-level RNG sequence (one more roulette candidate), so
-      LevelGeneratorSnapshotTest is a DELIBERATE, reviewed re-baseline (as in order-8 and order-9) — not a
-      determinism break: same seed still ⇒ same level.
+   A room is ONE row in level/RoomBlueprints.registerAll(). A special room's row is
+        registry.register(special(ID_X, RoomKind.SIGNATURE, WallGroup.Y, xKit(), architecture)
+                .layout(xWindow(), xKit(), xRelaxedKit()));
+   1. Its ARCHITECTURE (build): compose RoomBuildContext steps (standardFloor, serverRoomFloor, ...,
+      exportPillarSlots, researchLabAlcove, stellarObservatoryRotunda). build() lays FLOOR and STRUCTURE only —
+      never a prop. A room needing new architecture adds ONE RoomBuildContext method (and exports any FEATURE
+      tiles its kit anchors on via room.exportFeature / claimCentre).
+   2. Its SIZE WINDOW: RoomSizeWindow.of(minW, minH, maxW, maxH) (or .square(...)) from LEVEL_GEN_SIZE_X_*
+      constants in LevelGenConstants. The MINIMUM must fit the signature row with 3 sockets present.
+   3. Its KIT (see ADD A PROP KIT): row 1 is the SIGNATURE. A DENSE kit also gets a RELAXED variant (the floor's
+      second tight room uses it).
+   4. Its DEMAND is computed: union(architecture symbols, kit.spriteDemand()) — every flexible symbol either can
+      stamp, bound to its legacy sprite (R29). Nothing to declare by hand.
+   5. supplyStance(): SUPPLY_NEUTRAL unless it offers tagged supply / group slots (K12, below).
+   That is all. The room joins the equal-chance SPECIAL POOL (SpecialRoomPlanner.specialPool — every blueprint but
+   entrance / standard): no depth gate, no weight, no cap, and ZERO edits to any generator. Registering a room
+   changes which specials floors draw, so LevelGeneratorSnapshotTest is a deliberate, dated re-baseline (same seed
+   still => same level). Verify with the LevelQualityAudit (docs/procedural-level-generation.txt): I11 shows the
+   new room in the per-type spread; I12 / I13 / I16 must stay 0.
+        - BALANCE (balance-overhaul order 8, K12): every blueprint declares supplyStance() (no default). SUPPLY_
+          NEUTRAL = build() stamps NO pickup and NO enemy-spawn symbol (every room shipped today); SLOT_PROVIDER =
+          it offers tagged supply/group slots to the planners. C-ROOM stamps each room in isolation over a seed
+          sweep and fails the build if a neutral room places supply. A neutral room may stay short-lane;
+          anything else is full lane and follows docs/game-balance-authority.txt -> ADD CONTENT (K12). A kit
+          places only furniture and decals, never supply, so a kit does not change a room's stance.
+
+   ---------------------------------------------------------------------------------------------------
+   ADD A PROP KIT   (level-generation-overhaul R16-R23)
+   ---------------------------------------------------------------------------------------------------
+   A kit is a static factory returning PropKit.signature(id) (a special's) or PropKit.plain(id) (a regular /
+   bespoke one), built from PropKitRow rows:
+        PropKitRow.place('&').at(PropAnchor.BACK_WALL).count(2, 4).as(PropKitRow.Mode.SPACED)
+   Row options: orAt(anchor) fallback, chance(p), as(SINGLE | RUN | SPACED | CLUSTER), feature("name") for the
+   FEATURE anchor, near("sym") for NEAR, density(p) for FIELD decals, whenShortSideAtLeast(n), footprints(...) for
+   a CENTRE block. .dense() marks a DENSE kit (lane half-width 0, fill cap 0.40, counts as the floor's one tight
+   room). The RoomDresser enforces every rule — clearance, lanes, plugs, one open region, the fill cap — so a row
+   that cannot fit places fewer; nothing in the kit has to re-check them.
+     - a NEW REGULAR kit: add it to RoomBlueprints.regularKits() (uniform draw; LevelGenConfig.preferredRegularKit
+       may name it to count double), with a PropKit.ID_* constant;
+     - a SPECIAL's kit: the row in RECIPE B; row 1 is its signature (the audit's I13 checks it is present);
+     - a BESPOKE floor's kit (clinic / event / airlock): a static method on that generator, dressed through
+       new RoomDresser(grid, rooms, seed).dress(room, kit, null).
+   'T' goes only in terminal kits (R20; add the kit id to LevelQualityAudit.TERMINAL_ROOMS if it is new). Use
+   only existing symbols; a kit symbol renders its legacy sprite (R29). A kit never needs a test (Testing Policy).
 
    ---------------------------------------------------------------------------------------------------
    ACCEPTANCE ADDITIONS (order-9 — the recipes proven with real, minimal additions)
@@ -1271,9 +1291,9 @@ CLASSES (headless, tileset):
                             set's first column, LevelPalette.wallSetId() = the REAL set
 CHOOSING (level): level/LevelFinisher - every generator's final grid (rooms, corridor, cavern, boss arena, med bay,
 event, gate, start room, fallbacks) goes through it: family stamping from RoomBlueprint.wallGroup() (P2/P3), the
-hall placement P4-P9, then RegionPaletteBuilder. Own seeded stream (GameMath.wallSetSeed); the generators keep
-every random draw of their retired wall passes (level/RetiredWallDressing) so layout, spawns and supply are
-byte-identical (R1). LevelPalettes.legacy() = props/decals + set A, so hand levels read their walls through the
+hall placement P4-P9, then RegionPaletteBuilder. Own seeded stream (GameMath.wallSetSeed). (Order 2 kept every
+random draw of the retired wall passes via level/RetiredWallDressing so layout stayed byte-identical; the
+level-generation-overhaul rebuild deleted both the passes and the ledger.) LevelPalettes.legacy() = props/decals + set A, so hand levels read their walls through the
 slot table as written.
 REGION: RegionAmbience.wallSetId (route) names each region's set; RouteRegistries fails startup on an unknown id;
 World.applyFloorWallSet sets LevelGenConfig.wallSetId + floorIndexInRegion per floor (like the lighting mood).

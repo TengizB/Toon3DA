@@ -514,6 +514,8 @@ brightest moods (sprite guide 4.5).
        prop, spawn and pickup, and a few later passes drew only when a wall was still plain 'x'. The passes keep
        every draw and write nothing; level/RetiredWallDressing remembers which walls they WOULD have repainted
        so the 'x'-conditioned draws see what they saw. Prove R1 with a full sweep, never a spot check.
+       (level-generation-overhaul rebuilt every layout, so the retired passes and RetiredWallDressing are
+       deleted; the lesson stands for any future pass removed WITHOUT a rebuild.)
   15.21 A LIGHT placed on "the latest tile before the 7-stretch closes" kept landing beside a STRUCTURE rib
        (k S pairs along every hall). Preferring a tile flanked by base on both sides centres the lamp between
        ribs (k x S x k) and reads as architecture.
