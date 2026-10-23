@@ -1,0 +1,1042 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Level Design
+TITLE: Level gen overhaul - designed props, real doors, specials
+CREATED: 2026-10-23
+IMPLEMENTED: -
+---
+
+
+OVERVIEW
+--------
+Every level generator is rebuilt around three guarantees. Each floor is laid out SPECIAL ROOMS FIRST, drawn
+with equal chance from the whole catalog from floor 1. Every room opening is a one-tile doorway with a wall
+on each side. Every object in a room is placed by that room's PURPOSE (a kit of designed placements, with a
+little randomness) and never by a per-tile dice roll. A new dedicated agent, `level-generation-engineer`,
+is created first and owns this work and all level work after it.
+
+WHAT THE OWNER SAID (2026-10-23): level quality dropped sharply after the balance-overhaul ideas changed
+generation. (1) Props must follow designer logic plus a bit of randomness, never pure chance: terminals
+belong in labs and server rooms, never in front of a door. Drop the current random prop selection and
+placement completely. (2) Props never block a door or any passage, and a non-walkable object is never
+spawned right next to a door. (3) Doors always have walls on both sides; today you can walk past a door
+into its room. (4) Special rooms seem never to spawn. Place them FIRST and build regular rooms and halls
+around them. Every type gets an equal chance from level 1, with no depth gating and no unequal weights.
+Every level has special rooms except boss areas. (5) Random props make rooms hard to move through. An
+occasional tight room is fine, most rooms are not. Refine every generator, one at a time, with one
+checkpoint each. No confirmations needed.
+
+WHAT THE OWNER NEEDS: floors that read as a real, inhabited facility at a glance. You can tell which room
+is the server room. A door means "a room starts here". You never have to fight the furniture to cross a
+room. And the memorable rooms actually turn up, on the floors people play most (1-5).
+
+WHY QUALITY FELL - the concrete causes, found in the code on 2026-10-23
+  C1 PROPS ARE A PER-TILE DICE ROLL. LevelGenerator.placeStandardPropsForRoom rolls every floor tile of
+     every STANDARD room at BalanceConfig.LEVEL_GEN_PROP_CHANCE (0.13). randomPropChar() then picks g/C/T/L
+     (solid) or ./m/O (decal) by LevelGenConfig weights. LinearCorridorGenerator.placeStandardRoomProps does
+     the same with {g, E, C, #}. SUPPLY_CACHE runs the scatter TWICE. MEDICAL_BAY and CONTAINMENT_BLOCK roll
+     per tile too (randomMedicalPropChar / randomContainmentPropChar), so a medical bay holds random crates,
+     terminals and oil, nothing medical. tryPlaceAtmosphericProp* drops props on a random interior tile.
+     CavernGenerator.placeBiomeProps rolls 3.5% per cave tile, placeStalagmites 3%. The only guards are
+     "not orthogonally next to a door" and "not on the door's axis" (isAdjacentToDoor /
+     isAdjacentToDoorAxis). Nothing keeps a walking lane through a room, nothing stops props splitting a
+     room into pockets, and diagonal tiles next to a door are allowed.
+  C2 THE REPAIRS MAKE IT WORSE. Pocketed rooms are reopened by verifyAndRepairConnectivity /
+     carveEmergencyCorridor and repairUnreachableFloorRegions. Both run AFTER placeDoors and carve straight
+     through room walls, often right beside a door. Then FloorPopulator.clearPluggedPassages deletes props
+     that plug a passage. The result: random holes in walls, beside doors, and props that vanish where the
+     dice landed worst.
+  C3 DOORS ARE DECIDED PER TILE, NOT PER ROOM. placeDoors (in both LevelGenerator and
+     LinearCorridorGenerator) turns any 'l' corridor tile next to a ' '/'u'/'f' tile into a door, 75% of
+     the time (LEVEL_GEN_DOOR_CHANCE). Corridors are L-shapes from room CENTRE to room CENTRE, and
+     carveHorizontal/VerticalSegment turns every 'x' on the line into floor. So:
+       - a corridor that runs along a third room's wall row opens that whole wall;
+       - corridors cut straight through other rooms;
+       - a quarter of room entrances are bare gaps with no door;
+       - the 3-wide hall spine is carved as ' ', the room-floor character, so the door pass cannot tell a
+         hall from a room;
+       - the emergency carves (C2) punch new gaps next to existing doors;
+       - LinearCorridorGenerator.carveSpinePlaza turns every wall within its radius to floor, eating the
+         walls of side rooms that sit against the spine.
+     Any one of these leaves a door that "blocks nothing".
+  C4 SPECIAL ROOMS ARE A LOTTERY AFTER THE FACT. Rooms are placed at random sizes first. A blueprint is
+     then rolled onto each room, weighted by size eligibility:
+       - weights: STANDARD 5.0, special 1.0, set-piece 3.0, observatory 20.0;
+       - depth gates: STELLAR_OBSERVATORY, GORE_NEST and ATMOSPHERIC_PLANT need depth >= 2, so they never
+         appear on floor 1;
+       - the observatory needs a 13x13 interior, which only the 16% LARGE modifier can produce;
+       - balance-overhaul order 2 (E6) shrank the room window to about 50% on floor 1 (FootprintPlanner),
+         so fewer rooms fit any special's size gate;
+       - CavernGenerator ignores the registry. Its typing is hardcoded (medical bay nearest the centre,
+         armory 80%, cryo/containment bands). Its chambers are at most 7x6, so CRYO (min 7x7) and
+         CONTAINMENT (min 8 wide) can never appear in a cave, and only 4 of the 13 specials exist there;
+       - LinearCorridorGenerator adds two local types (STORAGE_BAY, REACTOR) outside the registry;
+       - LEVEL_GEN_MIN_SPECIAL_ROOMS is a best-effort backstop.
+  C5 SPECIAL ROOMS DO NOT READ AS SPECIAL. Their dressing is the C1 scatter. generated-wall-art order 2
+     retired their wall theming (the R1 ledger keeps the dice draws but writes nothing), and region sets
+     B-E still alias set A. A medical bay that happens to spawn looks like any other room, which is half of
+     why the owner says "they never spawn".
+  C6 SYMBOL MEANING CAN DRIFT. 'T' is a FLEXIBLE prop symbol (TilesetConstants.FLEXIBLE_SOLIDPROP_SYMBOLS).
+     On ROOMS_MST the SymbolAllocator may bind it to another sprite when no placed room reserves it. Yet
+     World treats every 'T' as a story LOG terminal (StoryUiConstants.STORY_LOG_TERMINAL_SYMBOL). A
+     "terminal" can therefore render as some other object. (CP2's audit confirms how often.)
+
+
+SCOPE
+-----
+IN
+  - A new agent `.claude/agents/level-generation-engineer.md`. It carries over everything still true from
+    `game-level-designer.md`, which is deleted, and every live reference is updated (CLAUDE.md table,
+    orchestrator.md, commands/implement.md, run-game SKILL.md, docs/level-design-context.txt,
+    ideas/_TEMPLATE.txt).
+  - A dev-only measuring instrument, `level/LevelQualityAudit` (headless main(), no JUnit, no Gradle task).
+    It sweeps seeds x generators x depths and reports every invariant below plus ASCII grid dumps. Its
+    BASELINE on today's generators is recorded before anything changes.
+  - A shared, headless foundation in `ge.tbegvadze.toon3d.level`:
+      - the room/doorway data model and the DOORWAY RULES, with a final validator;
+      - a socket-to-socket CORRIDOR ROUTER;
+      - the PROP ENGINE (anchors, kits, the room dresser, door-clearance zone, walking lanes, fill caps);
+      - the SPECIAL ROOM PLANNER (equal chance, count from footprint, sizes from each room's window);
+      - kit demands pinned into the floor palette.
+  - ONE checkpoint per generator, rebuilding it on that foundation: ROOMS_MST (LevelGenerator),
+    LINEAR_CORRIDOR, CAVERN, BOSS_ARENA, MED_BAY, EVENT_ROOM, GATE_AIRLOCK, and the start room
+    (StartGameLevelGenerator).
+  - Every registered room gets a size window and a prop kit. Five REGULAR-room kits replace the scatter.
+  - The runtime shop machine (World.tryMakeMachineCandidate) and the group barrels (GroupBarrelPlacer)
+    obey the door-clearance zone and room lanes.
+  - Deleted with the scatter:
+      - BalanceConfig.LEVEL_GEN_PROP_CHANCE and its GRANDFATHERED entry;
+      - LevelGenConfig's scatter flags and weights;
+      - every SELECTION_WEIGHT / *_CHANCE / *_MIN_DEPTH / *_MAX room constant;
+      - the LARGE modifier;
+      - LinearCorridorGenerator's STORAGE_BAY / REACTOR and its build bridge;
+      - CavernGenerator's hardcoded chamber typing;
+      - the R1 retired-wall-dressing ledger (RetiredWallDressing and every retired*Rolls method).
+  - Docs: procedural-level-generation.txt (rewritten), environment-tileset-system.txt (RECIPE B updated, new
+    RECIPE: add a prop kit), tile-symbols.txt notes, route-map-system.txt special-floor notes,
+    game-balance-knowledge.txt, game-balance-authority.txt K12 note, and CLAUDE.md.
+
+OUT (deliberately not doing now)
+  - Hand-made `.txt` levels in assets/levels. They do not pass through generators. The new agent's
+    authoring rules apply to new ones; existing files are untouched.
+  - New tile symbols, new sprites, new art of any kind. Every kit uses symbols and sprites that exist today.
+  - New room TYPES. The 13 registered specials are the pool. Adding one later is one register() row (the
+    recipe below).
+  - Wall pictures. The LevelFinisher, region sets and P1-P9 are unchanged. generated-wall-art orders 3-4
+    stay as written.
+  - Footprint targets, encounter budgets, supply plans, keycard-gate selection logic, stairs-in-deepest-room,
+    first-contact distances. These are balance contracts. The new layouts must keep them green, not
+    change them.
+  - Irregular room shapes (L/T rooms), multi-floor structures, secret rooms. Those are separate ideas.
+  - Remembering which specials appeared on previous floors (no-repeat across floors). Each floor draws
+    independently. That is what "equal chance" means here.
+  - Any change to door mechanics (opening, keycards, turn cost). Only WHERE doors go changes.
+  - Runtime-spawned solids that live a few turns (Verdant Spiresower crystal spires ':'). They are an
+    enemy ability, not environment.
+  - A new JUnit test of any kind (Testing Policy). The audit is an instrument, not a test.
+  - Any change to balance-overhaul-order-7's sim/BalanceConfig SECTION 18 work. It is in progress and
+    waiting on owner playtests; this idea only changes the floors those playtests will be played on.
+
+
+GAMEPLAY LOOP
+-------------
+This is a generation change. There is no new player action, no turn cost and no new control. What follows
+is (A) what every combat floor's generator does, in order, and (B) what the player experiences.
+
+A. GENERATION PIPELINE (ROOMS_MST / LINEAR_CORRIDOR / CAVERN; the bespoke floors follow the same rules)
+  1. SPECIAL PLAN. From the floor seed salted by LevelGenConstants.SPECIAL_ROOM_SEED_SALT (NOT the footprint
+     attempt seed), SpecialRoomPlanner draws N special room types uniformly WITHOUT replacement from every
+     registered SPECIAL blueprint. N = GameMath.specialRoomCountForFootprint(target walkable tiles) (R2).
+     The draw is fixed for the floor before any footprint attempt.
+  2. FOOTPRINT ATTEMPT (FootprintPlanner.buildToTarget, unchanged contract). For each attempt:
+     a. Size each planned special from its window, scaled by the attempt's footprint scale (R4).
+     b. PLACE THE SPECIALS FIRST, spread across the window (R5).
+     c. Place the ENTRANCE room (R6), then fill REGULAR rooms into the space left (R7).
+     d. Give every room its SOCKETS (doorway tiles in its wall ring) and route corridors socket-to-socket
+        with CorridorRouter (R9-R13). Room shells are never cut except at sockets. Some MST edges become
+        3-wide halls that taper to the 1-wide socket.
+     e. Each room's blueprint builds its ARCHITECTURE (floor lighting, columns, observatory shell, lab
+        alcove) and exports FEATURE slots.
+     f. RoomDresser dresses every room from its kit (R15-R27): signature row first, then supporting rows,
+        then decals. Every solid placement is checked against door clearance, lanes, plug rules, room
+        connectivity and the fill cap.
+     g. Hall pass: walkable decals only, plus the existing spaced columns on 3-wide halls (R28).
+     h. DoorwayRules.validate: the final check on the finished grid (R14).
+     i. Connectivity audit (must now be a no-op; R30), keycard gate, stairs.
+     j. Encounter + supply + barrels through the unchanged shared pipeline (FloorPopulator, with
+        GroupBarrelPlacer obeying R26).
+     k. LevelFinisher dresses the walls (unchanged). The palette request carries every placed kit's demand,
+        and always 'T' -> prop_terminal and 'E' -> prop_explosive_barrel (R29).
+  3. The FootprintPlanner keeps the attempt closest to target, exactly as today.
+
+B. WHAT THE PLAYER SEES
+  - Entering a floor: a clean entrance room with no solid props, and one or more doors leading out.
+  - A door is always set in a wall: two wall tiles flank it, a corridor is on one side, a room on the other.
+    Walking through it is the only way into that part of the room.
+  - Inside, the furniture hugs the walls, corners and back wall: lockers by the door wall, a console desk
+    on the back wall. A clear lane runs from every doorway to the room's middle. A special room shows its
+    signature at once: pod rows, console banks, a generator block, weapon racks.
+  - At most one room per floor is deliberately tight (a server room's rack aisles, a salvage heap).
+    Everything else is easy to cross.
+  - From floor 1, any of the 13 special rooms can be on the floor, and every floor (bosses aside) has at
+    least two.
+
+
+RULES
+-----
+Definitions used below.
+  ROOM: an interior rectangle plus its one-tile wall ring (the SHELL). Cave chambers are rooms too.
+  SOCKET: a shell tile that is a doorway: a door leaf ('d', or 'R'/'Y'/'B' once gated) or an open doorway
+    floor tile.
+  FLUSH TILE: an interior tile with a shell wall as an orthogonal neighbour (not a socket).
+  DOOR CLEARANCE ZONE of a socket: every tile within Chebyshev distance 1 of it (LEVEL_GEN_DOOR_CLEARANCE_
+    RADIUS = 1), plus the two tiles at distance 2 straight out on both sides along its axis
+    (LEVEL_GEN_DOOR_AXIS_CLEARANCE = 2).
+  HUB: the room's interior centre tile, or, when a CENTRE feature claims the centre, the ring of tiles
+    around that feature.
+  LANE: the shortest 4-connected interior path from each socket's inner tile to the HUB (ties broken by the
+    dresser's seeded stream).
+  LANE BAND: the lane tiles plus their orthogonal interior neighbours (half-width 1,
+    LEVEL_GEN_LANE_BAND_HALF_WIDTH). In a DENSE room the band is the lane alone (half-width 0).
+  SOLID: a solid prop (Level.isPropSolid) or a column 'P'.
+  FILL: SOLID tiles inside the interior / interior tile count.
+
+SPECIAL ROOMS
+  R1  SPECIAL pool = every registered RoomBlueprint other than "entrance" and "standard": today server_room,
+      medical_bay, armory, cryo_chamber, power_plant, command_center, containment_block, research_lab,
+      stellar_observatory, gore_nest, atmospheric_plant, salvage_bay and supply_cache (13). There is no
+      depth input, no per-type weight and no per-type cap anywhere. RoomContext's depth field and
+      RoomBlueprint.eligible / selectionWeight are removed.
+  R2  Specials per floor N = clamp(round(targetWalkableTiles / LEVEL_GEN_WALKABLE_TILES_PER_SPECIAL_ROOM
+      (260)), LEVEL_GEN_SPECIAL_ROOMS_MIN (2), LEVEL_GEN_SPECIAL_ROOMS_MAX (4)), as
+      GameMath.specialRoomCountForFootprint with the standard comment block. Reference values from today's
+      targets (original walkable x (1 - FOOTPRINT_REDUCTION_BY_DEPTH)):
+        ROOMS_MST        d1 565 -> 2, d2 678 -> 3, d3 791 -> 3, d4 848 -> 3, d5+ 904 -> 3
+        LINEAR_CORRIDOR  d1 350 -> 2 (min), d2 420 -> 2, d3 490 -> 2, d4 525 -> 2, d5+ 560 -> 2
+        CAVERN           d1 1050 -> 4, d2+ -> 4 (max)
+      The function reads the target FootprintPlanner hands the generator, so a later footprint change moves
+      the count with it.
+  R3  The N types are drawn uniformly WITHOUT replacement (no duplicate type on a floor) from the floor
+      seed salted with SPECIAL_ROOM_SEED_SALT, before any footprint attempt. Retries never change WHICH
+      specials appear, so small rooms are not favoured by rebuild bias.
+  R4  Each blueprint declares a SIZE WINDOW (interior min W x H, max W x H, rotatable unless SQUARE). An
+      attempt sizes a special uniformly in [min, min + (max - min) x clamp(footprintScale, 0, 1)] per axis,
+      so small floors get near-minimum specials. Windows are in TECHNICAL NOTES. Every window's MINIMUM is
+      chosen so its signature row fits with 3 sockets present.
+  R5  Specials are placed FIRST in an empty window by best-candidate sampling: LEVEL_GEN_SPECIAL_PLACEMENT_
+      CANDIDATES (12) random positions, keeping the one that maximises distance to the specials already
+      placed, respecting LEVEL_GEN_ROOM_MARGIN. Every planned special MUST be placed. If one cannot be after
+      LEVEL_GEN_PLACEMENT_TRIES, that footprint attempt shrinks it to its window minimum. If it still fails,
+      the attempt is discarded (FootprintPlanner tries the next). A planned special is never swapped for
+      another type or dropped. As an absolute last resort (every attempt failed), the floor is built at
+      window minimums and the 1.0 scale.
+  R6  ENTRANCE (ROOMS_MST): placed after the specials, never a special, interior 5x5..7x7, and within
+      LEVEL_GEN_ENTRANCE_MAX_HOPS_TO_ROOM (one corridor hop) of at least one other room, so the
+      first-contact rule (FIRST_CONTACT_*) stays reachable. LINEAR keeps its small entrance room
+      (LEVEL_GEN_SPINE_ENTRANCE_MAX_DIM 7). CAVERN's entrance chamber is a regular-size walled chamber.
+  R7  REGULAR rooms fill the remaining window up to the footprint's room target, interior 4x4..12x10
+      (LEVEL_GEN_ROOM_MIN/MAX_WIDTH/HEIGHT become 4/12 and 4/10). The LARGE modifier is gone; big spaces
+      come from specials and 3-wide halls.
+  R8  Every ROOMS_MST, LINEAR_CORRIDOR and CAVERN floor carries exactly its planned N >= 2 specials. The
+      bespoke floors (MED_BAY clinic, EVENT_ROOM chamber, GATE_AIRLOCK threshold, start-room staging
+      armory) are each one purpose-built special room by definition. BOSS_ARENA is the owner's stated
+      exception.
+
+DOORWAYS AND CORRIDORS
+  R9  A room's shell is never carved except at its sockets. No corridor, plaza, emergency carve or prop
+      pass may turn a shell tile into floor. Corridors may run alongside a shell; they never touch it
+      except at a socket's outer tile.
+  R10 A socket is exactly one tile wide. It is never a corner, and is at least LEVEL_GEN_SOCKET_CORNER_MIN_
+      DISTANCE (2) tiles from either corner of its side, so both flank tiles are straight shell walls.
+      Sockets on the same side are >= LEVEL_GEN_SOCKET_MIN_SPACING (3) tiles apart. A room has
+      1..LEVEL_GEN_MAX_SOCKETS_PER_ROOM (3) sockets; the entrance has at most 2.
+  R11 The socket's outer tile is a corridor (or spine / cave) floor tile straight out from the socket. The
+      corridor's last step INTO a socket is perpendicular to the shell.
+  R12 CorridorRouter routes each MST edge and each loop edge (rooms/3 loops, LEVEL_GEN_LOOP_MAX_DISTANCE
+      unchanged) socket-outer-tile to socket-outer-tile. It runs a seeded A* on the tile grid:
+        - room interiors and shells are impassable except the two endpoints;
+        - a tile orthogonally next to another room's shell costs LEVEL_GEN_ROUTE_SHELL_HUG_COST (4);
+        - an existing corridor tile costs LEVEL_GEN_ROUTE_MERGE_COST (0.5), so corridors merge;
+        - every other tile costs 1.
+      Each new edge first reuses an existing socket on the facing side, else adds one (R10). An edge with
+      no legal route is skipped. MST edges retry with the next-nearest room pair until all rooms are
+      connected.
+  R13 WIDE HALLS: LEVEL_GEN_WIDE_HALLWAY_COUNT MST edges (unchanged count) are carved 3 wide along their
+      route wherever the 3-wide band keeps >= 1 tile from every shell. They narrow to 1 wide for the last
+      LEVEL_GEN_WIDE_HALL_TAPER_TILES (2) tiles before a socket. The hall spine is carved as 'l' like any
+      corridor, never as ' ', so no later pass can mistake a hall for a room.
+  R14 DOOR RULE (checked by DoorwayRules.validate on every finished grid, every generator):
+        - a door tile has walls on both tiles of one axis and walkable tiles on both tiles of the other;
+        - no door is orthogonally next to another door;
+        - every opening in a room shell is a socket satisfying R10.
+      The validator is a last-resort guard. A door failing the rule is DEMOTED to open floor 'l' and
+      counted. Construction must make the count zero (A7). Socket door leaves: a SPECIAL room's sockets
+      always get a door (LEVEL_GEN_SPECIAL_DOOR_CHANCE 1.0); every other socket gets one at
+      LEVEL_GEN_DOOR_CHANCE (0.75, unchanged); otherwise the socket stays an open doorway. The keycard gate
+      still promotes one existing door (algorithm unchanged).
+
+PROPS (the prop engine)
+  R15 No solid prop or decal is ever placed by a per-tile chance roll. Every placement comes from a kit row
+      (R16), a hall/cave rule (R28/G3), the boss arena's cover/barrel rules, or the shared supply/barrel
+      pipeline. LEVEL_GEN_PROP_CHANCE, randomPropChar, randomMedicalPropChar, randomContainmentPropChar,
+      tryPlaceAtmosphericProp* and the cave per-tile prop/stalagmite rolls are deleted.
+  R16 A KIT is an ordered list of rows. Each row has:
+        - a symbol (optionally with weighted alternatives);
+        - an ANCHOR (R17);
+        - a count range;
+        - a row chance (default 1.0);
+        - a mode: SINGLE, RUN (contiguous along one wall line), SPACED (every 2nd tile along one wall
+          line), or CLUSTER (contiguous blob of up to the count).
+      Row 1 of a special kit is its SIGNATURE: always present (chance 1.0, count >= its min) and placed
+      before anything else. The randomness is in which candidate tiles are chosen, the counts within
+      range, optional rows, alternates and mirror side. All of it comes from the dresser's own seeded
+      stream (floor seed ^ LevelGenConstants.ROOM_DRESSING_SEED_SALT ^ room index), so dressing never
+      shifts the layout's random sequence.
+  R17 ANCHORS (PropAnchor, one enum constant per anchor with its own candidate-tile rule - the WaveformKind
+      idiom, never a switch):
+        BACK_WALL    flush tiles on the side opposite the room's PRIMARY socket (the socket on its corridor
+                     toward the entrance; the entrance's first socket). Falls back to SIDE_WALL when that
+                     side is too short.
+        SIDE_WALL    flush tiles on the two sides perpendicular to the primary socket's side.
+        ENTRY_WALL   flush tiles on the primary socket's side, outside every clearance zone.
+        ANY_WALL     any flush tile.
+        CORNER       interior tiles with two shell neighbours.
+        CENTRE       the interior centre (a 1x1, 1x2, 2x2 or 1x3 footprint as the row says). Rooms smaller
+                     than 7x7 interior skip a non-signature CENTRE row; a signature CENTRE row falls back to
+                     BACK_WALL.
+        ROWS         DENSE aisle pattern: parallel lines along the long axis with 1-tile aisles, a cross
+                     aisle through the HUB, and the line broken in front of every socket's lane.
+        FEATURE      named tiles exported by the room's architecture build (observatory core/spokes, the
+                     research lab's alcove).
+        NEAR         within Chebyshev 1 of a prop this kit already placed, symbol named by the row.
+        FIELD        (decals only) any open interior tile, at a per-tile density given by the row - the ONE
+                     density-based anchor, and decals are walkable.
+        TRAIL        (decals only) 2-4 tiles along a lane, from the HUB side toward a socket, gaps allowed.
+  R18 Every SOLID placement must pass ALL of:
+        (a) not in any socket's DOOR CLEARANCE ZONE (this is the owner's "never right next to a door",
+            including diagonals);
+        (b) not in any LANE BAND of its room;
+        (c) FloorPopulator.wouldPlugPassage is false for it;
+        (d) after placing it, the room's open interior tiles stay ONE 4-connected region;
+        (e) the room's FILL stays within its cap (R21).
+      A failing candidate is skipped and the next one tried. A row that runs out of candidates places fewer.
+      A signature row that cannot reach its min tries the next anchor in BACK_WALL -> SIDE_WALL -> ANY_WALL;
+      the size windows (R4) guarantee it can.
+  R19 Decals (m s . O e) are walkable. They may sit on lanes but never on a socket tile. They come only from
+      kit rows (FIELD / TRAIL / NEAR / SINGLE) and the hall rule (R28).
+  R20 TERMINALS. 'T' appears only:
+        - in the kits of OFFICE, SERVER_ROOM, RESEARCH_LAB, COMMAND_CENTER, MEDICAL_BAY and
+          CONTAINMENT_BLOCK, and the bespoke MED_BAY / EVENT_ROOM / GATE_AIRLOCK dressings;
+        - always FLUSH to a wall, except in a server room's ROWS racks;
+        - never in a hall, a cave body, the entrance room or a door clearance zone.
+      Every ROOMS_MST / LINEAR_CORRIDOR / CAVERN floor carries >= 1 'T' with a standable orthogonal
+      neighbour, because the story's LOG_FOUND beats (including the two mandatory reveal logs) fire off
+      terminals. If no placed room's kit produced one, the dresser re-dresses one regular room with OFFICE
+      (or, with no regular room, adds the OFFICE 'T' row to the first terminal-allowed special).
+  R21 FILL CAPS: REGULAR rooms <= LEVEL_GEN_ROOM_FILL_CAP_REGULAR (0.12). SPECIAL rooms <=
+      LEVEL_GEN_ROOM_FILL_CAP_SPECIAL (0.22). A DENSE kit (server_room, salvage_bay) <=
+      LEVEL_GEN_ROOM_FILL_CAP_DENSE (0.40) with a lane band of half-width 0. A room dressed DENSE is "TIGHT".
+      At most LEVEL_GEN_MAX_TIGHT_ROOMS_PER_FLOOR (1) per floor: when a second DENSE special is planned, it
+      uses its kit's RELAXED variant (non-dense band and cap).
+  R22 The ENTRANCE room holds no solid prop and no decal. (The start must read clean; the player spawns at
+      its centre.)
+  R23 Regular rooms draw one kit uniformly from OFFICE / STOREROOM / MAINTENANCE / AFTERMATH / BARE, with
+      one exception: the floor's LevelGenConfig.preferredRegularKit (set by a route profile; R31) counts
+      double.
+  R24 A kit's solid props never leave its room. The only solids outside rooms are 3-wide-hall columns
+      (R28), cave formations and debris (G3), boss-arena cover/barrels, group barrels (R26) and the runtime
+      shop machine (R27).
+  R25 Columns placed by ARCHITECTURE (BARE-kit pillars, LINEAR's interior layouts four-pillars / centre-
+      avenue / altar, the start room's four framing columns, observatory pylons) are SOLIDs and obey R18.
+  R26 GroupBarrelPlacer (balance-bearing, R-HAZARD) additionally rejects tiles in any door clearance zone
+      or room lane band, and prefers flush tiles when both exist within its radius. Its count rules,
+      Random and flood guards are unchanged.
+  R27 The runtime shop machine (World.tryMakeMachineCandidate) rejects any tile inside a door clearance
+      zone, on top of its current wall-mount and local-connectivity checks.
+  R28 HALLS (corridor tiles outside every room): no solid props, ever. 3-wide halls keep their spaced spine
+      columns (placeWideHallwayColumns / placeSpineColumns), now also kept out of door clearance zones.
+      Walkable decals in halls only at LEVEL_GEN_HALL_DECAL_CHANCE (0.02) per hall tile, never on a socket
+      or its outer tile.
+  R29 MEANING IS PINNED. Every placed kit contributes its symbol -> sprite demand to the floor's palette
+      request (exactly as a SIGNATURE room's RoomSymbolDemand does today). Every generated floor also
+      reserves 'T' -> prop_terminal and 'E' -> prop_explosive_barrel. A kit-placed symbol therefore always
+      renders its kit's sprite. Flexible-category slot counts (salvage_bay / supply_cache) are removed;
+      their kits name concrete symbols.
+
+GENERAL
+  R30 Connectivity repair (verifyAndRepairConnectivity, repairUnreachableFloorRegions, CavernGenerator's
+      equivalents) stays as a backstop and must obey R9: a repair carve that would cut a shell instead opens
+      a NEW socket on it (R10). The audit counts repair carves; the target is zero (A8).
+          FloorPopulator.clearPluggedPassages stays as the final backstop. It must also be a no-op (A8).
+  R31 Route profiles stop setting the deleted scatter flags. CacheProfile sets preferredRegularKit
+      STOREROOM, EliteProfile AFTERMATH; MysteryProfile and every other profile set none. enableLargeRooms
+      and enableServerRooms are deleted from LevelGenConfig and from every profile that set them.
+  R32 No generator contains a switch or if-chain over room types. Room behaviour (size window,
+      architecture, kit, wall group, signature) comes from the blueprint row. LevelGenerator.RoomType,
+      LinearCorridorGenerator.RoomType and CavernGenerator.ChamberType are deleted, or reduced to
+      ENTRANCE/REGULAR/SPECIAL roles if a builder needs a tag.
+  R33 Determinism: same seed + same LevelGenConfig -> byte-identical grid, spawns, palette.
+
+PER-GENERATOR RULES
+  G1 ROOMS_MST (LevelGenerator): pipeline A as written. The specials-first window placement, entrance and
+     regular fill are R5-R7.
+  G2 LINEAR_CORRIDOR: keep the spine and plaza concept.
+       - Side-room SLOTS are computed first. The planned specials take slots FIRST, at evenly spaced
+         fractions of the spine length (alternating sides), each sized from its window; a slot that cannot
+         fit one moves it to the next slot.
+       - Regular rooms then fill the remaining slots with the existing LEVEL_GEN_SPINE_SIDE_ROOM_CHANCE.
+       - Each side room's socket is on its spine-facing wall (the socket's outer tile is spine floor).
+       - carveSpinePlaza may only convert tiles >= 1 tile away from every shell (R9).
+       - Interior layouts (four pillars, centre avenue, altar, crate cover) survive only as BARE-kit
+         architecture variants for regular rooms >= 5x5, subject to R18.
+       - Deleted: STORAGE_BAY, REACTOR, the build bridge (buildDelegatedRooms / LevelGenerator.
+         buildRoomForBridge), the native per-type prop passes, the roulette and the min-specials backstop.
+  G3 CAVERN:
+       - The cellular-automata cave is unchanged.
+       - SPECIAL chambers are stamped FIRST (planned types, sized from their windows), then the entrance
+         chamber, then 0..LEVEL_GEN_CAVE_REGULAR_CHAMBERS_MAX (2) regular chambers. All are walled rooms:
+         the shell ring is forced to wall.
+       - Each chamber gets 1-3 sockets on the sides nearest cave floor, joined by a straight 1-wide tunnel
+         (<= LEVEL_GEN_CAVE_SOCKET_TUNNEL_MAX 6 tiles) to the nearest cave floor.
+       - If forcing a shell severs cave regions, add a socket or a bypass tunnel around the shell (R9).
+       - The chamber floor-overlap requirement is dropped for specials (they may carve rock).
+       - Cave body solids come only from two rules:
+           (a) FORMATIONS: 'P' stalagmite clusters of 1-3, only on tiles whose 5x5 window holds >=
+               LEVEL_GEN_CAVE_FORMATION_MIN_OPEN (20) open tiles, never within 3 tiles of a socket, at most
+               LEVEL_GEN_CAVE_FORMATIONS_PER_BIOME_MAX (3) clusters per biome; CRYSTAL_GROTTO may use 2x
+               that cap;
+           (b) DEBRIS: 1-2 wall-anchored clusters per biome (existing LEVEL_GEN_CAVE_BIOME_FEATURE_MIN/MAX),
+               1-3 props of the biome's scatterProps flush against cave wall, the landmark prop at chance
+               LEVEL_GEN_CAVE_BIOME_LANDMARK_CHANCE.
+         Both obey R18 (a)(c) and never touch a cave passage narrower than 3 tiles (a solid may not sit
+         where the open width across it, on either axis, is < 3).
+       - 'T' is removed from DERELICT_NEST's scatter set (R20); 'L' and 'C' stay.
+       - Biome floor moods and walkable decal scatter stay (decals are walkable; FIELD-style density).
+  G4 BOSS_ARENA: the arena layout, fairness pass (validateArena), alcoves, boss/exit positions and cover/
+     barrel counts are unchanged.
+       - The arena door must pass R14.
+       - Cover columns and barrels must sit outside the door's clearance zone (the existing keepClear radius
+         already exceeds it; verify, do not re-tune).
+       - The ANTECHAMBER gets a fixed STAGING dressing: 1 'L' flush on each side wall, outside the start
+         tile's lane to the door.
+       - No special room (owner exception).
+  G5 MED_BAY:
+       - The 3-wide approach corridor ends at a SOCKET in the ward's left wall, with a door (the clinic
+         entrance).
+       - Each pod alcove opens to the ward through one open socket.
+       - The ward dressing becomes the fixed CLINIC kit, all flush: '&' beds SPACED on the alcoves' far
+         walls (existing lineAlcovePods intent), 'I' tanks in two ward corners, 'T' consoles flush on the
+         ward's top and bottom walls, '%' flush in one corner.
+       - The auto-doc 'W' stays at the ward centre as its CENTRE feature, with the lane band routed around
+         it.
+       - Today's props sit one tile OFF the wall (wardLeft + 1), leaving 1-wide slots; that is fixed.
+       - Zero enemies (unchanged).
+  G6 EVENT_ROOM: the approach ends at a door socket into the room. The 'W' station stays as CENTRE feature.
+     'T' and '%' move flush to walls. The corpse / oil decals stay optional.
+  G7 GATE_AIRLOCK: the bulkhead 'B' becomes the threshold room's single entrance socket. The 3-wide approach
+     runs up to the room's left wall and the 'B' sits in that wall, flanked by shell walls. The keycard 'b'
+     stays on the approach. 'T' and '%' move flush to walls.
+  G8 START ROOM (StartGameLevelGenerator): the sealed staging room keeps its size, portal, offer rows, start
+     tile and four framing columns. A fixed STAGING_ARMORY dressing adds:
+       - 2 '=' racks flush on the north wall, >= 2 tiles either side of the portal column;
+       - 1-2 'L' flush on each side wall;
+       - 1 '#' in a corner.
+     Everything stays clear of the offer tiles and of the lanes from the start tile to the portal and to
+     every offer.
+
+
+PLAYER EXPERIENCE
+-----------------
+The facility starts to make sense. A medical bay has beds and consoles; an armory has its racks on the back
+wall and the dead in front of them; a power plant is a humming block in the middle of a big room. Offices
+have a desk against the far wall. Nothing stands in a doorway, and every doorway is a real one: the player
+learns that a door means "new room", which is what gives first-person exploration its reveal.
+
+The decisions this creates are spatial, not new mechanics. A room's lane is the fast way through. Its
+furniture, all against the walls, is real cover from ranged lanes. Players reason about cover without
+fighting it. Special rooms become landmarks the player can name when they talk about a run.
+
+Teaching: none needed and none added. There is no new rule for the player to learn. The existing
+DOOR / BARREL / MACHINE teaching topics still fire at their existing moments.
+
+
+TECHNICAL NOTES
+---------------
+NEW CLASSES (package ge.tbegvadze.toon3d.level, all headless, no LibGDX imports)
+  LayoutRoom          interior rect, role (ENTRANCE / REGULAR / SPECIAL), blueprint id, kit id, sockets,
+                      primary socket, exported FEATURE slots, dense/relaxed flag. Every generator hands its
+                      rooms to the shared engine as LayoutRooms. Generators may keep private room classes,
+                      but the engine sees only these.
+  DoorSocket          tile, side (N/S/E/W), outer tile, leaf kind (DOOR / OPEN).
+  DoorwayRules        socket legality (R10/R11), clearance-zone queries (isInDoorClearance(grid, column, row)
+                      - also used by World and GroupBarrelPlacer), and validate(grid, rooms) -> a small
+                      report (demotions, shell gaps) that the generator logs and the audit reads.
+  CorridorRouter      R12/R13 seeded A* on the grid with the shell mask; returns the carved tiles, so the
+                      generator can record wide-hall spines for columns.
+  PropAnchor          enum, one constant per anchor (R17), each with its own candidate-tile rule.
+  PropKit / PropKitRow  immutable kit data (rows per R16). Built with a small builder.
+  RoomDresser         the engine: clearance mask, lanes + band, signature-first placement, R18 checks, fill
+                      caps, the tight-room budget, the R20 terminal guarantee, and kit demand collection for
+                      the palette (R29).
+  SpecialRoomPlanner  R1-R4: the floor's special types (uniform, no replacement) and per-attempt sizes.
+  RoomSizeWindow      min/max interior, SQUARE flag.
+  LevelQualityAudit   DEV INSTRUMENT (see below).
+
+CHANGED
+  RoomBlueprint       gains sizeWindow(), kit() (or relaxedKit() for DENSE kits) and signatureSymbol().
+                      build() keeps ARCHITECTURE only (floor lighting, columns, observatory shell, research
+                      alcove, salvage floor) and exports FEATURE slots. eligible() / selectionWeight() are
+                      removed once the last caller goes (CP7). wallGroup(), supplyStance(), symbolDemand()
+                      stay. symbolDemand() becomes the union of architecture demand and kit demand.
+  RoomBlueprints      THE CONTENT FILE: every row gets its window + kit. The STANDARD row carries the five
+                      regular kits. symbolsStampedInIsolation (C-ROOM's helper) is re-pointed at the shared
+                      engine (architecture + dresser) with one synthetic socket. Hazard 'g' stays owned by
+                      level.RoomBlueprints (BalanceSchema HAZARD_DECLARATIONS needs no change). Kits live here
+                      for that reason.
+  RoomBuildContext    becomes the architecture facade over a LayoutRoom + grid + stream. It no longer wraps a
+                      LevelGenerator instance.
+  RoomContext         loses dungeonDepth / alreadyPlacedOfThisKind (or is deleted if nothing else reads it).
+  LevelGenerator, LinearCorridorGenerator, CavernGenerator  rebuilt per G1-G3 (each its own checkpoint).
+  BossArenaGenerator, MedBayGenerator, EventRoomGenerator, GateAirlockGenerator, StartGameLevelGenerator
+                      conformed per G4-G8.
+  GroupBarrelPlacer   R26.  FloorPopulator  unchanged contract (clearPluggedPassages kept as backstop).
+  world/World         R27 only (tryMakeMachineCandidate rejects door-clearance tiles via DoorwayRules).
+  route/CacheProfile, EliteProfile, MysteryProfile (+ any profile setting a deleted flag)   R31.
+  LevelGenConfig      deleted: radioactiveBarrels, crates, computerTerminals, lockers, bloodStains, corpses,
+                      oilPools, every *Weight, enableLargeRooms, enableServerRooms. Added:
+                      preferredRegularKit (String kit id, null = none).
+  SymbolAllocator request (tileset)  receives kit demands; 'T' and 'E' always reserved on generated floors.
+                      No allocator algorithm change.
+  util/GameMath       + specialRoomCountForFootprint(int targetWalkableTiles) (pure, comment block).
+  util/BalanceConfig  - LEVEL_GEN_PROP_CHANCE.   util/BalanceSchema  - its GRANDFATHERED entry (shrink-only).
+  DELETED             RetiredWallDressing and every retired*Rolls / retiredWallVarietyRolls method (the R1
+                      ledger is moot: layouts change on purpose). The LevelFinisher draws its own stream, so
+                      walls stay deterministic.
+
+CONSTANTS (util/LevelGenConstants unless stated; names are final, values are the decided defaults)
+  SPECIAL_ROOM_SEED_SALT, ROOM_DRESSING_SEED_SALT                 long salts (any fixed odd constant)
+  LEVEL_GEN_WALKABLE_TILES_PER_SPECIAL_ROOM = 260
+  LEVEL_GEN_SPECIAL_ROOMS_MIN = 2, LEVEL_GEN_SPECIAL_ROOMS_MAX = 4
+  LEVEL_GEN_SPECIAL_PLACEMENT_CANDIDATES = 12
+  LEVEL_GEN_ENTRANCE_MIN_DIM = 5, LEVEL_GEN_ENTRANCE_MAX_DIM = 7
+  LEVEL_GEN_ROOM_MIN_WIDTH = 4, LEVEL_GEN_ROOM_MIN_HEIGHT = 4, LEVEL_GEN_ROOM_MAX_WIDTH = 12,
+  LEVEL_GEN_ROOM_MAX_HEIGHT = 10
+  LEVEL_GEN_DOOR_CLEARANCE_RADIUS = 1, LEVEL_GEN_DOOR_AXIS_CLEARANCE = 2
+  LEVEL_GEN_SOCKET_CORNER_MIN_DISTANCE = 2, LEVEL_GEN_SOCKET_MIN_SPACING = 3, LEVEL_GEN_MAX_SOCKETS_PER_ROOM = 3
+  LEVEL_GEN_SPECIAL_DOOR_CHANCE = 1.0f (LEVEL_GEN_DOOR_CHANCE 0.75f unchanged)
+  LEVEL_GEN_ROUTE_SHELL_HUG_COST = 4f, LEVEL_GEN_ROUTE_MERGE_COST = 0.5f, LEVEL_GEN_WIDE_HALL_TAPER_TILES = 2
+  LEVEL_GEN_LANE_BAND_HALF_WIDTH = 1
+  LEVEL_GEN_ROOM_FILL_CAP_REGULAR = 0.12f, LEVEL_GEN_ROOM_FILL_CAP_SPECIAL = 0.22f,
+  LEVEL_GEN_ROOM_FILL_CAP_DENSE = 0.40f, LEVEL_GEN_MAX_TIGHT_ROOMS_PER_FLOOR = 1
+  LEVEL_GEN_HALL_DECAL_CHANCE = 0.02f
+  LEVEL_GEN_CAVE_REGULAR_CHAMBERS_MAX = 2, LEVEL_GEN_CAVE_SOCKET_TUNNEL_MAX = 6,
+  LEVEL_GEN_CAVE_FORMATION_MIN_OPEN = 20, LEVEL_GEN_CAVE_FORMATIONS_PER_BIOME_MAX = 3
+  Size windows, LEVEL_GEN_SIZE_<ROOM>_{MIN_WIDTH, MIN_HEIGHT, MAX_WIDTH, MAX_HEIGHT}, as in the table below.
+  DELETED: every LEVEL_GEN_*_SELECTION_WEIGHT, LEVEL_GEN_*_CHANCE that gated a room type, every *_MIN_DEPTH,
+  every per-type *_MAX cap, every per-room *_PROP_CHANCE, LEVEL_GEN_MIN_SPECIAL_ROOMS,
+  LEVEL_GEN_LARGE_MODIFIER_*, LEVEL_GEN_LARGE_MIN_DIM, LEVEL_GEN_SPINE_STORAGE_*, LEVEL_GEN_SPINE_REACTOR_*,
+  LEVEL_GEN_CAVE_BIOME_PROP_CHANCE, LEVEL_GEN_CAVE_STALAGMITE_CHANCE, LEVEL_GEN_CAVE_CHAMBER_BREACH_CHANCE
+  (already unused), LEVEL_GEN_SERVER_ROOM_CHANCE / _MAX_PER_LEVEL. Each constant goes in the checkpoint
+  that removes its last reader.
+
+SIZE WINDOWS (interior, W x H; rotatable unless SQUARE) and KITS
+  Notation: symbol x count @ANCHOR mode [chance]. Row 1 = SIGNATURE. All kits use existing symbols and the
+  sprites the room already claims, or the legacy sprite for that symbol.
+
+  server_room         6x5 -> 10x8   DENSE
+      'T'/'L' (65/35, LEVEL_GEN_SERVER_LOCKER_RATIO) racks @ROWS. '#' x1 @CORNER near the entry wall.
+      'O' x1-2 @NEAR racks.
+      RELAXED: racks only on alternate ROWS lines, max 2 lines.
+  medical_bay         7x5 -> 10x8
+      '&' beds x2-4 @BACK_WALL SPACED. 'T' console x1 @SIDE_WALL. 'I' tank x0-1 @CORNER [0.6].
+      'C' supply crate x1 @CORNER [0.5]. '.' x1-2 @NEAR beds. 'm' x1 @ANY_WALL [0.4].
+  armory              6x5 -> 9x7
+      '=' racks x2-4 @BACK_WALL RUN. 'C' ammo crates x1-3 @CORNER CLUSTER. '#' x1 @ENTRY_WALL.
+      'm' x1-2 @NEAR racks. '.' x1-3 TRAIL.
+  cryo_chamber        7x6 -> 11x8
+      '&' pods x3-6 @BACK_WALL + opposite wall SPACED (both long walls when H >= 6). '#' x1 @CORNER.
+      'O' coolant x1-3 @NEAR pods. 'C' x0-1 @CORNER [0.5].
+  power_plant         8x8 -> 12x10
+      '%' generator block x2-4 @CENTRE (2x2 or 1x3). 'g' drums x1-2 @CORNER. '#' x1 @ENTRY_WALL.
+      'O' x1-3 @NEAR '%'. 'e' x0-2 @NEAR '%'.
+  command_center      8x6 -> 12x9
+      'T' console bank x3-5 @BACK_WALL RUN. 'W' holo-table x1 @CENTRE [0.6]. '=' x1 @SIDE_WALL.
+      '#' x1-2 @CORNER. '.' x0-2 FIELD. 'm' x1 @ANY_WALL [0.3].
+  containment_block   8x6 -> 12x8
+      '&' cell pods x3-5 @BACK_WALL SPACED. 'T' observation console x1 @ENTRY_WALL. '#' x2 @CORNER.
+      'm' x1-2 @ANY_WALL. '.' x2-3 TRAIL. 'O' x0-1 FIELD.
+  research_lab        7x6 -> 10x8
+      'I' tanks x2-4 @BACK_WALL SPACED. 'J' AI core x1 @FEATURE (lab alcove) or @CORNER.
+      'W' workstation x1-2 @SIDE_WALL. 'T' x1 @SIDE_WALL. 'e' scorch x1-5 FIELD (existing max 5).
+  stellar_observatory 13x13 -> 14x14 SQUARE
+      ';' core x1 @FEATURE (centroid). '|' pylons x2-4 @FEATURE (spokes). '<' x0-1 @FEATURE [0.65].
+      '\' x1-3 @FEATURE (shell band). '?' ']' '-' decals per the existing counts. The rotunda architecture
+      (shell, catwalk, spokes) is unchanged.
+  gore_nest           6x6 -> 10x8
+      ruptured '&' x1 @CENTRE. 'm' '.' 's' 'O' decal carpet FIELD (density 0.35, existing).
+      'g'/'C' debris x1-2 @ANY_WALL.
+  atmospheric_plant   7x6 -> 10x8
+      '%' scrubbers x2 @BACK_WALL SPACED. 'E' gas cylinders x3 @SIDE_WALL CLUSTER (count unchanged, the
+      chain-reaction core). 'g' x1 @CORNER. 'O' FIELD 0.35 near machinery. 'e' FIELD 0.20.
+  salvage_bay         7x7 -> 10x9   DENSE
+      scrap heap 'C'/'g'/'%' x3-6 @CENTRE CLUSTER. 'L'/'=' racks x1-3 @ANY_WALL. 'O' 'e' x1-3 FIELD.
+      RELAXED: heap max 3.
+  supply_cache        5x5 -> 8x6
+      'C' stacks x2-3 @CORNER CLUSTER, in two corners. 'L' run x2-3 @BACK_WALL RUN. 'O' x0-1 FIELD.
+  REGULAR kits (STANDARD row; uniform, R23):
+      OFFICE        'T' desk x1-2 @BACK_WALL RUN. 'L' x0-1 @CORNER. '#' x0-1 @CORNER [0.3].
+                    'm' x1 @ANY_WALL [0.2].
+      STOREROOM     'C' x2-3 @CORNER CLUSTER. 'L' x1-2 @SIDE_WALL RUN. 'O' x0-1 FIELD [0.3].
+      MAINTENANCE   '%' x1 @SIDE_WALL or @BACK_WALL. 'g' x0-1 @NEAR '%'. 'O' x1-2 @NEAR '%'.
+      AFTERMATH     'C' x0-1 @ANY_WALL. 'm' x1 @ANY_WALL. '.'/'s' x2-4 TRAIL.
+      BARE          no props. If interior >= 7x7: two 'P' pillars symmetric about the main lane, or one
+                    LINEAR interior-layout variant on LINEAR floors.
+  ENTRANCE (R22)  nothing.
+  Bespoke: CLINIC (G5), EVENT (G6), AIRLOCK (G7), STAGING (G4 antechamber), STAGING_ARMORY (G8).
+
+LEVEL QUALITY AUDIT - the instrument (CP2)
+  ge.tbegvadze.toon3d.level.LevelQualityAudit, a public static void main(String[] args).
+    - Headless.
+    - Not a JUnit test, not wired to Gradle, never run by any gate, and never fails a build. It prints, like
+      sim/LadderReport and render/RenderPerformanceProbe.
+    - Args: --seeds N (default 200), --depths list (default 1,5,10,15,20,25), --generators list (default
+      all), --dump K (write K ASCII grids per generator).
+    - It builds floors through GeneratorRegistry exactly as World does (a default COMBAT LevelGenConfig
+      for the three combat generators; each bespoke generator with its own node type) and also
+      StartGameLevelGenerator.
+    - It writes core/build/reports/level-audit/summary.txt (+ dumps/) and echoes the summary.
+  The working run command (from the run-game mirror, java -cp with the core classes + the gdx jar) is
+  confirmed at CP2 and written into the new agent file.
+  It reports, per generator and pooled:
+    I1 doors failing the flank rule (before validator demotion) + validator demotions
+    I2 shell openings that are not legal sockets
+    I3 SOLIDs in a door clearance zone
+    I4 SOLIDs in a lane band
+    I5 rooms whose open interior is not one 4-connected region
+    I6 standable tiles unreachable from 'p'
+    I7 SOLIDs where wouldPlugPassage is true (before clearPluggedPassages)
+    I8 SOLIDs outside rooms that are not an allowed kind (R24)
+    I9 'T' outside a terminal-allowed kit; floors with no usable 'T'
+    I10 specials planned vs placed per floor; floors below 2; duplicate types on a floor
+    I11 per-special-type appearance counts (and at depth 1 alone) with the max deviation from the mean
+    I12 per-room fill (mean / max by role), tight rooms per floor, rooms over cap
+    I13 placed specials missing their signature
+    I14 repair carves and clearPluggedPassages removals
+    I15 mean doors per floor (vs RELIC_VALUATION_DOORS_PER_FLOOR)
+    I16 kit symbols rendering a sprite other than their kit's
+  Today's figures are recorded at CP2 as the BEFORE baseline.
+
+THE NEW AGENT - .claude/agents/level-generation-engineer.md (written at CP1 by the orchestrator; it is
+configuration, not code)
+  Frontmatter: name level-generation-engineer; model opus (spatial/procedural design is judgement work; the
+  old level agent was opus too); tools Read, Write, Edit, Bash, Glob, Grep.
+  Description: "Use for ANY level-generation or level-file work: every generator in level/ (ROOMS_MST,
+  LINEAR_CORRIDOR, CAVERN, BOSS_ARENA, MED_BAY, EVENT_ROOM, GATE_AIRLOCK, the start room), room blueprints and
+  their size windows and prop kits, doorway / corridor / prop placement rules, the LevelQualityAudit, and
+  hand-made level .txt files."
+  Body sections:
+    1. run-game skill note (verbatim pattern of the other spokes; build from the mirror; seed:N and
+       lookat:d for door captures).
+    2. THE WORLD: 80x45, 16-unit tiles, (0,0) bottom-left, Y-up. Cardinal only. The 3D view is cosmetic;
+       all logic is 2D.
+    3. SYMBOLS: docs/tile-symbols.txt is the only authority. The STRICT RULE. Generators write walls only as
+       'x'; the LevelFinisher picks pictures by slot. No tables copied from the doc (they rot; the old
+       agent's did).
+    4. THE PIPELINE (this idea's GAMEPLAY LOOP A) and THE INVARIANTS (R9-R30 condensed to a checklist).
+    5. RECIPES:
+         - ADD A ROOM: one RoomBlueprint row with window + kit + wall group + optional architecture. It joins
+           the equal-chance pool automatically; adding one dilutes every type's share.
+         - ADD / TUNE A KIT ROW: one row; non-balance; short-lane when it touches no balance file.
+    6. THE AUDIT: the exact command and how to read it. Run it before and after any generator change.
+    7. HAND-MADE LEVELS (carried from game-level-designer, still true):
+         - format: exactly 45 rows x 80 chars, the first line is the top row, solid perimeter, exactly one
+           'p' not on an edge, every floor tile reachable, no reliance on diagonal gaps, room interior >= 2x2;
+         - every dead end has a purpose;
+         - the room archetypes (entry room, combat corridor, main room, terminal alcove, boss antechamber);
+         - the pre-save verification checklist;
+         - plus this idea's door and prop rules as authoring rules.
+    8. THE BALANCE CONTRACT (carried and updated): K12 / K13. Generated content never hand-places supply or
+       spawns. The footprint target, R-SUPPLY / R-DENSITY / R-HAZARD and S-NAVIGATION are the gates a
+       generator change must keep green. Both balance gates run on any combat-generator change.
+    9. TESTING POLICY: no new tests. The audit is an instrument.
+    10. Working under the orchestrator (the standard spoke block).
+  NOT carried (outdated in game-level-designer.md, which is why it is deleted):
+    - its wall table: 'r' listed as a rust wall is the RED KEYCARD; 'v' / 't' / 'c' / 'w' / 'N' / 'Q' / 'M' /
+      'Z' / 'U' / 'X' / 'G' / 'S' meanings predate the slot model;
+    - the "x >= 80%" accent rule (the LevelFinisher dresses walls);
+    - the five-entry spawn list (16 spawn symbols exist);
+    - the prop list missing I / J / W and calling '@' standard equipment ('@' is the shop machine).
+  docs/level-design-context.txt's header line is updated to name the new agent. Its stale accent-wall advice
+  ('v' / 'c' / 't') is marked LEGACY with a pointer to docs/wall-art-creation-guide.txt.
+
+
+VISUAL DESIGN
+-------------
+No new art, no new sprite, no renderer change. The visual result is entirely composition:
+  - props flush to walls and corners, so billboards read against a wall instead of floating mid-room;
+  - each special room's SIGNATURE is the first thing in view from its door: the BACK_WALL anchor sits
+    opposite the primary socket, so the player faces it on entry;
+  - door frames: the LevelFinisher's P4 already paints the walls flanking a door as STRUCTURE. With every
+    door now flanked, every door gets its frame;
+  - halls stay clean. Light, markers and breaches come from the finisher as today.
+
+
+BALANCE NOTES
+-------------
+- No new balance number. The footprint targets (BalanceConfig FOOTPRINT_*), encounter budgets, group
+  templates, supply specs, first-contact distances and barrel counts are untouched. The layouts must
+  satisfy them as they stand.
+- One balance field is DELETED: BalanceConfig.LEVEL_GEN_PROP_CHANCE (0.13). It is GRANDFATHERED in
+  BalanceSchema's C-CONSTANT list, which is shrink-only, so removing the entry is allowed. Its CHANGELOG line
+  cites this idea.
+- Expected movements the gates will judge:
+  (a) R-HAZARD: group barrels have fewer legal tiles (R26). If R-HAZARD's served-room share goes red, the ONE
+      permitted balance move is HAZARD_GROUP_BARREL_RADIUS_TILES 2 -> 3. That is a single existing number;
+      it needs a CHANGELOG line and both gates.
+  (b) S-RELIC / the door relics: RELIC_VALUATION_DOORS_PER_FLOOR (3) assumes three doors opened per floor.
+      Specials now always have doors, so the mean should rise. A7/I15 requires mean doors per combat
+      floor >= 3 so the assumption stays conservative. Do not retune it here.
+  (c) S-NAVIGATION and every S-band: cleaner lanes should only help. Any red band is fixed in the
+      generator, never by moving a band.
+- If any other band goes red, the checkpoint stops and the hub reports the band and its numbers. No
+  balance number moves without the CHANGELOG protocol.
+
+
+BALANCE ADMISSION
+-----------------
+None - adds no balance-bearing content. No new room, generator, hazard, supply or spawn. Every RoomBlueprint
+stays SUPPLY_NEUTRAL (kits place props and decals only, never a pickup or an enemy symbol), so K12 / C-ROOM
+must stay green as is. Every GeneratorId stays registered and served, so K13 / C-GENERATOR and the R-SUPPLY /
+R-DENSITY sweeps must stay green. Hazard 'g' keeps its placement owner (level.RoomBlueprints). 'E' keeps
+GroupBarrelPlacer plus the atmospheric plant's existing three cylinders.
+
+
+INTERACTIONS
+------------
+- Supply / encounter pipeline (SupplySlotSurvey, EncounterPlacer, SupplyPlanner, FloorPopulator): unchanged
+  contracts. Each generator still implements SupplySlotProvider with one region per room (specials
+  included). Spawns keep their "not adjacent to a door" rule. Pickups may land on lanes (walkable).
+- Keycard gate (placeLockAndKeyGate): it picks among doors. Since every room entrance is now a flanked
+  socket, every gate is a true doorway.
+- LevelFinisher / region wall sets: rooms are passed with their wall groups as today. Specials keep their
+  families. Regular rooms are HALL. P4 door frames now apply to every door.
+- SymbolAllocator / palette: R29. Observatory theme sprites are still reserved only when it is placed.
+- Story: LOG_FOUND terminals (R20 guarantees one per combat floor). No line, no string id, no schedule
+  change.
+- Shop machine: R27. TeachingTopic.MACHINE still fires on first sight.
+- Floor twists: BLACKOUT, SALVAGE and HUNTED act on lighting, supply and enemies; none reads layout
+  internals. HUNTED's PlayerTrail benefits from real doorways.
+- Balance sim (sim/SimWorld): plays real generators, so every S-band sees the new floors. The fast gate's
+  R-SUPPLY / R-DENSITY / R-HAZARD / C-ROOM / C-GENERATOR sweeps run every generator.
+- balance-overhaul-order-7 (IN PROGRESS, waiting on owner playtest round 1): its playtests should be played
+  on these floors. This idea touches none of its sim navigation code or SECTION 18 numbers. Order-7 owns
+  the playtest; the hub should land this before round-1 notes are taken, if the owner agrees.
+- Relics: door blast / heal relics trigger per door opened; see BALANCE NOTES (b).
+
+
+EDGE CASES
+----------
+- FOOTPRINT RETRIES: the special set is fixed per floor seed (R3). Sizes and positions vary per attempt.
+  An attempt that cannot place every planned special is discarded (R5).
+- TINY FLOORS: the FootprintPlanner minimum window (24x18) still fits a 15x15 observatory shell. On LINEAR d1
+  (target ~350), two specials at window minimum plus a short spine must fit. If footprint precision and
+  special count conflict, the precedence is: (1) passability invariants, (2) N >= 2 specials,
+  (3) footprint within tolerance. FootprintPlanner keeps the closest build as today. R-DENSITY judges.
+- TWO DENSE specials on one floor: the second uses its RELAXED kit (R21).
+- A signature that will not fit (an odd shape after sockets): anchor fallback chain (R18). Windows are sized
+  so it always fits. A7 checks this.
+- A room with one socket: the lane runs socket -> HUB. With a CENTRE feature: socket -> the feature's ring.
+- Sockets on adjacent rooms facing each other across a 1-tile corridor: allowed if neither door is
+  orthogonally next to another door (R14) and each clearance zone is prop-free.
+- Linear side room whose wall IS the spine edge: the socket's outer tile is spine floor. Spine columns
+  avoid door clearance zones (R28).
+- Cave chamber shell severing the cave: R9 / G3 bypass.
+- Connectivity repair firing anyway: it must open a socket, never a raw gap (R30). A8 wants zero repairs.
+- Boss floors: no specials (owner exception). The door rule and clearance still apply (G4).
+- Bespoke REST / EVENT / GATE floors: zero enemies unchanged. Their one room counts as their special (R8).
+- Start room: no route node, no specials beyond itself (G8). The shop machine still seeds there (R27).
+- Hand-made levels (World(String)): untouched. They never pass through a generator.
+- Save / persistence: no generated grid is ever persisted (floors rebuild from seed), so no migration, no
+  schema bump, no "new game" wipe concern.
+- Determinism: every new random draw comes from a seeded stream (layout RNG, special salt, dressing salt).
+  LevelGeneratorSnapshotTest is re-baselined at CP6 with a dated note, as earlier behaviour changes did.
+- app pause / overlays / action lock / turn economy: not applicable (generation runs at floor build only).
+
+
+ACCEPTANCE CRITERIA
+-------------------
+"The audit" = LevelQualityAudit at defaults (200 seeds x depths 1,5,10,15,20,25 x every generator + the start
+room), run on the final code.
+
+  A1  .claude/agents/level-generation-engineer.md exists with the sections in TECHNICAL NOTES.
+      .claude/agents/game-level-designer.md is deleted. `grep -rn game-level-designer` over .claude/ and docs/
+      finds hits only in historical idea files and historical checkpoint files. CLAUDE.md's agent table lists
+      the new agent.
+  A2  LevelQualityAudit runs headless from the documented command and writes
+      core/build/reports/level-audit/summary.txt. The BEFORE baseline from CP2 is recorded in the checkpoint
+      file's notes.
+  A3  The audit reports, for every generator: I1 = 0 doors failing the flank rule, I2 = 0 illegal shell
+      openings, I3 = 0 solids in a clearance zone, I4 = 0 solids in a lane band, I5 = 0 split rooms, I6 = 0
+      unreachable tiles, I7 = 0 plugging solids, I8 = 0 stray solids, I9 = 0 misplaced 'T' and 0 combat
+      floors without a usable 'T', I16 = 0 kit symbols off-sprite.
+  A4  I10: every ROOMS_MST / LINEAR_CORRIDOR / CAVERN floor places exactly its planned N >= 2 specials, with no
+      duplicate type on a floor. Planned = placed on 100% of floors.
+  A5  I11: in each of the three combat generators' sweeps, every one of the 13 special types appears, and
+      each type's count is within +/-25% of that generator's per-type mean. In the depth-1-only slice, every
+      type appears at least once per generator.
+  A6  I12: regular rooms' max fill <= 0.12; special non-dense <= 0.22; no floor has more than 1 tight room;
+      tight rooms are <= 15% of all rooms in the pooled sweep.
+  A7  I13: 0 placed specials without their signature. I1 validator demotions <= 1 per 1000 floors per
+      generator (construction is right; the validator is a guard). I15: mean doors per combat floor >= 3.
+  A8  I14: connectivity-repair carves = 0 and clearPluggedPassages removals = 0 across the sweep.
+  A9  Code read: no per-tile prop chance remains anywhere in level/. LEVEL_GEN_PROP_CHANCE no longer exists
+      (BalanceConfig, BalanceSchema, LevelGenConstants). The deleted-constant list in TECHNICAL NOTES is gone.
+      No generator switches on a room type (R32). RetiredWallDressing no longer exists.
+  A10 Code read: no RoomBlueprint reads depth. No special has a weight, cap or depth gate. SpecialRoomPlanner
+      draws without replacement from the special pool using the floor-seed salt (R3).
+  A11 World.tryMakeMachineCandidate rejects door-clearance tiles. GroupBarrelPlacer rejects door-clearance and
+      lane-band tiles.
+  A12 Same seed + config builds the identical grid twice (LevelGeneratorSnapshotTest re-baselined once, at CP6,
+      with a dated note; RouteDeterminismTest green).
+  A13 `./gradlew build` and `./gradlew test` green, with C-ROOM, C-GENERATOR, R-SUPPLY, R-DENSITY and R-HAZARD
+      green. `./gradlew balanceSim` green with every S-band (incl. S-NAVIGATION, S-RELIC, S-TWIST) green.
+      GeneratorReachabilityTest passes UNCHANGED. Other existing tests pass, updated only where behaviour
+      legitimately changed (listed under TESTS).
+  A14 In the running game (run-game skill; seed:N, engage, lookat:d:INDEX:2), captures on one seeded floor of
+      each combat generator show:
+        - a door with a wall on each side and nothing solid beside it;
+        - a special room whose signature is visible from its door;
+        - a regular room crossable along its lane without touching a prop.
+      Captures go to the reviewer, not to the repo.
+  A15 Docs updated in the same checkpoints as the code (CP15 completes them): procedural-level-generation.txt
+      describes the new pipeline, rules and audit, with the HISTORICAL sections removed;
+      environment-tileset-system.txt RECIPE B covers the size window + kit, plus a new ADD A PROP KIT recipe;
+      CLAUDE.md's level / tileset notes and agent table are current.
+
+
+IMPLEMENTATION PLAN
+-------------------
+Spokes: `level-generation-engineer` (created at CP1) builds every level/ change. `java-architect` handles
+the non-level edits (world/World R27, route profiles R31, BalanceConfig/BalanceSchema deletion, tileset
+palette request). `math-expert` writes GameMath.specialRoomCountForFootprint. The orchestrator writes the
+agent file and docs itself or via the engineer. One generator per checkpoint, as the owner asked.
+
+  1. AGENT              (orchestrator)  CP1.
+  2. INSTRUMENT         (level-generation-engineer)  CP2: LevelQualityAudit on today's code + BEFORE
+                        baseline.
+  3. FOUNDATION         (level-generation-engineer; java-architect for World + GroupBarrelPlacer;
+                        math-expert for GameMath)
+                        CP3 doorways + router + clearance consumers.
+                        CP4 prop engine + kits + windows (additive, unwired).
+                        CP5 special planner + palette pinning (unwired).
+  4. GENERATORS         (level-generation-engineer), one each: CP6 ROOMS_MST, CP7 LINEAR, CP8 CAVERN,
+                        CP9 BOSS_ARENA, CP10 MED_BAY, CP11 EVENT_ROOM, CP12 GATE_AIRLOCK, CP13 START ROOM.
+                        Every one ends with: the audit shows 0 violations for THAT generator, plus the fast
+                        gate. CP6-CP8 add balanceSim.
+  5. TESTS              Balance-touching, NO new tests and no new test methods. It deletes one GRANDFATHERED
+                        BalanceConfig field and changes the floors the existing audits sweep. The existing
+                        R-SUPPLY / R-DENSITY / R-HAZARD / C-ROOM / C-GENERATOR rules and the S-bands are the
+                        gate, so BalanceAuditTest / BalanceSimTest need no extension. Both gates
+                        (`./gradlew test` + `./gradlew balanceSim`).
+                        Existing tests UPDATED because behaviour legitimately changed, never weakened:
+                          - LevelGeneratorSnapshotTest (re-baseline at CP6, dated note);
+                          - RoomBlueprintRegistryTest (size windows + equal pool replace the eligibility /
+                            weight-tier tests, CP7);
+                          - RoomBlueprintBuildDemandTest (demand = architecture + kit, CP6);
+                          - BossArenaGeneratorTest, TilesetExtensibilityAcceptanceTest,
+                            SymbolAllocatorTest, LevelPaletteWiringTest only if they fail for a legitimate
+                            behaviour reason (the hub records why).
+                        GeneratorReachabilityTest must pass UNCHANGED. The audit is a measuring instrument,
+                        not a test: no assertion, no Gradle task, no CI.
+  6. CLEANUP + GATES    CP14.
+  7. DOCS               CP15 (each code checkpoint also updates the doc lines it invalidates;
+                        CP15 completes and reconciles).
+  8. REVIEW             CP16 reviewer.
+
+RISKS AND UNKNOWNS
+  - SIZE. LevelGenerator 3376, LinearCorridorGenerator 2135 and CavernGenerator 1494 lines. Most of the
+    deletions are per-room prop helpers. If CP6 or CP7 runs past ~45 minutes, split it as CP6a (layout:
+    planner + placement + sockets + router + validator, with the OLD dressing still called) and CP6b
+    (dresser wired, old helpers deleted). Never hold two checkpoints uncommitted.
+  - Linear's build bridge uses LevelGenerator's per-room helpers. CP6 must re-point
+    LevelGenerator.buildRoomForBridge at the shared engine before deleting those helpers, or LINEAR breaks
+    between CP6 and CP7.
+  - First-contact distance on floor 1 with specials placed first. R6's entrance rule is the guard. The fast
+    gate shows it at CP6 (R-DENSITY / first contact).
+  - LINEAR d1 footprint (~350 walkable tiles) with two specials. Watch R-DENSITY at CP7; the precedence is in
+    EDGE CASES.
+  - A* routing can fail on dense windows. Edges with no route are skipped. MST connectivity must still
+    complete, which is why the router retries the next-nearest pair. The audit's I6 proves reachability.
+  - Cave shells forcing walls into a CA cave can sever regions (G3 bypass). I6 / I14 catch it.
+  - R-HAZARD and the barrel radius fallback (BALANCE NOTES a).
+  - CONFIRM EARLY (CP2): how often C6 meaning-drift actually happens (I16 BEFORE). The pin (R29) is cheap
+    either way.
+
+
+CHECKPOINTS
+-----------
+Seventeen checkpoints (CP0-CP16). This is above the normal 4-10 because the owner explicitly asked for ONE
+idea file with ONE checkpoint per generator (eight generators). Splitting into order files would break that
+request. Every checkpoint is one artifact, one dispatch, and leaves the build green.
+
+  CP   DONE WHEN - a state that can be CHECKED, never an action
+  ---  ---------------------------------------------------------------
+  CP0  .claude/checkpoints/level-generation-overhaul.md exists on the branch, committed and pushed.
+  CP1  .claude/agents/level-generation-engineer.md exists with the sections listed in TECHNICAL NOTES (THE
+       AUDIT section may say "command confirmed at CP2"). game-level-designer.md is deleted. CLAUDE.md's
+       agent table, orchestrator.md, commands/implement.md, run-game SKILL.md, docs/level-design-context.txt
+       and ideas/_TEMPLATE.txt name the new agent. A1's grep is clean. No Java changed.
+  CP2  level/LevelQualityAudit exists, runs headless on the UNCHANGED generators and writes
+       core/build/reports/level-audit/summary.txt. The BEFORE figures (I1-I16 per generator) are in the
+       checkpoint notes. The exact run command is in the agent file. `./gradlew build` + `./gradlew test`
+       green.
+  CP3  DoorSocket, DoorwayRules (with validate + isInDoorClearance) and CorridorRouter exist in level/,
+       headless. World.tryMakeMachineCandidate (R27) and GroupBarrelPlacer (R26) use the clearance zone /
+       lane rule. The new doorway/router constants are in LevelGenConstants. Generators are not yet wired.
+       `./gradlew test` green (R-HAZARD included; the barrel-radius fallback is applied here only if
+       R-HAZARD is red, with a CHANGELOG line).
+  CP4  PropAnchor, PropKit/PropKitRow, RoomSizeWindow, LayoutRoom and RoomDresser exist. Every RoomBlueprints
+       row carries its window + kit (+ relaxed kit) and the STANDARD row carries the five regular kits.
+       RoomBlueprint gains sizeWindow()/kit()/signatureSymbol() ADDITIVELY (old eligible/selectionWeight
+       still present and used). UNWIRED: no generator calls the dresser yet (CP6 wires it). Build + test
+       green.
+  CP5  SpecialRoomPlanner + GameMath.specialRoomCountForFootprint exist. The palette-request helper that adds
+       kit demands and the 'T'/'E' pins exists in tileset (R29). UNWIRED until CP6. Build + test green.
+  CP6  ROOMS_MST runs pipeline A end to end (G1).
+         - Deleted from LevelGenerator: placeRooms' random-first selection, assignRoomBlueprints /
+           selectBlueprint / ensureMinimumSpecialRooms, the L-corridor carver + placeDoors, every per-room
+           prop helper and the scatter, the LARGE modifier, its retired*Rolls.
+         - buildRoomForBridge is re-pointed at the shared engine, so LINEAR's delegated rooms already use it.
+         - symbolsStampedInIsolation is re-pointed (C-ROOM).
+         - LevelGeneratorSnapshotTest re-baselined with a dated note. RoomBlueprintBuildDemandTest updated.
+         - The audit shows A3-A8 = 0 / pass for ROOMS_MST.
+         - `./gradlew test` + `./gradlew balanceSim` green.
+  CP7  LINEAR_CORRIDOR runs pipeline A with G2.
+         - STORAGE_BAY / REACTOR, the build bridge, native prop passes, roulette and retired*Rolls are gone.
+         - RoomBlueprint.eligible/selectionWeight and every weight/chance/depth/cap constant are deleted
+           (their last reader is gone). RoomBlueprintRegistryTest is updated.
+         - BalanceConfig.LEVEL_GEN_PROP_CHANCE + its GRANDFATHERED entry are deleted (CHANGELOG line).
+         - The audit passes for LINEAR. Both gates green.
+  CP8  CAVERN runs G3: walled chambers with sockets, specials first from the planner, ChamberType typing gone,
+       cave formations/debris per G3, no per-tile prop or stalagmite roll, 'T' out of the cave body. The audit
+       passes for CAVERN. Both gates green.
+  CP9  BOSS_ARENA conforms to G4 (door rule, clearance, antechamber STAGING). The audit passes for it.
+       BossArenaGeneratorTest green. Fast gate green.
+  CP10 MED_BAY conforms to G5 (door socket into the ward, open alcove sockets, flush CLINIC kit). The audit
+       passes. Fast gate green.
+  CP11 EVENT_ROOM conforms to G6. The audit passes. Fast gate green.
+  CP12 GATE_AIRLOCK conforms to G7 ('B' is the threshold room's socket). The audit passes. Fast gate green.
+  CP13 StartGameLevelGenerator conforms to G8 (STAGING_ARMORY; offers and lanes clear). The audit's
+       start-room row passes. Fast gate green.
+  CP14 Whole-feature state:
+         - RetiredWallDressing and every remaining retired*Rolls are deleted;
+         - LevelGenConfig's scatter flags, enableLargeRooms and enableServerRooms are deleted, with
+           preferredRegularKit set by CacheProfile/EliteProfile (R31);
+         - every dead constant is gone (A9);
+         - the full audit passes A3-A8 across ALL generators, and the AFTER figures are recorded next to the
+           BEFORE baseline;
+         - both gates green;
+         - the A14 captures are taken.
+  CP15 Docs: procedural-level-generation.txt rewritten, environment-tileset-system.txt (RECIPE B + ADD A PROP
+       KIT), tile-symbols.txt T/#/P placement notes, route-map-system.txt special-floor notes,
+       game-balance-knowledge.txt + game-balance-authority.txt (K12 note, prop chance gone), and CLAUDE.md
+       (level key classes, recipes, agent table) all match the code. The agent file's invariant list matches
+       the final rules.
+  CP16 reviewer returns PASS (or PASS WITH FIXES applied). STATUS: IMPLEMENTED + date.
+
+CP4 and CP5 deliberately land unwired code; CP6 wires both. CP3's DoorwayRules is consumed at once by World
+and GroupBarrelPlacer, and by the generators from CP6 on.
+
+
+ASSUMPTIONS
+-----------
+  AS1  "Special rooms" = every registered blueprint other than entrance/standard: 13 today, including the
+       GENERIC salvage_bay and supply_cache, which the code already counts as special.
+  AS2  "Equal chance" = uniform draw without replacement per floor, so each type's probability of being on a
+       floor is N/13. No duplicate type on one floor.
+  AS3  "Every level must have special rooms" = at least 2 on every ROOMS_MST / LINEAR / CAVERN floor (R2), up
+       to 4 on large floors. The bespoke REST / EVENT / GATE floors and the start room ARE one special room
+       each. Adding an extra special to the REST clinic would break its "always safe and calm" read.
+  AS4  Special room count scales with footprint (2-4), not depth. Depth stays fully out of room choice.
+  AS5  Footprint targets, encounters, supply and first contact are balance contracts and stay exactly as
+       they are. "Resize rooms" is used for room SIZES (regular rooms 4x4..12x10, special windows), not for
+       floor size.
+  AS6  "Next to a door" includes diagonals: Chebyshev 1, plus 2 tiles straight out along the door's axis on
+       both sides.
+  AS7  Door leaves: special rooms always get a door. Other doorways keep the 75% door chance; the rest are
+       open 1-tile doorways in a wall, which satisfy "walls on both sides". Doorways wider than one tile no
+       longer exist on rooms. Wide halls taper to 1 tile at the socket.
+  AS8  The LARGE size modifier is removed. Grand spaces come from big specials and 3-wide halls.
+  AS9  LINEAR's local STORAGE_BAY and REACTOR are retired. supply_cache / salvage_bay (STORAGE family) and
+       power_plant / atmospheric_plant (MACHINERY family) cover them, and keeping them would mean an unequal,
+       unregistered sixth and seventh special source.
+  AS10 Cave chambers become proper walled rooms with doorways. An open, wall-less "chamber" cannot have a
+       door rule or a recognisable signature.
+  AS11 Regular rooms get one of five kits (OFFICE, STOREROOM, MAINTENANCE, AFTERMATH, BARE), uniformly.
+       Route profiles that used the deleted scatter flags express their intent as a preferred kit at double
+       weight (CACHE -> STOREROOM, ELITE -> AFTERMATH).
+  AS12 Terminals are allowed in offices, server rooms, labs, command, medical, containment and the bespoke
+       clinic / event / airlock floors. Every combat floor guarantees one, because the story's LOG_FOUND
+       beats depend on it.
+  AS13 One tight room per floor at most (the owner's "occasional"). Dense kits are server_room and
+       salvage_bay. A second dense special on the floor goes RELAXED.
+  AS14 Fill caps 0.12 / 0.22 / 0.40, lane band half-width 1 (a 3-wide clear lane in open rooms).
+  AS15 The entrance room is left clean (no props, no decals).
+  AS16 Kits use only existing symbols and sprites. Several room demands change accordingly (e.g. server_room
+       drops 'g'; medical_bay gains '&' and 'I'). symbolDemand() always equals what the room can stamp.
+  AS17 The R1 "2D game untouched" ledger from generated-wall-art order 2 is retired on purpose. This idea
+       changes the 2D game by design. The LevelFinisher's own stream keeps walls deterministic.
+  AS18 The audit is acceptable under the Testing Policy as a measuring instrument (like LadderReport and
+       RenderPerformanceProbe). It has no assertions, no Gradle task and no CI hook.
+  AS19 The new agent runs on opus, as the old level agent did, because generator design is judgement-heavy.
+       The orchestrator may still escalate or downgrade per its model-tiering rule.
+  AS20 Kit rows, counts and anchors in TECHNICAL NOTES are decided defaults. Tuning a kit row later is
+       short-lane work (one register row, no balance file).
+  AS21 Halls get no solid props except the existing 3-wide-hall columns. Walkable decals at 2% per hall
+       tile.
+  AS22 The research lab's alcove / field-wall architecture and the observatory rotunda are kept as
+       architecture. Only their prop placement moves to the engine (FEATURE anchors).
+  AS23 The barrel radius 2 -> 3 is the only balance number this work may move, and only if R-HAZARD goes red.
+  AS24 Landing order vs balance-overhaul-order-7: this can land at any time. The orchestrator should mention
+       to the owner that order-7's round-1 playtest is better taken on the new floors.
+
+
+DECISIONS
+---------
+  D1  Ask the owner anything before building?  ->  No. The owner pre-authorised every decision ("no
+      confirmations needed; free to resize rooms, change how levels are generated, rework every
+      generator"). All choices are recorded under ASSUMPTIONS for cheap objection.  (2026-10-23)
+  D2  One idea file or ordered parts?  ->  One file, 17 checkpoints, one per generator, as the owner asked.
+      RISKS gives the CPna/CPnb split rule for oversized checkpoints.  (2026-10-23)
+  D3  Is the old game-level-designer agent kept?  ->  Deleted. Its wall table, spawn list and prop list are
+      wrong today ('r' listed as a wall is the red keycard). Everything still true is carried into
+      level-generation-engineer.  (2026-10-23)
+  D4  How is quality verified without new tests?  ->  The dev-only LevelQualityAudit instrument, BEFORE and
+      AFTER figures, the existing suite and both balance gates, plus run-game captures.  (2026-10-23)
+
+
+OPEN QUESTIONS
+--------------
+None.
+
+
+RELATED
+-------
+  Ideas:  procedural-level-generation.txt, level-generation-improvements.txt,
+          second-level-generator-linear-corridor.txt (IMPLEMENTED; superseded in layout and dressing by this idea)
+          symbol-sprite-reuse-system-order-0..2 and the RECIPE B rooms (IMPLEMENTED; RoomBlueprint contract
+          revised here: window + kit replace eligibility + weight)
+          balance-overhaul-order-2.txt (IMPLEMENTED; footprint targets and the supply pipeline, kept as is),
+          balance-overhaul-order-4.txt (group barrels, R26), balance-overhaul-order-8.txt (K12 / K13, kept green)
+          generated-wall-art-order-2.txt (IMPLEMENTED; its R1 ledger retired here, the LevelFinisher kept);
+          generated-wall-art-order-3/4 (NOT IMPLEMENTED; art only, unaffected)
+          stellar-observatory-gravity-well-room.txt, gore-nest-corruption-room.txt,
+          atmospheric-processing-plant-room.txt, research_lab_room.txt (their rooms keep their architecture;
+          the depth gates and weights they introduced are removed on the owner's instruction)
+          balance-overhaul-order-7.txt (IN PROGRESS; see INTERACTIONS)
+          floor-twists.txt, relics-run-changing-artifacts.txt (door relics; BALANCE NOTES b)
+  Docs:   docs/procedural-level-generation.txt, docs/environment-tileset-system.txt, docs/tile-symbols.txt,
+          docs/route-map-system.txt, docs/game-balance-authority.txt (SECTION 5 K12/K13, R-SUPPLY, R-DENSITY,
+          R-HAZARD, S-NAVIGATION), docs/game-balance-knowledge.txt, docs/wall-art-creation-guide.txt (P4 door
+          frames), docs/level-design-context.txt, docs/story-ui-system.txt (LOG_FOUND terminals)
+  Agents: .claude/agents/game-level-designer.md (to be deleted at CP1),
+          .claude/agents/level-generation-engineer.md (created at CP1)
