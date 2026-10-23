@@ -73,7 +73,7 @@ into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
 - [x] **CP10** — DONE WHEN: MED_BAY conforms to G5; audit passes; fast gate green.
 - [x] **CP11** — DONE WHEN: EVENT_ROOM conforms to G6; audit passes; fast gate green.
 - [x] **CP12** — DONE WHEN: GATE_AIRLOCK conforms to G7; audit passes; fast gate green.
-- [ ] **CP13** — DONE WHEN: StartGameLevelGenerator conforms to G8; audit start-room row passes; fast gate green.
+- [x] **CP13** — DONE WHEN: StartGameLevelGenerator conforms to G8; audit start-room row passes; fast gate green.
 - [ ] **CP14** — DONE WHEN: RetiredWallDressing + retired rolls deleted; LevelGenConfig scatter flags /
       enableLargeRooms / enableServerRooms deleted, preferredRegularKit set by Cache/Elite profiles (R31); dead
       constants gone (A9); full audit A3-A8 across ALL generators, AFTER figures recorded beside BEFORE; both gates
@@ -262,3 +262,13 @@ into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
   NEXT (CP13): StartGameLevelGenerator per G8 — STAGING_ARMORY: 2 '=' flush on the north wall >= 2 either side of the
   portal column, 1-2 'L' flush on each side wall, 1 '#' in a corner; clear of the offer tiles and the lanes start ->
   portal and start -> every offer; four framing columns, size, portal, offers, start unchanged.
+- CP13 (START ROOM, G8): size, portal, offer rows, start tile and the four framing columns unchanged. STAGING_ARMORY
+  (fixed, no random draw): '=' flush on the north wall at portal +- START_ROOM_RACK_PORTAL_OFFSET (3; G8 asks >= 2),
+  two 'L' flush on each side wall at centerRow +- 1, one '#' in the south-east corner. Layout report: one sealed
+  REGULAR room "start_room" (kit "staging_armory"), its lane band REPORTED as start -> portal up the centre +-1 plus
+  start -> each offer row +-1 (no socket for the audit to compute one from), DoorwayRules.validate on the grid.
+  Audit 200 x 6: every counter 0 (fill 0.065). Fast gate green (only the baseline StoryBarkTest).
+  NEXT (CP14): delete RetiredWallDressing + every retired roll; delete LevelGenConfig scatter flags/weights,
+  enableLargeRooms, enableServerRooms; Cache/Elite profiles set preferredRegularKit ("storeroom" / "aftermath"),
+  remove the deleted flags from Mystery and the other profiles (R31); dead constants (A9); full audit AFTER vs the CP2
+  BEFORE across ALL generators; both gates; A14 captures via run-game.

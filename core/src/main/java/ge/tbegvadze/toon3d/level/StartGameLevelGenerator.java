@@ -14,6 +14,9 @@ import java.util.Collections;
  *   - Three weapon-offer tiles in a row at the room centre (one tile south of the portal).
  *   - 'p' player spawn at the south-centre of the interior, facing north toward the offers.
  *   - Four optional 'P' decorative columns framing the portal area.
+ *   - The STAGING_ARMORY dressing (level-generation-overhaul G8): two '=' racks flush on the north wall,
+ *     START_ROOM_RACK_PORTAL_OFFSET either side of the portal; two 'L' lockers flush on each side wall; one '#' in
+ *     the south-east corner — all clear of the offers and of the lanes to the portal and every offer.
  *
  * After generate() returns, call getWeaponTileColumn(index) / getWeaponTileRow(index)
  * to retrieve the tile coordinates where World should spawn the three GroundItems.
@@ -25,6 +28,13 @@ public class StartGameLevelGenerator implements ILevelGenerator {
     private static final int MELEE_ROW_OFFSET   = LevelGenConstants.START_ROOM_MELEE_ROW_OFFSET;
     private static final int INTERIOR_SIZE      = LevelGenConstants.START_ROOM_INTERIOR_SIZE;
     private static final int COLUMN_OFFSET      = LevelGenConstants.START_ROOM_COLUMN_OFFSET;
+
+    // STAGING_ARMORY props (docs/tile-symbols.txt) and the layout report's ids.
+    private static final char   WEAPON_RACK_TILE     = '=';
+    private static final char   LOCKER_TILE          = 'L';
+    private static final char   CRATE_TILE           = '#';
+    private static final String START_ROOM_ID        = "start_room";
+    private static final String STAGING_ARMORY_KIT_ID = "staging_armory";
 
     private final int[] weaponTileColumns = new int[OFFER_COUNT];
     private final int[] weaponTileRows    = new int[OFFER_COUNT];
@@ -111,8 +121,62 @@ public class StartGameLevelGenerator implements ILevelGenerator {
                                   roomLeft, roomBottom, outerSize);
         }
 
-        return new Level(matrix, Collections.emptyList(), Collections.emptyList(),
+        // The fixed STAGING_ARMORY dressing (level-generation-overhaul G8), every prop flush and clear of the offer
+        // tiles and of the lanes from the start to the portal and to every offer.
+        int interiorLeft  = roomLeft + 1;
+        int interiorRight = roomLeft + INTERIOR_SIZE;
+        int interiorBottom = roomBottom + 1;
+        int interiorTop   = roomBottom + INTERIOR_SIZE;
+        int rackOffset    = LevelGenConstants.START_ROOM_RACK_PORTAL_OFFSET;
+        matrix[interiorTop][portalColumn - rackOffset] = WEAPON_RACK_TILE;   // north wall, left of the portal
+        matrix[interiorTop][portalColumn + rackOffset] = WEAPON_RACK_TILE;   // north wall, right of the portal
+        for (int lockerRow : new int[]{ centerRow - 1, centerRow + 1 }) {
+            matrix[lockerRow][interiorLeft]  = LOCKER_TILE;                  // west wall
+            matrix[lockerRow][interiorRight] = LOCKER_TILE;                  // east wall
+        }
+        matrix[interiorBottom][interiorRight] = CRATE_TILE;                  // the south-east corner
+
+        Level level = new Level(matrix, Collections.emptyList(), Collections.emptyList(),
                          LevelFinisher.request(matrix, seed).basePalette(LevelPalettes.legacy()).finish());
+        level.attachLayoutReport(layoutReport(matrix, roomLeft, roomBottom, outerSize, startColumn, startRow,
+                portalColumn, portalRow));
+        return level;
+    }
+
+    /**
+     * The layout as the audit instrument reads it: the sealed staging room (no socket) and its lane band — the
+     * start tile's walk up the centre to the portal and across both offer rows, a tile either side.
+     */
+    private LevelLayoutReport layoutReport(char[][] matrix, int roomLeft, int roomBottom, int outerSize,
+                                           int startColumn, int startRow, int portalColumn, int portalRow) {
+        LayoutRoom room = new LayoutRoom(roomLeft, roomBottom, roomLeft + outerSize - 1, roomBottom + outerSize - 1,
+                LevelLayoutReport.Role.REGULAR, START_ROOM_ID);
+        java.util.List<int[]> lane = new java.util.ArrayList<>();
+        for (int tileRow = startRow; tileRow <= portalRow; tileRow++) {
+            for (int tileColumn = portalColumn - 1; tileColumn <= portalColumn + 1; tileColumn++) {
+                lane.add(new int[]{ tileColumn, tileRow });
+            }
+        }
+        for (int[] offer : offerTiles()) {
+            int fromColumn = Math.min(startColumn, offer[0]), toColumn = Math.max(startColumn, offer[0]);
+            for (int tileColumn = fromColumn - 1; tileColumn <= toColumn + 1; tileColumn++) {
+                for (int tileRow = offer[1] - 1; tileRow <= offer[1] + 1; tileRow++) lane.add(new int[]{ tileColumn, tileRow });
+            }
+        }
+        room.recordDressing(STAGING_ARMORY_KIT_ID, false, lane);
+        java.util.List<LayoutRoom> rooms = java.util.Collections.singletonList(room);
+        return LayoutSupport.report(rooms, null, 0, DoorwayRules.validate(matrix, rooms));
+    }
+
+    private java.util.List<int[]> offerTiles() {
+        java.util.List<int[]> tiles = new java.util.ArrayList<>();
+        for (int offerIndex = 0; offerIndex < OFFER_COUNT; offerIndex++) {
+            tiles.add(new int[]{ weaponTileColumns[offerIndex], weaponTileRows[offerIndex] });
+        }
+        for (int offerIndex = 0; offerIndex < MELEE_OFFER_COUNT; offerIndex++) {
+            tiles.add(new int[]{ meleeTileColumns[offerIndex], meleeTileRows[offerIndex] });
+        }
+        return tiles;
     }
 
     /** Returns the tile column for the weapon offer at the given index (0 to OFFER_COUNT-1). */

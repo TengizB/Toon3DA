@@ -359,6 +359,9 @@ public final class LevelGenConstants {
     public static final boolean START_ROOM_USE_COLUMNS          = true;
     // Tile distance from the room centre at which the four framing columns are placed.
     public static final int     START_ROOM_COLUMN_OFFSET        = 4;
+    // STAGING_ARMORY (level-generation-overhaul G8): the two north-wall weapon racks sit this many columns either side
+    // of the portal (G8 asks for >= 2).
+    public static final int     START_ROOM_RACK_PORTAL_OFFSET   = 3;
 
     // -------------------------------------------------------------------------
     // CAVERN generator (generator 3) — cellular automata constants
