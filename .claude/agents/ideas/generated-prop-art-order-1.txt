@@ -1,0 +1,156 @@
+STATUS: IN PROGRESS
+CATEGORY: Visual
+TITLE: Generated props 1 - terminal, specimen tube, exit portal
+CREATED: 2026-10-23
+IMPLEMENTED: -
+---
+
+Order 1 of the generated-prop-art series. Read generated-prop-art.txt (the master: the owner's brief, PS1-PS8,
+D1-D3) first; this file does not repeat it. Written by the main thread with the owner, who approved the scope
+in the same message ("write an idea and start implementation").
+
+
+OVERVIEW
+--------
+Three environment objects, chosen by the owner, are rebuilt with the kit and animated: the COMPUTER TERMINAL
+('T', the story's LOG terminal), the BIO-POD ('&' / sprite prop_biopod, which becomes a floor-to-ceiling
+SPECIMEN TUBE) and the EXIT PORTAL ('>'). Because they are the first props, this order also builds what every
+later prop order reuses: the prop bake in the kit (props.py), the neon materials, the prop sheet format and
+the PropRenderer path that draws an animated, glowing generated prop.
+
+
+SCOPE
+-----
+IN
+  - props.py in .claude/skills/enemy-art: the prop canvas, the smooth bake, the neon bloom, the frame grid
+    packer, the manifest, previews (contact sheet + one GIF per prop).
+  - New EMISSIVE kit materials appended last: phosphor (CRT green), neon_cyan, rad (radioactive lime),
+    neon_violet, and the translucent glass_cyan (glass over neon_cyan light). Enemies + walls regenerate
+    byte-identical (checked with cmp).
+  - Three prop sheets: terminal, bio_pod, portal (assets/textures/props/generated/).
+  - render/propvisual (new subpackage, documented in CLAUDE.md): GeneratedPropSheet (one loaded sheet,
+    Disposable), GeneratedPropRegistry (the register() rows), GeneratedPropSheets (the per-level owner).
+  - PropRenderer: a registered prop draws its CURRENT FRAME from its sheet (per-tile phase so two tubes never
+    pulse in lockstep) and then its GLOW frame ungraded on top, distance-faded like the wall glow.
+  - Heights: the bio-pod is full height (floor to ceiling), the portal full height, the terminal 0.80.
+  - The three old Pixmap generators (terminal, bio-pod, portal) and their texture registrations are deleted.
+  - Docs: sprite-art-creation-guide section 14 (PROPS), SKILL.md, tile-symbols.txt rows, environment-tileset-
+    system.txt note, art-direction.txt (emissive exemption + D1), CLAUDE.md package row.
+
+OUT
+  - Every other prop (later orders, by the owner). The specimen tank 'I', the holo-workstation the auto-doc
+    and the EVENT console borrow - unchanged.
+  - Region-specific variants (D3).
+  - Any gameplay change: placement, solidity, LOG_FOUND, the portal's exit behaviour, symbols (V4).
+  - A runtime light cast by a prop onto the walls/floor (would need a lighting system; the bloom is baked).
+  - Interaction animation (a terminal reacting when read) - the loops are ambient.
+
+
+RULES
+-----
+  R1  A registered prop is drawn ONLY from its sheet; the per-level EnvironmentTextureSet / fixed texture map
+      no longer carries a picture for it.
+  R2  Frame index = floor((time + phase) / frameSeconds) mod frameCount, phase from the tile (GameMath), so
+      neighbouring copies desynchronise. No allocation per frame.
+  R3  Body pass = the existing prop pass unchanged (shade x tile brightness x mood grade, muzzle light,
+      occluder record, contact shadow), sampling the frame's rect. The portal body stays ungraded (it was
+      emissive before - art-direction section 5).
+  R4  Glow pass = the frame's glow rect, NORMAL blend, colour white (ungraded, unshaded), alpha =
+      GameMath.wallGlowDistanceAlpha(...) x the floor's light multiplier (BLACKOUT dims it) - the wall glow
+      rule, so walls and props glow alike. Same wall z-test and nearer-sprite test as the body.
+  R5  A sheet that fails to load is logged and the prop is skipped (not drawn) - never a crash.
+  R6  Everything loaded is disposed with the PropRenderer (one owner).
+
+
+VISUAL DESIGN
+-------------
+Common: smooth bake, the kit's light rig (key upper-left, cyan rim), cold steel + lab-white bodies
+(gunmetal, darkmetal, livery, steel_lt, frost), neon only on emissive parts, a soft bloom halo around the neon
+baked into the glow sheet. Each prop carries one Organization stencil (serial).
+
+COMPUTER TERMINAL ('T', 0.80 wall height, canvas 160 x 200, 16 frames @ 8 fps, loops)
+  A free-standing Organization console. A heavy darkmetal pedestal with a lab-white (livery) front panel
+  and a stencilled serial, a sloped keyboard deck, and on top a deep steel CRT housing angled at the viewer.
+  - SCREEN: black glass with a text IMITATION in bright PHOSPHOR GREEN - lines of pseudo-glyphs (seeded 3x5
+    glyph blocks, varying line lengths, a header bar), faint scanlines, scrolling up one line every two
+    frames, a block cursor blinking on the last line.
+  - BUTTONS: a row of backlit keys on the deck, a few lit neon_cyan and rad lime.
+  - LAMPS: three indicator lamps on the housing (phosphor green steady, neon_cyan, rad lime blinking).
+  Animated: screen scroll + cursor + lamp blink. Nothing else moves.
+
+SPECIMEN TUBE / BIO-POD ('&' sprite prop_biopod, FULL wall height - floor to ceiling, canvas 112 x 256,
+24 frames @ 8 fps, loops)
+  A floor-to-ceiling containment cylinder. A steel plinth on the floor (vents, a stencil, a rad lime hazard
+  ring light), a tall glass tube of glowing NEON CYAN fluid, a steel collar and conduits running up INTO the
+  ceiling (the top row of the canvas is the ceiling line).
+  - SPECIMEN: a curled grown creature (no human face - series rule from the undead) hanging on a feeding
+    line, flesh tinted by the cyan light, slowly drifting up and down and turning a little, tendrils trailing.
+  - BUBBLES rise through the fluid (seeded columns, wrapping), the fluid glow breathes, the ring light pulses.
+  - Glass: vertical sheen streaks over the fluid; bands of steel and neon_cyan ring lights at both ends.
+
+EXIT PORTAL ('>', FULL wall height, canvas 224 x 256, 16 frames @ 12 fps, loops)
+  A transit ring-gate: a heavy steel torus standing in a floor cradle, clamped to the ceiling, its rim set
+  with rad lime emitter lamps; inside the ring a NEON VIOLET vortex - spiral arms turning, a white-hot core,
+  sparks - spilling a violet bloom past the rim. Hazard chevrons on the cradle.
+  Animated: the vortex turns (seamless loop), the rim lamps chase.
+
+
+TECHNICAL NOTES
+---------------
+  - Kit: props.py (beside walls.py) imports kit; one function per prop returns its frames
+    [(body RGBA, glow RGBA)]; write_prop() packs them into the frame grid and writes the three files.
+    Screen text and the vortex are painted into the rendered frame (body + glow) by numpy after the kit
+    render, like kit.stencil - generated in code, seeded.
+  - Manifest <id>.prop.json: {"version":1,"id","frameWidth","frameHeight","frameCount","columns",
+    "frameSeconds"}. Frame k sits at column k % columns, row k / columns.
+  - render/propvisual: GeneratedPropRegistry.bootstrap() rows: spriteId "prop_terminal" -> "terminal",
+    "prop_biopod" -> "bio_pod", fixed char '>' -> "portal". GeneratedPropSheets loads the registered sheets
+    once per PropRenderer and answers sheetForSprite(id) / sheetForChar(c). GeneratedPropSheet holds the two
+    textures (Nearest), the manifest numbers and a per-frame ColumnOpacity for the occluder record.
+  - PropRenderer.render: before resolving a texture, ask the sheets; when a sheet answers, the column loop
+    samples (frameX + column, frameY + row) of the sheet; aspect = frameWidth / frameHeight.
+  - Constants (RenderConstants): PROP_SHEET_DIRECTORY, PROP_HEIGHT_TERMINAL 0.80, PROP_BIOPOD_HEIGHT 1.0,
+    PROP_GLOW_* reuse WALL_GLOW_FADE_* (one rule). GameMath: propFrameIndex(time, phase, frameSeconds, count).
+  - Deleted: PropRenderer.generateTerminalTexture / generateBioPodTexture / generatePortalTexture and their
+    TextureGeneratorRegistry rows; the '>' entry of the fixed texture map.
+
+
+BALANCE NOTES
+-------------
+None. Not balance-bearing (V7): no number in BalanceConfig / BalanceSchema / GameBalance / sim moves.
+
+
+ACCEPTANCE CRITERIA
+-------------------
+  A1  python3 props.py <dir> writes terminal/bio_pod/portal .prop.png/.glow.png/.prop.json, deterministically
+      (two runs -> cmp-identical); enemies and walls regenerate byte-identical after the kit change.
+  A2  In game the terminal, bio-pod and portal show the new art, animated, with ungraded neon glow; no old
+      picture of them remains in the code.
+  A3  The bio-pod and the portal span floor to ceiling; the terminal is 0.80 high.
+  A4  ./gradlew build green (run-game mirror build in the container); no allocation in the new render path;
+      every new Texture disposed.
+  A5  Docs updated (guide section 14, SKILL.md, tile-symbols, art-direction, tileset doc, CLAUDE.md).
+  A6  The owner has seen the previews and in-engine screenshots and approved (DECISIONS).
+
+
+CHECKPOINTS
+-----------
+  CP0  checkpoint file committed.
+  CP1  kit: neon materials + props.py + the three sheets baked; previews sent to the owner.
+  CP2  runtime: render/propvisual + PropRenderer path + constants; old generators deleted; build green.
+  CP3  in-engine screenshots (two moods) sent to the owner.
+  CP4  docs.
+  CP5  owner approval -> STATUS IMPLEMENTED.
+
+
+DECISIONS
+---------
+  (owner, 2026-10-23) Scope = terminal, bio-pod (specimen tube), portal. Neon accents per the brief (master D1).
+  (default) The terminal keeps a modest height (0.80): a console a player reads standing, not a wall.
+  (default) Portal colour = neon violet (distinct from the cyan tube and the green screen, and from every
+    keycard ink); rim lamps rad lime.
+
+
+OPEN QUESTIONS
+--------------
+  (none)
