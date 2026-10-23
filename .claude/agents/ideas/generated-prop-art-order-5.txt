@@ -1,0 +1,119 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Visual
+TITLE: Generated props 5 - security camera from the ceiling
+CREATED: 2026-10-23
+IMPLEMENTED: -
+---
+
+Order 5 of the generated-prop-art series. Read generated-prop-art.txt (the brief, PS1-PS8, D1-D4) and
+docs/sprite-art-creation-guide.txt section 14 (the prop method: props.py, the smooth bake, neon inks, bloom,
+prop sheets, render/propvisual) first; this file does not repeat them. Requested by the owner 2026-10-23:
+"rework security camera. Make it not stand on the floor but come down from ceiling."
+
+
+OVERVIEW
+--------
+The security camera ('#', sprite prop_camera; GENERATED placement: one or two per security / command / research
+room kit, at a CORNER or on the ENTRY_WALL, flush - see RoomBlueprints) today is a box standing on the floor,
+which no camera does. It becomes the Organization's eye HANGING FROM THE CEILING: a mount in the ceiling, an
+arm, and a camera head that slowly pans the room with a blinking recording lamp. It is the first CEILING-MOUNTED
+prop, so this order also adds the one small runtime idea that needs: a prop that hangs casts no floor shadow.
+
+
+SCOPE
+-----
+IN
+  - make_camera() in props.py + its PROPS row; the sheet camera.prop.png / .glow.png / .prop.json.
+  - GeneratedPropRegistry: a CEILING-MOUNTED registration (e.g. registerCeilingSprite("prop_camera", "camera"))
+    and a query (isCeilingMounted) - data, not a switch; the next hanging prop (lamps, cable bundles) is one row.
+  - PropRenderer: a ceiling-mounted sheet gets NO contact shadow (both the main and the dynamic pass). Nothing
+    else in the draw changes: the frame is a full-height billboard whose lower part is transparent.
+  - RenderConstants.PROP_CAMERA_HEIGHT 0.80 -> 1.00 (the billboard spans floor to ceiling so its top row is the
+    ceiling line; only the top part is painted).
+  - Delete PropRenderer.generateCameraTexture and its TextureGeneratorRegistry row (PS6).
+  - Docs: guide 14 (ceiling-mounted props: the canvas rule + the registry flag; 14.7 entry), tile-symbols '#',
+    CLAUDE.md propvisual row, enemy-art SKILL.md.
+OUT
+  - Gameplay: the '#' tile stays SOLID and keeps its placement and every rule (V4). It sits flush to a wall or in
+    a corner, so the blocked floor tile under it is not a pathing problem. Making hanging props walkable is a
+    gameplay change for a later, separate request.
+  - No camera behaviour (detection, alarms, tracking the player) - the pan is a cosmetic loop.
+  - Other ceiling things (lamps, ducts) - later orders, which reuse this order's flag.
+
+
+RULES
+-----
+  R1  A ceiling-mounted prop's canvas is FULL HEIGHT (height 1.0): its top row is the ceiling line, the object is
+      painted in the top part, everything below it is fully transparent (so the per-frame opaque-column masks keep
+      it out of the occluder record below the camera, and enemies behind it are not cut).
+  R2  isCeilingMounted(sheet) -> contact shadow fraction 0, in BOTH prop passes. Body / glow / muzzle passes are
+      unchanged.
+  R3  The camera head must stay readable at 3-4 tiles: a clear dark silhouette against the ceiling and one
+      bright lamp.
+
+
+VISUAL DESIGN
+-------------
+SECURITY CAMERA ('#', full height 1.0, canvas 128 x 256, 24 frames @ 0.1 s, loops; painted in rows 0-~110)
+  Cold steel with a hot accent - the Organization's eye:
+  - MOUNT: a gunmetal ceiling plate flush with the top row (rivets), a cable loop running back up into the
+    ceiling, a short darkmetal drop arm with a clamp collar ending in a pivot yoke.
+  - HEAD: an angled camera housing hanging from the yoke - livery_dk shroud with a sun hood over the lens, a
+    stencilled serial (SEC-02). The lens: dark glass, a NEON CYAN iris ring, a small white glint.
+  - REC LAMP: a HOT IRON (master D4) recording lamp on the housing, blinking.
+  - PAN: the head pans slowly left and right over the loop (the housing foreshortens and the lens slides across
+    it, then back - seamless), the yoke turning with it; the arm and plate stay still.
+  - SCAN (subtle): a faint neon cyan cone of light fanning down from the lens and sweeping with the pan, GLOW
+    sheet only, low alpha (cap ~0.25) so it reads as "being watched" without covering the room. Drop it if it
+    reads as a beam weapon.
+  Static parts = one kit render; the head is re-rendered per pan pose (cache identical poses); lamp, glint and
+  scan painted per frame.
+
+
+TECHNICAL NOTES
+---------------
+  - props.py: make_camera(); the mount + arm are a cached kit render, the head a kit render per pan pose (a pose
+    parameter: yaw in -1..1 -> housing width scale, lens offset, yoke turn). Seamless: yaw = sin(2*pi*k/frames).
+  - render/propvisual/GeneratedPropRegistry: a Set<String> of ceiling sheets beside the existing maps,
+    filled by registerCeilingSprite; GeneratedPropSheet or GeneratedPropSheets exposes isCeilingMounted(sheet).
+  - PropRenderer: in both passes, if sheet != null && ceiling-mounted -> skip drawContactShadow.
+  - TilesetGfxBootstrap / TextureGeneratorRegistryTest need no edit (expectedGeneratorIds already drops every
+    migrated sprite).
+
+
+BALANCE NOTES
+-------------
+None. Not balance-bearing (V7).
+
+
+ACCEPTANCE CRITERIA
+-------------------
+  A1  props.py bakes camera deterministically; every earlier prop sheet re-bakes byte-identical.
+  A2  In game the camera hangs from the ceiling (no part on the floor, no floor shadow), pans, its lamp blinks,
+      its glow is ungraded; no old camera picture remains in code.
+  A3  An enemy standing behind the camera's tile is not cut below the camera (R1).
+  A4  Build green (the known StoryBarkTest failure aside); no new tests.
+  A5  Docs updated.  A6  Owner approval (PS7) written into DECISIONS.
+
+
+CHECKPOINTS
+-----------
+  CP0  checkpoint file .claude/checkpoints/generated-prop-art-order-5.md committed.
+  CP1  camera baked + previews (still + GIF) sent; earlier sheets unchanged.
+  CP2  ceiling-mounted registry flag + no contact shadow + registry row + height 1.0 + old generator deleted;
+       build green.
+  CP3  in-engine screenshots (run-game: a floor with '#', lookat:#:0:2 and :3, plus one other mood, plus an enemy
+       spawned behind it for A3) sent; docs.
+  CP4  owner approval -> STATUS IMPLEMENTED.
+
+
+DECISIONS
+---------
+  (owner, 2026-10-23) The camera hangs from the ceiling instead of standing on the floor.
+  (default) The '#' tile stays solid (V4: no gameplay change in an art series).
+  (default) Accents: neon cyan lens + hot-iron REC lamp; the scan cone is subtle and glow-only.
+
+
+OPEN QUESTIONS
+--------------
+  (none)
