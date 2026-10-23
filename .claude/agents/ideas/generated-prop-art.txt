@@ -79,3 +79,4 @@ OWNER DECISIONS (series-wide)
 ORDERS
 ------
   order 1  generated-prop-art-order-1.txt  the kit's prop bake + the runtime + terminal, bio-pod, portal
+  order 2  generated-prop-art-order-2.txt  the AI core node ('J') as the floor-to-ceiling pattern archive
