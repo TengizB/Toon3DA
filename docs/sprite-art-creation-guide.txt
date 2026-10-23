@@ -767,7 +767,6 @@ is .claude/agents/ideas/generated-prop-art.txt (+ -order-<n>); its brief and rul
   phosphor     CRT green: terminal text and status lamps
   neon_cyan    specimen fluid, ring lights, backlit keys (brighter and more saturated than the facility cyan)
   rad          radioactive lime: hazard lamps, warning strips, emitter studs
-  neon_violet  the exit portal's energy
   Big glowing areas (a fluid column, a vortex, a screen's text) are PAINTED with numpy into the frame after the
   kit render, from these inks' ramps - the kit's translucent materials wash out to a pale tint at that size.
 
@@ -826,9 +825,12 @@ is .claude/agents/ideas/generated-prop-art.txt (+ -order-<n>); its brief and rul
             hunched faceless grown specimen on a feeding line plugged into a harvest port on its back (the story
             detail), backlit to a dark teal silhouette, bubbles rising in whole laps, two glass highlights, a
             steel plinth with a rad hazard strip. 24 frames @ 0.125 s.
-  portal    a transit ring-gate clamped to the ceiling and standing in a floor cradle; twelve rad emitter lamps
-            chase round the rim; inside, a painted neon_violet log-spiral vortex turning by one arm spacing per
-            loop, a white-hot core, orbiting sparks, a bright lip at the ring. 16 frames @ 1/12 s.
+  portal    (recreated at the owner's request: rectangular, walk-in, cyan) a gate on a raised steel platform: two
+            steel pillars, a header beam into the ceiling with chasing cyan emitter lamps, a person-sized doorway
+            outlined by neon_cyan strips and filled with a painted cyan field of rectangles receding to a bright
+            vanishing core at eye height (they slide inward one spacing per loop), a hot rim, motes rising, its
+            light pooling on the platform. The owner rejected a round ring-gate: an exit must read as a DOOR. 16
+            frames @ 1/12 s. [first design, removed: a ring with a violet vortex]
 
 ADD A PROP
   [ ] brief from the master (14.1): what it IS, its cold body materials, its one or two neon accents, still or

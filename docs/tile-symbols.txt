@@ -95,7 +95,8 @@ P   Cylindrical column  Solid. Rendered as 3D cylinder (ray-circle intersection)
                         four-pillars / avenue / altar), spaced columns on 3-wide hall spines, cave FORMATIONS
                         (clusters of 1-3 in open ground), the start room's four framing columns — never in a door
                         clearance zone, never plugging a passage.
->   Portal / exit       Level exit. Full-height transit ring-gate with a turning neon violet vortex, GENERATED + ANIMATED
+>   Portal / exit       Level exit. Full-height walk-in gate on a steel platform, its doorway a cyan field receding to a
+                        bright core, GENERATED + ANIMATED
                         (generated-prop-art order 1). Exactly one per generated level.
 
 SOLID PROPS (block player movement; rendered as billboard sprites)

@@ -25,7 +25,7 @@ IN
   - props.py in .claude/skills/enemy-art: the prop canvas, the smooth bake, the neon bloom, the frame grid
     packer, the manifest, previews (contact sheet + one GIF per prop).
   - New EMISSIVE kit materials appended last: phosphor (CRT green), neon_cyan, rad (radioactive lime),
-    neon_violet. Enemies + walls regenerate byte-identical (checked with cmp).
+    (neon_violet was added for the first portal and removed with it). Enemies + walls regenerate byte-identical.
   - Three prop sheets: terminal, bio_pod, portal (assets/textures/props/generated/).
   - render/propvisual (new subpackage, documented in CLAUDE.md): GeneratedPropSheet (one loaded sheet,
     Disposable), GeneratedPropRegistry (the register() rows), GeneratedPropSheets (the per-level owner).
@@ -88,10 +88,15 @@ SPECIMEN TUBE / BIO-POD ('&' sprite prop_biopod, FULL wall height - floor to cei
   - Glass: vertical sheen streaks over the fluid; bands of steel and neon_cyan ring lights at both ends.
 
 EXIT PORTAL ('>', FULL wall height, canvas 224 x 256, 16 frames @ 12 fps, loops)
-  A transit ring-gate: a heavy steel torus standing in a floor cradle, clamped to the ceiling, its rim set
-  with rad lime emitter lamps; inside the ring a NEON VIOLET vortex - spiral arms turning, a white-hot core,
-  sparks - spilling a violet bloom past the rim. Hazard chevrons on the cradle.
-  Animated: the vortex turns (seamless loop), the rim lamps chase.
+  (REDESIGNED at the owner's request - see DECISIONS. The first design, a ring-gate with a violet vortex, is gone.)
+  A RECTANGULAR WALK-IN GATE, floor to ceiling: a raised STEEL PLATFORM (tread plates, a threshold groove, a
+  neon_cyan strip on its step), two heavy steel pillars with lab-grey inset panels, clamp bands and cyan status
+  lamps, and a header beam running up into the ceiling with an emitter housing whose cyan lamps chase. The
+  DOORWAY (104 x 178 px - person-sized against a 256 px wall) is outlined by neon_cyan light strips and filled
+  with a painted NEON CYAN field: rectangles of light receding to a bright vanishing core at eye height (a
+  corridor you could step into), a hot rim at the frame, faint vertical shimmer, motes rising. The field's light
+  pools on the platform in front. Stencil EXIT-0 on the header.
+  Animated: the receding rectangles slide inward (one spacing per loop), motes rise, strips pulse, lamps chase.
 
 
 TECHNICAL NOTES
@@ -146,8 +151,10 @@ DECISIONS
 ---------
   (owner, 2026-10-23) Scope = terminal, bio-pod (specimen tube), portal. Neon accents per the brief (master D1).
   (default) The terminal keeps a modest height (0.80): a console a player reads standing, not a wall.
-  (default) Portal colour = neon violet (distinct from the cyan tube and the green screen, and from every
-    keycard ink); rim lamps rad lime.
+  (owner, 2026-10-23) TERMINAL and SPECIMEN POD approved as shown ("look great").
+  (owner, 2026-10-23) PORTAL rejected and recreated: rectangular like a gate, shaped so a person could walk into
+    it, full height floor to ceiling, CYAN (not violet), a steel platform at the bottom. The first portal (ring +
+    violet vortex) and its neon_violet ink are deleted.
 
 
 OPEN QUESTIONS

@@ -133,8 +133,6 @@ MATERIALS = {
     "neon_cyan":   dict(ramp=ramp("003840", "00687a", "00a8c0", "1ae6ff", "8ef6ff", "effeff"), emissive=True),
     # rad: the radioactive lime of hazard lamps and warning strips
     "rad":         dict(ramp=ramp("263606", "4a6a0a", "80b014", "b8f020", "e2ff70", "faffdc"), emissive=True),
-    # neon_violet: the exit portal's energy
-    "neon_violet": dict(ramp=ramp("240634", "4a0c66", "8016b0", "b840ff", "e09cff", "fbeaff"), emissive=True),
 }
 
 # The wet sheen's glint colour: near-white with the slightest warmth (never pure white: the hit flash owns it).

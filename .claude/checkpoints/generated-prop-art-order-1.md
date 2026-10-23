@@ -44,7 +44,9 @@ same commit. Never `git add -A`.
       DONE WHEN: mirror build green; game draws the three props from their sheets.
 - [x] **CP3** — in-engine screenshots (default + one other mood) sent to the owner.
 - [x] **CP4** — docs (guide §14, SKILL.md, tile-symbols, art-direction, tileset doc, CLAUDE.md).
-- [ ] **CP5** — owner approval written into DECISIONS; STATUS IMPLEMENTED.
+- [x] **CP4a** — owner verdict 1: terminal + pod approved; portal recreated (rectangular walk-in cyan gate on a
+      steel platform), neon_violet removed, docs updated, screenshots sent.
+- [ ] **CP5** — owner approval of the recreated portal written into DECISIONS; STATUS IMPLEMENTED.
 
 ## NOTES CARRIED FORWARD
 

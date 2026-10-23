@@ -67,7 +67,7 @@ OWNER DECISIONS (series-wide)
 -----------------------------
   D1  (2026-10-23) Neon / radioactive accents are WANTED on props, as emissive accents only. This is the
       owner's exception to art-direction V5 for environment props: phosphor green on a terminal screen, a
-      neon cyan specimen fluid, a violet portal, lime "radioactive" lamps. V5 still holds for the HUD,
+      neon cyan specimen fluid, a cyan walk-in portal, lime "radioactive" lamps. V5 still holds for the HUD,
       telegraphs and combat effects, and no prop uses the exact keycard red / yellow / blue inks (those mean
       "this door's key").
   D2  (2026-10-23) Order 1 = computer terminal, bio-pod (the specimen tube), exit portal. Later orders are

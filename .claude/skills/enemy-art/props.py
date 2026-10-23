@@ -390,95 +390,109 @@ def make_pod():
 
 
 # ---------------------------------------------------------------------------------------------------
-# EXIT PORTAL ('>') - a transit ring-gate with a neon violet vortex, floor to ceiling
+# EXIT PORTAL ('>') - a rectangular walk-in gate, floor to ceiling, a cyan energy field on a steel platform
 # ---------------------------------------------------------------------------------------------------
 PORTAL_W, PORTAL_H = 224, 256
 PORTAL_FRAMES, PORTAL_FRAME_SECONDS = 16, 1.0 / 12
-PORTAL_C = (112, 122)
-PORTAL_R = 92                                # ring centre-line radius
-PORTAL_TUBE = 11                             # ring tube radius
-PORTAL_ARMS = 3
-LAMPS = 12
+PORTAL_PLATFORM_Y = 222                      # top of the steel platform the gate stands on
+PORTAL_OPENING = (60, 44, 164, PORTAL_PLATFORM_Y)   # x0, y0, x1, y1: the doorway a person walks into
+PORTAL_HEADER_LAMPS = 6
 
 
-def portal_ring(k):
-    cx, cy = PORTAL_C
-    pts = [(cx + PORTAL_R * math.cos(a), cy + PORTAL_R * math.sin(a))
-           for a in np.linspace(0, 2 * math.pi, 49)]
-    ring = [limb(p[0], p[1], q[0], q[1], PORTAL_TUBE, PORTAL_TUBE, "gunmetal", k=2) for p, q in zip(pts, pts[1:])]
-    plates = []
-    for i in range(8):                                                                # riveted segment clamps
-        a = 2 * math.pi * (i + 0.5) / 8
-        ca, sa = math.cos(a), math.sin(a)
-        p0 = (cx + (PORTAL_R - 14) * ca, cy + (PORTAL_R - 14) * sa)
-        p1 = (cx + (PORTAL_R + 14) * ca, cy + (PORTAL_R + 14) * sa)
-        plates.append(limb(p0[0], p0[1], p1[0], p1[1], 6.5, 6.5, "darkmetal", k=0))
-    lamps = []
-    for i in range(LAMPS):                                                            # chasing rad lamps
-        a = 2 * math.pi * i / LAMPS
-        g = 1.45 if (i - k) % 4 == 0 else 0.45
-        lamps.append(blob(cx + PORTAL_R * math.cos(a), cy + PORTAL_R * math.sin(a), 3.6, 3.6, "rad", glow=g))
-    clamp = [slab([(94, 0), (130, 0), (126, 22), (98, 22)], "darkmetal", bevel=4, slope=0.9),
-             slab(chamfer_rect(88, 18, 136, 30, 3), "gunmetal", bevel=4, slope=0.9)]
-    cradle = [slab([(52, 214), (172, 214), (196, 255), (28, 255)], "gunmetal", bevel=6, slope=0.9),
-              slab(chamfer_rect(70, 222, 154, 236, 3), "darkmetal", bevel=3, slope=0.9, op="carve")]
-    for i in range(7):                                                                # hazard chevrons (steel/livery)
-        x = 58 + i * 16
-        cradle.append(slab([(x, 240), (x + 8, 240), (x + 14, 250), (x + 6, 250)], "livery", bevel=1.5, op="add",
-                           depth=1.0))
-    cradle.append(slab(chamfer_rect(74, 226, 150, 232, 2), "neon_violet", bevel=1.5, op="add", depth=1.0, glow=1.1))
-    return [clamp, ring, plates, lamps, cradle]
+def portal_frame(k):
+    """The steel: platform, two pillars, the header beam into the ceiling, light strips round the doorway."""
+    x0, y0, x1, y1 = PORTAL_OPENING
+    edge = 1.15 + 0.25 * math.sin(2 * math.pi * k / PORTAL_FRAMES)
+    platform = [
+        slab([(4, PORTAL_PLATFORM_Y), (220, PORTAL_PLATFORM_Y), (222, 238), (2, 238)], "gunmetal", bevel=5, slope=0.9),
+        slab([(0, 236), (224, 236), (224, 255), (0, 255)], "darkmetal", bevel=4, slope=0.9),       # the step
+        slab(chamfer_rect(40, 240, 184, 244, 1), "neon_cyan", bevel=1.2, slope=0.9, op="add", depth=1.0, glow=1.2),
+        slab(chamfer_rect(x0 - 2, PORTAL_PLATFORM_Y + 2, x1 + 2, PORTAL_PLATFORM_Y + 7, 1), "darkmetal", bevel=1.5,
+             op="carve"),                                                                          # threshold groove
+    ]
+    for tx in range(10, 216, 14):                                                     # tread plates on the step
+        platform.append(slab([(tx, 247), (tx + 9, 247), (tx + 9, 252), (tx, 252)], "gunmetal", bevel=1.2, op="add",
+                             depth=1.0))
+    for rx in (12, 40, 184, 212):
+        platform.append(blob(rx, 229, 1.8, 1.8, "darkmetal", op="add"))
+    pillars = []
+    for px0, px1 in ((22, x0), (x1, 202)):
+        pillars += [
+            slab(chamfer_rect(px0, 0, px1, PORTAL_PLATFORM_Y + 2, 3), "gunmetal", bevel=6, slope=0.9),
+            slab(chamfer_rect(px0 + 7, 60, px1 - 7, 196, 3), "livery_dk", bevel=3, slope=0.9, op="add", depth=1.2),
+            limb((px0 + px1) / 2, 70, (px0 + px1) / 2, 186, 1.6, 1.6, "darkmetal", op="carve"),     # conduit slot
+        ]
+        for ry in (52, 104, 156, 204):                                                # clamp bands
+            pillars.append(slab(chamfer_rect(px0 - 3, ry, px1 + 3, ry + 7, 2), "darkmetal", bevel=2.5, slope=0.9))
+        for ry in (80, 130, 176):                                                     # status lamps
+            pillars.append(blob((px0 + px1) / 2, ry, 2.2, 2.2, "neon_cyan", op="add", glow=edge))
+    header = [
+        slab([(10, 0), (214, 0), (214, 30), (10, 30)], "gunmetal", bevel=6, slope=0.9),             # beam into ceiling
+        slab(chamfer_rect(x0 - 6, 28, x1 + 6, y0 + 2, 3), "darkmetal", bevel=4, slope=0.9),        # emitter housing
+        limb(40, 0, 40, 12, 4, 4, "darkmetal"), limb(184, 0, 184, 12, 4, 4, "darkmetal"),
+    ]
+    for i in range(PORTAL_HEADER_LAMPS):                                              # chasing emitter lamps
+        lx = x0 + 10 + i * (x1 - x0 - 20) / (PORTAL_HEADER_LAMPS - 1)
+        g = 1.5 if (i - k // 2) % 3 == 0 else 0.55
+        header.append(blob(lx, 37, 3.0, 2.4, "neon_cyan", op="add", glow=g))
+    strips = [                                                                         # light strips round the doorway
+        limb(x0 + 1.5, y0 + 2, x0 + 1.5, y1 - 2, 1.6, 1.6, "neon_cyan", glow=edge),
+        limb(x1 - 1.5, y0 + 2, x1 - 1.5, y1 - 2, 1.6, 1.6, "neon_cyan", glow=edge),
+        limb(x0 + 2, y0 + 1.5, x1 - 2, y0 + 1.5, 1.6, 1.6, "neon_cyan", glow=edge),
+    ]
+    return [header, pillars, platform, strips]
 
 
-def vortex(k, h, w):
-    """The energy inside the ring: arms of a log spiral turning by one arm spacing over the loop (seamless),
-    a white-hot core, a bright lip at the ring. -> (rgb, alpha, intensity)."""
-    cx, cy = PORTAL_C
-    yy, xx = np.mgrid[0:h, 0:w].astype(float) + 0.5
-    dx, dy = xx - cx, yy - cy
-    r = np.hypot(dx, dy); th = np.arctan2(dy, dx)
-    rmax = PORTAL_R - PORTAL_TUBE + 2
-    inside = np.clip(rmax - r, 0, 1)
-    phase = 2 * math.pi / PORTAL_ARMS * k / PORTAL_FRAMES
-    u = r / rmax
-    arms = 0.5 + 0.5 * np.cos(PORTAL_ARMS * (th + phase * PORTAL_ARMS / PORTAL_ARMS * 1.0) - 7.0 * np.log(u + 0.05))
-    arms2 = 0.5 + 0.5 * np.cos(2 * PORTAL_ARMS * (th - phase * 0.5) - 11.0 * np.log(u + 0.05) + 1.3)
-    inten = 0.18 + 0.55 * arms ** 2 * np.clip(1 - u, 0, 1) ** 0.4 + 0.18 * arms2 ** 3
-    inten += 1.1 * np.exp(-(u / 0.16) ** 2)                                           # the core
-    inten += 0.45 * np.exp(-((1 - u) / 0.08) ** 2)                                    # the lip at the ring
-    rnd = random.Random(77)
-    for i in range(18):                                                               # orbiting sparks
-        rr = rnd.uniform(0.25, 0.9) * rmax; a0 = rnd.uniform(0, 2 * math.pi)
-        a = a0 + 2 * math.pi * rnd.choice((1, 2)) * k / PORTAL_FRAMES
-        sx, sy = cx + rr * math.cos(a), cy + rr * math.sin(a)
-        inten += 0.9 * np.exp(-((xx - sx) ** 2 + (yy - sy) ** 2) / 2.2)
-    ramp = kit.MATERIALS["neon_violet"]["ramp"]
-    v = np.clip(inten, 0, 1.25) / 1.25 * (len(ramp) - 1)
-    lo = np.floor(v).astype(int); hi = np.minimum(lo + 1, len(ramp) - 1); f = (v - lo)[..., None]
+def portal_field(k):
+    """The doorway's energy, painted: a cyan field you could step into - rectangles of light receding to a bright
+    vanishing core (they slide inward by exactly one spacing per loop, so the loop is seamless), a hot rim at the
+    frame, faint vertical shimmer and motes rising. -> (rgb, alpha, intensity) on the portal canvas."""
+    x0, y0, x1, y1 = PORTAL_OPENING
+    yy, xx = np.mgrid[0:PORTAL_H, 0:PORTAL_W].astype(float) + 0.5
+    inside = ((xx >= x0) & (xx < x1) & (yy >= y0) & (yy < y1)).astype(float)
+    vx, vy = (x0 + x1) / 2, y0 + (y1 - y0) * 0.46                                   # vanishing point (eye height)
+    u = np.where(xx < vx, (vx - xx) / (vx - x0), (xx - vx) / (x1 - vx))
+    v = np.where(yy < vy, (vy - yy) / (vy - y0), (yy - vy) / (y1 - vy))
+    d = np.clip(np.maximum(u, v), 0, 1)                                                # 0 at the core, 1 at the frame
+    depth = np.log(d + 0.06)                                                           # perspective-ish spacing
+    phase = k / PORTAL_FRAMES
+    rings = np.cos(2 * math.pi * (depth * 2.2 + phase)) * 0.5 + 0.5
+    inten = 0.20 + 0.30 * rings ** 6 * (0.3 + 0.7 * d)
+    inten += 1.10 * np.exp(-(d / 0.20) ** 2)                                           # the bright core
+    inten += 0.55 * np.exp(-((1 - d) / 0.07) ** 2)                                     # hot rim at the frame
+    inten += 0.06 * np.sin(xx * 0.9 + 2 * math.pi * phase * 2) * (1 - d)              # vertical shimmer
+    rnd = random.Random(4103)
+    span = y1 - y0
+    for i in range(16):                                                                # motes rising through the field
+        mx = rnd.uniform(x0 + 6, x1 - 6); start = rnd.uniform(0, span); laps = rnd.choice((1, 1, 2))
+        my = y1 - ((start + span * laps * phase) % span)
+        inten += 0.8 * np.exp(-((xx - mx) ** 2 / 1.4 + (yy - my) ** 2 / 4.0))
+    ramp = kit.MATERIALS["neon_cyan"]["ramp"]
+    v_idx = np.clip(inten, 0, 1.3) / 1.3 * (len(ramp) - 1)
+    lo = np.floor(v_idx).astype(int); hi = np.minimum(lo + 1, len(ramp) - 1); f = (v_idx - lo)[..., None]
     rgb = ramp[lo] * (1 - f) + ramp[hi] * f
     return rgb, inside
 
 
 def make_portal():
-    cache = {}
-
     def frame(k):
-        key = k % 4
-        if key not in cache:
-            cache[key] = bake(portal_ring(key), PORTAL_W, PORTAL_H, seed=613)
-        ring_body, ring_glow = (a.copy() for a in cache[key])
-        rgb, inside = vortex(k, PORTAL_H, PORTAL_W)
+        steel, steel_glow = bake(portal_frame(k), PORTAL_W, PORTAL_H, seed=613)
+        rgb, inside = portal_field(k)
         body = np.zeros((PORTAL_H, PORTAL_W, 4)); glow = np.zeros((PORTAL_H, PORTAL_W, 4))
         body[..., :3] = rgb; body[..., 3] = inside * 255
         glow[..., :3] = rgb; glow[..., 3] = inside * 255
-        over(body, ring_body)
-        # the ring's metal covers the vortex's glow; the ring's own lamps glow on top
-        glow[..., 3] *= (1 - ring_body[..., 3] / 255.0)
-        over(glow, ring_glow)
+        # the field's light pools on the platform in front of the doorway (glow only: it never greys out)
+        x0, y0, x1, y1 = PORTAL_OPENING
+        yy, xx = np.mgrid[0:PORTAL_H, 0:PORTAL_W].astype(float)
+        pool = np.exp(-(((xx - (x0 + x1) / 2) / 62) ** 2) - (((yy - (y1 + 6)) / 7) ** 2)) * (yy >= y1)
+        over(body, steel)
+        glow[..., 3] *= (1 - steel[..., 3] / 255.0)
+        over(glow, steel_glow)
+        paint(body, glow, pool * 0.55, (120, 240, 255))
         img = finish(body)
-        kit.stencil(img, "GATE5", 102, 6, (150, 156, 164))
+        kit.stencil(img, "EXIT-0", 100, 14, (150, 156, 164))
         body = np.asarray(img, float).copy()
-        bloom(glow, 5, 1.5, cap=0.55)
+        bloom(glow, 5, 1.4, cap=0.5)
         return body, glow
 
     return Prop("portal", PORTAL_W, PORTAL_H, PORTAL_FRAMES, PORTAL_FRAME_SECONDS, frame)
