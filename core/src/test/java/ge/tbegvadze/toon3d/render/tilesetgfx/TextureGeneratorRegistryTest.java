@@ -33,10 +33,11 @@ class TextureGeneratorRegistryTest {
         TextureGeneratorRegistry generators = new TextureGeneratorRegistry();
         TilesetGfxBootstrap.register(generators);
 
-        // Every registered sprite has a generator and vice-versa — the startup assertion's contract.
-        assertEquals(TilesetRegistries.sprites().ids(), generators.ids());
+        // Every registered sprite has a generator and vice-versa — the startup assertion's contract — except
+        // the sprites drawn from a generated prop sheet (generated-prop-art order 1), which have none.
+        assertEquals(TilesetGfxBootstrap.expectedGeneratorIds(), generators.ids());
         assertDoesNotThrow(() -> TilesetGfxBootstrap.assertGeneratorsMatchCatalog(generators));
-        assertEquals(TilesetRegistries.sprites().size(), generators.size());
+        assertEquals(TilesetGfxBootstrap.expectedGeneratorIds().size(), generators.size());
     }
 
     @Test
@@ -44,7 +45,7 @@ class TextureGeneratorRegistryTest {
         assertDoesNotThrow(TilesetGfxBootstrap::bootstrap);
         assertDoesNotThrow(TilesetGfxBootstrap::bootstrap); // second call is a no-op, must not re-throw
         assertTrue(TilesetGfxBootstrap.isBootstrapped());
-        assertEquals(TilesetRegistries.sprites().ids(), TilesetGfxBootstrap.generators().ids());
+        assertEquals(TilesetGfxBootstrap.expectedGeneratorIds(), TilesetGfxBootstrap.generators().ids());
     }
 
     @Test

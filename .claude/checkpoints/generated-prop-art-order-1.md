@@ -40,7 +40,7 @@ same commit. Never `git add -A`.
 - [x] **CP0** — this file + the idea files committed and pushed.
 - [x] **CP1** — neon materials in kit.py, props.py, three sheets in assets/textures/props/generated/, previews sent.
       DONE WHEN: `python3 props.py <dir>` writes the 9 files twice cmp-identical; bestiary/effects/walls regenerate identical.
-- [ ] **CP2** — render/propvisual + PropRenderer sheet path + constants; old generators deleted.
+- [x] **CP2** — render/propvisual + PropRenderer sheet path + constants; old generators deleted.
       DONE WHEN: mirror build green; game draws the three props from their sheets.
 - [ ] **CP3** — in-engine screenshots (default + one other mood) sent to the owner.
 - [ ] **CP4** — docs (guide §14, SKILL.md, tile-symbols, art-direction, tileset doc, CLAUDE.md).
@@ -55,3 +55,7 @@ same commit. Never `git add -A`.
   Do NOT re-ship enemy atlases as part of this order.
 - Big glowing areas (fluid, vortex, screen text) are painted with numpy from the ink ramps; kit translucent
   materials washed out to pale at that size (tried glass_cyan, removed).
+- CP2: mirror build green except the known pre-existing StoryBarkTest failure (bark.depth.core.2, unrelated).
+  TextureGeneratorRegistryTest updated (behaviour changed legitimately): generator ids == expectedGeneratorIds()
+  = catalog minus GeneratedPropRegistry sprites. In-engine: lookat:T / lookat:& / lookat:> on seed 7 floor 1
+  (kill:0 x8 first - enemies stand in front of the terminal; LEAVE IT 644,100 for the relic offer).
