@@ -139,7 +139,7 @@ public final class EnemyConstants {
     public static final int     CRAWLER_MAX_HEALTH               = BalanceConfig.CRAWLER_MAX_HEALTH;
     public static final int     CRAWLER_ATTACK_DAMAGE            = BalanceConfig.CRAWLER_ATTACK_DAMAGE;
     public static final int     CRAWLER_MOVE_EVERY_N_TURNS       = BalanceConfig.CRAWLER_MOVE_EVERY_N_TURNS;
-    public static final float   CRAWLER_HEIGHT_MULTIPLIER        = 0.55f;
+    public static final float   CRAWLER_HEIGHT_MULTIPLIER        = 1.00f;
 
     // REVENANT — fast, hard-hitting undead soldier melee (spawn 'K')
     public static final int     REVENANT_MAX_HEALTH              = BalanceConfig.REVENANT_MAX_HEALTH;
