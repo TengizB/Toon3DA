@@ -79,4 +79,32 @@ public interface RoomBlueprint {
      * symbols to sprites at render time, so {@code build()} stays about layout.
      */
     void build(RoomBuildContext context);
+
+    // --- level-generation-overhaul: what a room IS (its size window) and how it is FURNISHED (its kit) ---
+
+    /** The interior size window a room of this blueprint is stamped within (R4); null = the regular window. */
+    default RoomSizeWindow sizeWindow() {
+        return null;
+    }
+
+    /** The prop kit the room is dressed from (R16; row 1 = SIGNATURE); null = no kit (entrance). */
+    default PropKit kit() {
+        return null;
+    }
+
+    /** A DENSE kit's RELAXED variant, used when the floor's tight-room budget is spent (R21); null = none. */
+    default PropKit relaxedKit() {
+        return null;
+    }
+
+    /** The regular-room kits a REGULAR room draws one of uniformly (R23); empty for every other blueprint. */
+    default java.util.List<PropKit> regularKits() {
+        return java.util.Collections.emptyList();
+    }
+
+    /** The symbol that must be on a placed room of this blueprint (its kit's signature), or null. */
+    default Character signatureSymbol() {
+        PropKit roomKit = kit();
+        return roomKit == null ? null : roomKit.signatureSymbol();
+    }
 }

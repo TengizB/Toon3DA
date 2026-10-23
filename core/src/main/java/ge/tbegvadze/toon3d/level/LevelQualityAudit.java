@@ -345,12 +345,10 @@ public final class LevelQualityAudit {
         if (anyTerminal && !"prop_terminal".equals(palette.spriteIdOf('T'))) tally.offSpriteTerminalFloors++;
     }
 
-    /**
-     * The SIGNATURE symbol of a blueprint (row 1 of its kit), or null when the blueprint declares none — the
-     * signature model arrives with the prop engine (CP4); until then nothing is checked.
-     */
+    /** The SIGNATURE symbol of a registered blueprint (row 1 of its kit), or null when it declares none. */
     private static Character signatureSymbolOf(String blueprintId) {
-        return null;
+        RoomBlueprintRegistry registry = RoomBlueprints.rooms();
+        return registry.contains(blueprintId) ? registry.get(blueprintId).signatureSymbol() : null;
     }
 
     // -------------------------------------------------------------------------

@@ -55,6 +55,85 @@ public final class LevelGenConstants {
     public static final float LEVEL_GEN_ROUTE_TIE_JITTER           = 0.001f;
     // A 3-wide hall narrows to 1 wide for this many tiles before a socket (R13).
     public static final int   LEVEL_GEN_WIDE_HALL_TAPER_TILES      = 2;
+
+    // --- THE PROP ENGINE (level-generation-overhaul R15-R22) ---
+    // The dresser's own stream: floor seed ^ this salt ^ the room's index mix, so dressing never shifts layout draws.
+    public static final long  ROOM_DRESSING_SEED_SALT              = 0x5EEDD8E55L;
+    // Lane band half-width around each socket->HUB lane (1 = a 3-wide clear lane); a DENSE room keeps 0.
+    public static final int   LEVEL_GEN_LANE_BAND_HALF_WIDTH       = 1;
+    // Solid fill caps per room (solids / open interior tiles, R21).
+    public static final float LEVEL_GEN_ROOM_FILL_CAP_REGULAR      = 0.12f;
+    public static final float LEVEL_GEN_ROOM_FILL_CAP_SPECIAL      = 0.22f;
+    public static final float LEVEL_GEN_ROOM_FILL_CAP_DENSE        = 0.40f;
+    // At most this many rooms per floor are dressed DENSE (TIGHT); a further dense special goes RELAXED.
+    public static final int   LEVEL_GEN_MAX_TIGHT_ROOMS_PER_FLOOR  = 1;
+    // A non-signature CENTRE row needs an interior at least this big on both axes; a signature one falls back
+    // to BACK_WALL below it (R17).
+    public static final int   LEVEL_GEN_CENTRE_ROW_MIN_INTERIOR    = 7;
+    // TRAIL decals: each lane tile from the HUB outward takes a decal at this chance until the count is met.
+    public static final float LEVEL_GEN_TRAIL_STEP_CHANCE          = 0.6f;
+    // Walkable decals in halls (corridor tiles outside every room), per hall tile (R28).
+    public static final float LEVEL_GEN_HALL_DECAL_CHANCE          = 0.02f;
+
+    // --- ROOM SIZE WINDOWS (level-generation-overhaul R4): interior W x H, min -> max; rotatable unless square.
+    // Every minimum fits the room's signature row with three sockets present.
+    public static final int LEVEL_GEN_SIZE_SERVER_ROOM_MIN_WIDTH          = 6;
+    public static final int LEVEL_GEN_SIZE_SERVER_ROOM_MIN_HEIGHT         = 5;
+    public static final int LEVEL_GEN_SIZE_SERVER_ROOM_MAX_WIDTH          = 10;
+    public static final int LEVEL_GEN_SIZE_SERVER_ROOM_MAX_HEIGHT         = 8;
+    public static final int LEVEL_GEN_SIZE_MEDICAL_BAY_MIN_WIDTH          = 7;
+    public static final int LEVEL_GEN_SIZE_MEDICAL_BAY_MIN_HEIGHT         = 5;
+    public static final int LEVEL_GEN_SIZE_MEDICAL_BAY_MAX_WIDTH          = 10;
+    public static final int LEVEL_GEN_SIZE_MEDICAL_BAY_MAX_HEIGHT         = 8;
+    public static final int LEVEL_GEN_SIZE_ARMORY_MIN_WIDTH               = 6;
+    public static final int LEVEL_GEN_SIZE_ARMORY_MIN_HEIGHT              = 5;
+    public static final int LEVEL_GEN_SIZE_ARMORY_MAX_WIDTH               = 9;
+    public static final int LEVEL_GEN_SIZE_ARMORY_MAX_HEIGHT              = 7;
+    public static final int LEVEL_GEN_SIZE_CRYO_CHAMBER_MIN_WIDTH         = 7;
+    public static final int LEVEL_GEN_SIZE_CRYO_CHAMBER_MIN_HEIGHT        = 6;
+    public static final int LEVEL_GEN_SIZE_CRYO_CHAMBER_MAX_WIDTH         = 11;
+    public static final int LEVEL_GEN_SIZE_CRYO_CHAMBER_MAX_HEIGHT        = 8;
+    public static final int LEVEL_GEN_SIZE_POWER_PLANT_MIN_WIDTH          = 8;
+    public static final int LEVEL_GEN_SIZE_POWER_PLANT_MIN_HEIGHT         = 8;
+    public static final int LEVEL_GEN_SIZE_POWER_PLANT_MAX_WIDTH          = 12;
+    public static final int LEVEL_GEN_SIZE_POWER_PLANT_MAX_HEIGHT         = 10;
+    public static final int LEVEL_GEN_SIZE_COMMAND_CENTER_MIN_WIDTH       = 8;
+    public static final int LEVEL_GEN_SIZE_COMMAND_CENTER_MIN_HEIGHT      = 6;
+    public static final int LEVEL_GEN_SIZE_COMMAND_CENTER_MAX_WIDTH       = 12;
+    public static final int LEVEL_GEN_SIZE_COMMAND_CENTER_MAX_HEIGHT      = 9;
+    public static final int LEVEL_GEN_SIZE_CONTAINMENT_BLOCK_MIN_WIDTH    = 8;
+    public static final int LEVEL_GEN_SIZE_CONTAINMENT_BLOCK_MIN_HEIGHT   = 6;
+    public static final int LEVEL_GEN_SIZE_CONTAINMENT_BLOCK_MAX_WIDTH    = 12;
+    public static final int LEVEL_GEN_SIZE_CONTAINMENT_BLOCK_MAX_HEIGHT   = 8;
+    public static final int LEVEL_GEN_SIZE_RESEARCH_LAB_MIN_WIDTH         = 7;
+    public static final int LEVEL_GEN_SIZE_RESEARCH_LAB_MIN_HEIGHT        = 6;
+    public static final int LEVEL_GEN_SIZE_RESEARCH_LAB_MAX_WIDTH         = 10;
+    public static final int LEVEL_GEN_SIZE_RESEARCH_LAB_MAX_HEIGHT        = 8;
+    public static final int LEVEL_GEN_SIZE_STELLAR_OBSERVATORY_MIN_SIDE   = 13;
+    public static final int LEVEL_GEN_SIZE_STELLAR_OBSERVATORY_MAX_SIDE   = 14;
+    public static final int LEVEL_GEN_SIZE_GORE_NEST_MIN_WIDTH            = 6;
+    public static final int LEVEL_GEN_SIZE_GORE_NEST_MIN_HEIGHT           = 6;
+    public static final int LEVEL_GEN_SIZE_GORE_NEST_MAX_WIDTH            = 10;
+    public static final int LEVEL_GEN_SIZE_GORE_NEST_MAX_HEIGHT           = 8;
+    public static final int LEVEL_GEN_SIZE_ATMOSPHERIC_PLANT_MIN_WIDTH    = 7;
+    public static final int LEVEL_GEN_SIZE_ATMOSPHERIC_PLANT_MIN_HEIGHT   = 6;
+    public static final int LEVEL_GEN_SIZE_ATMOSPHERIC_PLANT_MAX_WIDTH    = 10;
+    public static final int LEVEL_GEN_SIZE_ATMOSPHERIC_PLANT_MAX_HEIGHT   = 8;
+    public static final int LEVEL_GEN_SIZE_SALVAGE_BAY_MIN_WIDTH          = 7;
+    public static final int LEVEL_GEN_SIZE_SALVAGE_BAY_MIN_HEIGHT         = 7;
+    public static final int LEVEL_GEN_SIZE_SALVAGE_BAY_MAX_WIDTH          = 10;
+    public static final int LEVEL_GEN_SIZE_SALVAGE_BAY_MAX_HEIGHT         = 9;
+    public static final int LEVEL_GEN_SIZE_SUPPLY_CACHE_MIN_WIDTH         = 5;
+    public static final int LEVEL_GEN_SIZE_SUPPLY_CACHE_MIN_HEIGHT        = 5;
+    public static final int LEVEL_GEN_SIZE_SUPPLY_CACHE_MAX_WIDTH         = 8;
+    public static final int LEVEL_GEN_SIZE_SUPPLY_CACHE_MAX_HEIGHT        = 6;
+    // The entrance room (R6) and the regular rooms (R7; these become LEVEL_GEN_ROOM_MIN/MAX_* at CP6).
+    public static final int LEVEL_GEN_ENTRANCE_MIN_DIM                    = 5;
+    public static final int LEVEL_GEN_ENTRANCE_MAX_DIM                    = 7;
+    public static final int LEVEL_GEN_SIZE_REGULAR_MIN_WIDTH              = 4;
+    public static final int LEVEL_GEN_SIZE_REGULAR_MIN_HEIGHT             = 4;
+    public static final int LEVEL_GEN_SIZE_REGULAR_MAX_WIDTH              = 12;
+    public static final int LEVEL_GEN_SIZE_REGULAR_MAX_HEIGHT             = 10;
     // Probability that a wall tile adjacent to an explosive barrel ('E') becomes a hazard wall ('h').
     public static final float LEVEL_GEN_HAZARD_WALL_CHANCE    = 0.45f;
     // Maximum Manhattan distance (room-center to room-center) for optional loop corridors.

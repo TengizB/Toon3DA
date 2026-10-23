@@ -56,7 +56,7 @@ into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
 - [x] **CP3** — DONE WHEN: DoorSocket, DoorwayRules (validate + isInDoorClearance), CorridorRouter exist (headless);
       World.tryMakeMachineCandidate (R27) and GroupBarrelPlacer (R26) use clearance / lane rule; doorway/router
       constants in LevelGenConstants; generators not wired; test green (R-HAZARD incl.).
-- [ ] **CP4** — DONE WHEN: PropAnchor, PropKit/PropKitRow, RoomSizeWindow, LayoutRoom, RoomDresser exist; every
+- [x] **CP4** — DONE WHEN: PropAnchor, PropKit/PropKitRow, RoomSizeWindow, LayoutRoom, RoomDresser exist; every
       RoomBlueprints row has window + kit (+ relaxed); STANDARD has the five regular kits; RoomBlueprint gains
       sizeWindow()/kit()/signatureSymbol() additively; unwired; build + test green.
 - [ ] **CP5** — DONE WHEN: SpecialRoomPlanner + GameMath.specialRoomCountForFootprint exist; tileset palette-request
@@ -124,3 +124,21 @@ into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
   clearance + keep-clear tiles and orders flush candidates first (after its unchanged shuffle).
 - CP3 DIVERGENCE: LevelGeneratorSnapshotTest re-baselined HERE too (barrels moved off door-adjacent tiles), dated
   note in the test; CP6 re-baselines again for the layout. R-HAZARD stayed green -> barrel radius NOT touched.
+- CP4: prop engine is in, UNWIRED. Entry points for CP6:
+  `new RoomDresser(grid, rooms, floorSeed)` AFTER every socket + door leaf is final (it precomputes clearance);
+  `dresser.dress(room, kit, relaxedKit)` per room (entrance: skip — R22); `dresser.hasUsableTerminal()`,
+  `dresser.redress(room, RoomBlueprints.officeKit())`, `dresser.dressExtraRow(room, officeKit().rows().get(0))` for R20;
+  `dresser.kitDemand()` (symbol -> legacy sprite, R29); `dresser.isKeepClear(c,r)` = clearance + lane bands (wire into
+  the generator's `SupplySlotProvider.isKeepClearTile`). After dress, `room.toRecord()` carries kit/dense/sockets/band.
+  Architecture hooks the dresser reads: `room.exportFeature(name, tiles)` (FEATURE_LAB_ALCOVE "alcove", observatory
+  "core"/"spokes"/"annulus"/"shell_band" — constants in RoomBlueprints) and `room.claimCentre(tiles)` (HUB becomes the
+  ring; the observatory core must be claimed so its ';' row can land on the FEATURE core tile).
+  Blueprint data: `sizeWindow()` (null on entrance/standard -> `RoomBlueprints.regularWindow()`), `kit()`,
+  `relaxedKit()` (server_room, salvage_bay), `regularKits()` (STANDARD: office/storeroom/maintenance/aftermath/bare),
+  `signatureSymbol()`. Entrance window = LEVEL_GEN_ENTRANCE_MIN/MAX_DIM (5/7).
+  Decisions the spec did not settle: ROOWS racks fill every legal tile, and the plug check (which now also refuses
+  turning a solid NEIGHBOUR into a plug) breaks them into pairs "TT.TT"; a 1x3 power-plant block therefore places 2.
+  Cryo "both long walls when H >= 6" = row 2 '&' @ENTRY_WALL SPACED whenShortSideAtLeast(6). Observatory '|' pylons go on
+  the "spokes" feature = tiles FLANKING the spoke lines (architecture must export it that way).
+  DEFERRED: LEVEL_GEN_SERVER_LOCKER_RATIO stays 0.30 (old racks still read it); set it to 0.35 (spec 65/35) at CP6.
+  Scratch harness (not committed): /tmp/claude-0/sbx/.../DressSandbox.java dresses every kit in a min-size room.

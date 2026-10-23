@@ -55,6 +55,13 @@ public final class RoomBlueprints {
     // existing build steps; no bespoke generator helper, no RoomType constant).
     public static final String ID_SUPPLY_CACHE        = "supply_cache";
 
+    // FEATURE slots the room architectures export (R17 FEATURE anchors).
+    public static final String FEATURE_LAB_ALCOVE              = "alcove";
+    public static final String FEATURE_OBSERVATORY_CORE        = "core";
+    public static final String FEATURE_OBSERVATORY_SPOKES      = "spokes";
+    public static final String FEATURE_OBSERVATORY_ANNULUS     = "annulus";
+    public static final String FEATURE_OBSERVATORY_SHELL_BAND  = "shell_band";
+
     private static final RoomBlueprintRegistry ROOMS = new RoomBlueprintRegistry();
     private static boolean bootstrapped = false;
 
@@ -120,7 +127,7 @@ public final class RoomBlueprints {
                 RoomSymbolDemand.of(emptyDemand()),
                 context -> true,
                 context -> LevelGenConstants.LEVEL_GEN_ROOM_ENTRANCE_SELECTION_WEIGHT,
-                context -> { /* no architecture */ }));
+                context -> { /* no architecture */ }).layout(null, null, null));
 
         // STANDARD: baseline lab room; residual fallback for any candidate no specialty claims.
         registry.register(new LambdaRoomBlueprint(ID_STANDARD, RoomKind.GENERIC, WallGroup.HALL,
@@ -132,7 +139,7 @@ public final class RoomBlueprints {
                     context.assignFloorLighting();
                     context.placeStandardColumns();
                     context.placeStandardProps();
-                }));
+                }).layout(null, null, null).regularKits(regularKits()));
 
         // NOTE: "LARGE" is no longer a room blueprint/type — it is a size MODIFIER applied
         // independently to any room (LevelGenerator/LinearCorridorGenerator Room.isLarge, rolled at
@@ -150,7 +157,7 @@ public final class RoomBlueprints {
                 context -> context.interiorWidth()  >= LevelGenConstants.LEVEL_GEN_SALVAGE_BAY_MIN_WIDTH
                         && context.interiorHeight() >= LevelGenConstants.LEVEL_GEN_SALVAGE_BAY_MIN_HEIGHT,
                 context -> LevelGenConstants.LEVEL_GEN_SPECIAL_ROOM_SELECTION_WEIGHT,
-                context -> context.placeSalvageBay()));
+                context -> context.placeSalvageBay()).layout(salvageBayWindow(), salvageBayKit(), salvageBayRelaxedKit()));
 
         // SUPPLY_CACHE (order-9 RECIPE B acceptance room): a compact ancillary storeroom added by
         // REGISTRATION ALONE — this blueprint + this register() line, nothing else. It needs NO RoomType
@@ -171,7 +178,7 @@ public final class RoomBlueprints {
                     context.placeStandardColumns();
                     context.placeStandardProps();
                     context.placeStandardProps(); // second pass → denser, cluttered storeroom clutter
-                }));
+                }).layout(supplyCacheWindow(), supplyCacheKit(), null));
 
         // --- SIGNATURE rooms (fixed identity; declare the sprites they claim) ---
 
@@ -189,7 +196,7 @@ public final class RoomBlueprints {
                     context.assignFloorLighting();
                     context.retiredServerRoomWallRolls();
                     context.placeServerRoomProps();
-                }));
+                }).layout(serverRoomWindow(), serverRoomKit(true), serverRoomKit(false)));
 
         // MEDICAL_BAY: MEDICAL wall family, clinical props. EQUAL-CHANCE: shares the
         // common special-room weight and carries no per-level cap (a floor may roll more than one).
@@ -209,7 +216,7 @@ public final class RoomBlueprints {
                     context.assignFloorLighting();
                     context.retiredRoomWallRolls();
                     context.placeMedicalBayProps();
-                }));
+                }).layout(medicalBayWindow(), medicalBayKit(), null));
 
         // ARMORY: last-stand room; SECURITY wall family, weapon racks, cameras, aftermath decals.
         registry.register(new LambdaRoomBlueprint(ID_ARMORY, RoomKind.SIGNATURE, WallGroup.SECURITY,
@@ -226,7 +233,7 @@ public final class RoomBlueprints {
                     context.assignFloorLighting();
                     context.retiredRoomWallRolls();
                     context.placeArmoryProps();
-                }));
+                }).layout(armoryWindow(), armoryKit(), null));
 
         // CRYO_CHAMBER: cryogenic bay; CONTAINMENT wall family, bio-pod rows.
         registry.register(new LambdaRoomBlueprint(ID_CRYO_CHAMBER, RoomKind.SIGNATURE, WallGroup.CONTAINMENT,
@@ -243,7 +250,7 @@ public final class RoomBlueprints {
                     context.assignFloorLighting();
                     context.retiredRoomWallRolls();
                     context.placeCryoChamberProps();
-                }));
+                }).layout(cryoChamberWindow(), cryoChamberKit(), null));
 
         // POWER_PLANT: reactor core (LARGE-class); MACHINERY wall family, generators.
         registry.register(new LambdaRoomBlueprint(ID_POWER_PLANT, RoomKind.SIGNATURE, WallGroup.MACHINERY,
@@ -260,7 +267,7 @@ public final class RoomBlueprints {
                     context.assignFloorLighting();
                     context.retiredRoomWallRolls();
                     context.placePowerPlantProps();
-                }));
+                }).layout(powerPlantWindow(), powerPlantKit(), null));
 
         // COMMAND_CENTER: control room (LARGE-class); SECURITY wall family, terminals.
         registry.register(new LambdaRoomBlueprint(ID_COMMAND_CENTER, RoomKind.SIGNATURE, WallGroup.SECURITY,
@@ -278,7 +285,7 @@ public final class RoomBlueprints {
                     context.assignFloorLighting();
                     context.retiredRoomWallRolls();
                     context.placeCommandCenterProps();
-                }));
+                }).layout(commandCenterWindow(), commandCenterKit(), null));
 
         // CONTAINMENT_BLOCK: cell block; CONTAINMENT wall family, bio-pods, dread.
         registry.register(new LambdaRoomBlueprint(ID_CONTAINMENT_BLOCK, RoomKind.SIGNATURE, WallGroup.CONTAINMENT,
@@ -297,7 +304,7 @@ public final class RoomBlueprints {
                     context.assignFloorLighting();
                     context.retiredRoomWallRolls();
                     context.placeContainmentBlockProps();
-                }));
+                }).layout(containmentBlockWindow(), containmentBlockKit(), null));
 
         // RESEARCH_LAB: sci-fi set-piece; RESEARCH wall family, specimen tanks, AI core.
         registry.register(new LambdaRoomBlueprint(ID_RESEARCH_LAB, RoomKind.SIGNATURE, WallGroup.RESEARCH,
@@ -314,7 +321,7 @@ public final class RoomBlueprints {
                     context.assignFloorLighting();
                     context.retiredRoomWallRolls();
                     context.placeResearchLabProps();
-                }));
+                }).layout(researchLabWindow(), researchLabKit(), null));
 
         // STELLAR_OBSERVATORY: rare rotunda landmark; room-CONTAINED observatory art (hull/viewport/
         // magrail walls, gravity-well core, pylons, holo-table, cargo crates, deck/debris/seam decals).
@@ -341,7 +348,7 @@ public final class RoomBlueprints {
                 context -> {
                     context.assignFloorLighting();
                     context.placeStellarObservatoryProps();
-                }));
+                }).layout(stellarObservatoryWindow(), stellarObservatoryKit(), null));
 
         // GORE_NEST: a demonic-breach "aftermath" set-piece, built from WALLS + ENVIRONMENT DECALS only,
         // all reused art (no new symbol, no new sprite). It PINS the currently-unclaimed gore wall 'G'
@@ -372,7 +379,7 @@ public final class RoomBlueprints {
                     context.assignFloorLighting();
                     context.retiredRoomWallRolls();      // retiredRoomWallRollsForRoom handles the GORE_NEST case
                     context.placeGoreNestProps();
-                }));
+                }).layout(goreNestWindow(), goreNestKit(), null));
 
         // ATMOSPHERIC_PLANT: an industrial "hazardous-materials" set-piece — the facility's volatile
         // air/coolant scrubbing hub, built from ENVIRONMENT DECALS + reused props only (no new
@@ -402,7 +409,279 @@ public final class RoomBlueprints {
                     context.assignFloorLighting();
                     context.retiredAtmosphericPlantWallRolls(); // the old hazard/vent pass: draws kept (R1), no writes
                     context.placeAtmosphericPlantProps();
-                }));
+                }).layout(atmosphericPlantWindow(), atmosphericPlantKit(), null));
+    }
+
+
+    // -------------------------------------------------------------------------
+    // SIZE WINDOWS and PROP KITS (level-generation-overhaul R4 / R16-R23). Row 1 of a special kit is its
+    // SIGNATURE. Symbols are existing ones; each renders its legacy sprite (pinned by the kit, R29). Tuning a
+    // row is short-lane work: one row, no balance file. Hazard 'g' stays owned by this file (HAZARD_DECLARATIONS).
+    // -------------------------------------------------------------------------
+
+    private static RoomSizeWindow window(int minWidth, int minHeight, int maxWidth, int maxHeight) {
+        return RoomSizeWindow.of(minWidth, minHeight, maxWidth, maxHeight);
+    }
+
+    static RoomSizeWindow serverRoomWindow() {
+        return window(LevelGenConstants.LEVEL_GEN_SIZE_SERVER_ROOM_MIN_WIDTH, LevelGenConstants.LEVEL_GEN_SIZE_SERVER_ROOM_MIN_HEIGHT,
+                      LevelGenConstants.LEVEL_GEN_SIZE_SERVER_ROOM_MAX_WIDTH, LevelGenConstants.LEVEL_GEN_SIZE_SERVER_ROOM_MAX_HEIGHT);
+    }
+
+    static RoomSizeWindow medicalBayWindow() {
+        return window(LevelGenConstants.LEVEL_GEN_SIZE_MEDICAL_BAY_MIN_WIDTH, LevelGenConstants.LEVEL_GEN_SIZE_MEDICAL_BAY_MIN_HEIGHT,
+                      LevelGenConstants.LEVEL_GEN_SIZE_MEDICAL_BAY_MAX_WIDTH, LevelGenConstants.LEVEL_GEN_SIZE_MEDICAL_BAY_MAX_HEIGHT);
+    }
+
+    static RoomSizeWindow armoryWindow() {
+        return window(LevelGenConstants.LEVEL_GEN_SIZE_ARMORY_MIN_WIDTH, LevelGenConstants.LEVEL_GEN_SIZE_ARMORY_MIN_HEIGHT,
+                      LevelGenConstants.LEVEL_GEN_SIZE_ARMORY_MAX_WIDTH, LevelGenConstants.LEVEL_GEN_SIZE_ARMORY_MAX_HEIGHT);
+    }
+
+    static RoomSizeWindow cryoChamberWindow() {
+        return window(LevelGenConstants.LEVEL_GEN_SIZE_CRYO_CHAMBER_MIN_WIDTH, LevelGenConstants.LEVEL_GEN_SIZE_CRYO_CHAMBER_MIN_HEIGHT,
+                      LevelGenConstants.LEVEL_GEN_SIZE_CRYO_CHAMBER_MAX_WIDTH, LevelGenConstants.LEVEL_GEN_SIZE_CRYO_CHAMBER_MAX_HEIGHT);
+    }
+
+    static RoomSizeWindow powerPlantWindow() {
+        return window(LevelGenConstants.LEVEL_GEN_SIZE_POWER_PLANT_MIN_WIDTH, LevelGenConstants.LEVEL_GEN_SIZE_POWER_PLANT_MIN_HEIGHT,
+                      LevelGenConstants.LEVEL_GEN_SIZE_POWER_PLANT_MAX_WIDTH, LevelGenConstants.LEVEL_GEN_SIZE_POWER_PLANT_MAX_HEIGHT);
+    }
+
+    static RoomSizeWindow commandCenterWindow() {
+        return window(LevelGenConstants.LEVEL_GEN_SIZE_COMMAND_CENTER_MIN_WIDTH, LevelGenConstants.LEVEL_GEN_SIZE_COMMAND_CENTER_MIN_HEIGHT,
+                      LevelGenConstants.LEVEL_GEN_SIZE_COMMAND_CENTER_MAX_WIDTH, LevelGenConstants.LEVEL_GEN_SIZE_COMMAND_CENTER_MAX_HEIGHT);
+    }
+
+    static RoomSizeWindow containmentBlockWindow() {
+        return window(LevelGenConstants.LEVEL_GEN_SIZE_CONTAINMENT_BLOCK_MIN_WIDTH, LevelGenConstants.LEVEL_GEN_SIZE_CONTAINMENT_BLOCK_MIN_HEIGHT,
+                      LevelGenConstants.LEVEL_GEN_SIZE_CONTAINMENT_BLOCK_MAX_WIDTH, LevelGenConstants.LEVEL_GEN_SIZE_CONTAINMENT_BLOCK_MAX_HEIGHT);
+    }
+
+    static RoomSizeWindow researchLabWindow() {
+        return window(LevelGenConstants.LEVEL_GEN_SIZE_RESEARCH_LAB_MIN_WIDTH, LevelGenConstants.LEVEL_GEN_SIZE_RESEARCH_LAB_MIN_HEIGHT,
+                      LevelGenConstants.LEVEL_GEN_SIZE_RESEARCH_LAB_MAX_WIDTH, LevelGenConstants.LEVEL_GEN_SIZE_RESEARCH_LAB_MAX_HEIGHT);
+    }
+
+    static RoomSizeWindow stellarObservatoryWindow() {
+        return RoomSizeWindow.square(LevelGenConstants.LEVEL_GEN_SIZE_STELLAR_OBSERVATORY_MIN_SIDE,
+                                     LevelGenConstants.LEVEL_GEN_SIZE_STELLAR_OBSERVATORY_MAX_SIDE);
+    }
+
+    static RoomSizeWindow goreNestWindow() {
+        return window(LevelGenConstants.LEVEL_GEN_SIZE_GORE_NEST_MIN_WIDTH, LevelGenConstants.LEVEL_GEN_SIZE_GORE_NEST_MIN_HEIGHT,
+                      LevelGenConstants.LEVEL_GEN_SIZE_GORE_NEST_MAX_WIDTH, LevelGenConstants.LEVEL_GEN_SIZE_GORE_NEST_MAX_HEIGHT);
+    }
+
+    static RoomSizeWindow atmosphericPlantWindow() {
+        return window(LevelGenConstants.LEVEL_GEN_SIZE_ATMOSPHERIC_PLANT_MIN_WIDTH, LevelGenConstants.LEVEL_GEN_SIZE_ATMOSPHERIC_PLANT_MIN_HEIGHT,
+                      LevelGenConstants.LEVEL_GEN_SIZE_ATMOSPHERIC_PLANT_MAX_WIDTH, LevelGenConstants.LEVEL_GEN_SIZE_ATMOSPHERIC_PLANT_MAX_HEIGHT);
+    }
+
+    static RoomSizeWindow salvageBayWindow() {
+        return window(LevelGenConstants.LEVEL_GEN_SIZE_SALVAGE_BAY_MIN_WIDTH, LevelGenConstants.LEVEL_GEN_SIZE_SALVAGE_BAY_MIN_HEIGHT,
+                      LevelGenConstants.LEVEL_GEN_SIZE_SALVAGE_BAY_MAX_WIDTH, LevelGenConstants.LEVEL_GEN_SIZE_SALVAGE_BAY_MAX_HEIGHT);
+    }
+
+    static RoomSizeWindow supplyCacheWindow() {
+        return window(LevelGenConstants.LEVEL_GEN_SIZE_SUPPLY_CACHE_MIN_WIDTH, LevelGenConstants.LEVEL_GEN_SIZE_SUPPLY_CACHE_MIN_HEIGHT,
+                      LevelGenConstants.LEVEL_GEN_SIZE_SUPPLY_CACHE_MAX_WIDTH, LevelGenConstants.LEVEL_GEN_SIZE_SUPPLY_CACHE_MAX_HEIGHT);
+    }
+
+    /** The regular-room window (R7). */
+    public static RoomSizeWindow regularWindow() {
+        return window(LevelGenConstants.LEVEL_GEN_SIZE_REGULAR_MIN_WIDTH, LevelGenConstants.LEVEL_GEN_SIZE_REGULAR_MIN_HEIGHT,
+                      LevelGenConstants.LEVEL_GEN_SIZE_REGULAR_MAX_WIDTH, LevelGenConstants.LEVEL_GEN_SIZE_REGULAR_MAX_HEIGHT);
+    }
+
+    /** Server room: rack aisles of terminals and lockers. DENSE; the relaxed variant keeps alternate lines. */
+    static PropKit serverRoomKit(boolean dense) {
+        float lockers = LevelGenConstants.LEVEL_GEN_SERVER_LOCKER_RATIO;
+        PropKit.Builder kit = PropKit.signature(ID_SERVER_ROOM)
+                .row(PropKitRow.place("TL", 1f - lockers, lockers).at(PropAnchor.ROWS).count(1, 99))
+                .row(PropKitRow.place('#').at(PropAnchor.CORNER).count(1))
+                .row(PropKitRow.place('O').at(PropAnchor.NEAR).near("TL").count(1, 2));
+        return dense ? kit.dense().build() : kit.build();
+    }
+
+    static PropKit medicalBayKit() {
+        return PropKit.signature(ID_MEDICAL_BAY)
+                .row(PropKitRow.place('&').at(PropAnchor.BACK_WALL).count(2, 4).as(PropKitRow.Mode.SPACED))
+                .row(PropKitRow.place('T').at(PropAnchor.SIDE_WALL).count(1))
+                .row(PropKitRow.place('I').at(PropAnchor.CORNER).count(0, 1).chance(0.6f))
+                .row(PropKitRow.place('C').at(PropAnchor.CORNER).count(1).chance(0.5f))
+                .row(PropKitRow.place('.').at(PropAnchor.NEAR).near("&").count(1, 2))
+                .row(PropKitRow.place('m').at(PropAnchor.ANY_WALL).count(1).chance(0.4f))
+                .build();
+    }
+
+    static PropKit armoryKit() {
+        return PropKit.signature(ID_ARMORY)
+                .row(PropKitRow.place('=').at(PropAnchor.BACK_WALL).count(2, 4).as(PropKitRow.Mode.RUN))
+                .row(PropKitRow.place('C').at(PropAnchor.CORNER).count(1, 3).as(PropKitRow.Mode.CLUSTER))
+                .row(PropKitRow.place('#').at(PropAnchor.ENTRY_WALL).count(1))
+                .row(PropKitRow.place('m').at(PropAnchor.NEAR).near("=").count(1, 2))
+                .row(PropKitRow.place('.').at(PropAnchor.TRAIL).count(1, 3))
+                .build();
+    }
+
+    /** Cryo chamber: pod rows on the back wall and, in a room at least six deep, the opposite wall too. */
+    static PropKit cryoChamberKit() {
+        return PropKit.signature(ID_CRYO_CHAMBER)
+                .row(PropKitRow.place('&').at(PropAnchor.BACK_WALL).count(2, 3).as(PropKitRow.Mode.SPACED))
+                .row(PropKitRow.place('&').at(PropAnchor.ENTRY_WALL).count(1, 3).as(PropKitRow.Mode.SPACED)
+                        .whenShortSideAtLeast(6))
+                .row(PropKitRow.place('#').at(PropAnchor.CORNER).count(1))
+                .row(PropKitRow.place('O').at(PropAnchor.NEAR).near("&").count(1, 3))
+                .row(PropKitRow.place('C').at(PropAnchor.CORNER).count(0, 1).chance(0.5f))
+                .build();
+    }
+
+    /** Power plant: a generator block in the middle of the room (2x2 or 1x3), drums in the corners. */
+    static PropKit powerPlantKit() {
+        return PropKit.signature(ID_POWER_PLANT)
+                .row(PropKitRow.place('%').at(PropAnchor.CENTRE).count(2, 4).as(PropKitRow.Mode.CLUSTER)
+                        .footprints(new int[]{ 2, 2 }, new int[]{ 3, 1 }))
+                .row(PropKitRow.place('g').at(PropAnchor.CORNER).count(1, 2))
+                .row(PropKitRow.place('#').at(PropAnchor.ENTRY_WALL).count(1))
+                .row(PropKitRow.place('O').at(PropAnchor.NEAR).near("%").count(1, 3))
+                .row(PropKitRow.place('e').at(PropAnchor.NEAR).near("%").count(0, 2))
+                .build();
+    }
+
+    static PropKit commandCenterKit() {
+        return PropKit.signature(ID_COMMAND_CENTER)
+                .row(PropKitRow.place('T').at(PropAnchor.BACK_WALL).count(3, 5).as(PropKitRow.Mode.RUN))
+                .row(PropKitRow.place('W').at(PropAnchor.CENTRE).count(1).chance(0.6f))
+                .row(PropKitRow.place('=').at(PropAnchor.SIDE_WALL).count(1))
+                .row(PropKitRow.place('#').at(PropAnchor.CORNER).count(1, 2))
+                .row(PropKitRow.place('.').at(PropAnchor.FIELD).count(0, 2))
+                .row(PropKitRow.place('m').at(PropAnchor.ANY_WALL).count(1).chance(0.3f))
+                .build();
+    }
+
+    static PropKit containmentBlockKit() {
+        return PropKit.signature(ID_CONTAINMENT_BLOCK)
+                .row(PropKitRow.place('&').at(PropAnchor.BACK_WALL).count(3, 5).as(PropKitRow.Mode.SPACED))
+                .row(PropKitRow.place('T').at(PropAnchor.ENTRY_WALL).count(1))
+                .row(PropKitRow.place('#').at(PropAnchor.CORNER).count(2))
+                .row(PropKitRow.place('m').at(PropAnchor.ANY_WALL).count(1, 2))
+                .row(PropKitRow.place('.').at(PropAnchor.TRAIL).count(2, 3))
+                .row(PropKitRow.place('O').at(PropAnchor.FIELD).count(0, 1))
+                .build();
+    }
+
+    /** Research lab: specimen tanks on the back wall, the AI core in the lab's alcove (else a corner). */
+    static PropKit researchLabKit() {
+        return PropKit.signature(ID_RESEARCH_LAB)
+                .row(PropKitRow.place('I').at(PropAnchor.BACK_WALL).count(2, 4).as(PropKitRow.Mode.SPACED))
+                .row(PropKitRow.place('J').at(PropAnchor.FEATURE).feature(FEATURE_LAB_ALCOVE).orAt(PropAnchor.CORNER).count(1))
+                .row(PropKitRow.place('W').at(PropAnchor.SIDE_WALL).count(1, 2))
+                .row(PropKitRow.place('T').at(PropAnchor.SIDE_WALL).count(1))
+                .row(PropKitRow.place('e').at(PropAnchor.FIELD).count(1, LevelGenConstants.LEVEL_GEN_RESEARCH_LAB_SCORCH_MAX))
+                .build();
+    }
+
+    /** Stellar observatory: every prop sits on a slot the rotunda architecture exported. */
+    static PropKit stellarObservatoryKit() {
+        return PropKit.signature(ID_STELLAR_OBSERVATORY)
+                .row(PropKitRow.place(';').at(PropAnchor.FEATURE).feature(FEATURE_OBSERVATORY_CORE).count(1))
+                .row(PropKitRow.place('|').at(PropAnchor.FEATURE).feature(FEATURE_OBSERVATORY_SPOKES)
+                        .count(LevelGenConstants.LEVEL_GEN_STELLAR_OBSERVATORY_PYLON_MIN,
+                               LevelGenConstants.LEVEL_GEN_STELLAR_OBSERVATORY_PYLON_MAX))
+                .row(PropKitRow.place('<').at(PropAnchor.FEATURE).feature(FEATURE_OBSERVATORY_ANNULUS).count(1)
+                        .chance(LevelGenConstants.LEVEL_GEN_STELLAR_OBSERVATORY_HOLOTABLE_CHANCE))
+                .row(PropKitRow.place('\\').at(PropAnchor.FEATURE).feature(FEATURE_OBSERVATORY_SHELL_BAND)
+                        .count(LevelGenConstants.LEVEL_GEN_STELLAR_OBSERVATORY_CRATE_MIN,
+                               LevelGenConstants.LEVEL_GEN_STELLAR_OBSERVATORY_CRATE_MAX))
+                .row(PropKitRow.place(']').at(PropAnchor.FEATURE).feature(FEATURE_OBSERVATORY_ANNULUS)
+                        .count(LevelGenConstants.LEVEL_GEN_STELLAR_OBSERVATORY_DEBRIS_MIN,
+                               LevelGenConstants.LEVEL_GEN_STELLAR_OBSERVATORY_DEBRIS_MAX))
+                .build();
+    }
+
+    /** Gore nest: one ruptured pod at the centre over a carpet of aftermath decals. */
+    static PropKit goreNestKit() {
+        return PropKit.signature(ID_GORE_NEST)
+                .row(PropKitRow.place('&').at(PropAnchor.CENTRE).count(1))
+                .row(PropKitRow.place("m.sO", 1f, 1f, 1f, 1f).at(PropAnchor.FIELD)
+                        .density(LevelGenConstants.LEVEL_GEN_GORE_NEST_DECAL_CHANCE))
+                .row(PropKitRow.place("gC", 1f, 1f).at(PropAnchor.ANY_WALL).count(1, 2))
+                .build();
+    }
+
+    /** Atmospheric plant: scrubbers on the back wall and the three-cylinder chain-reaction core on a side wall. */
+    static PropKit atmosphericPlantKit() {
+        return PropKit.signature(ID_ATMOSPHERIC_PLANT)
+                .row(PropKitRow.place('%').at(PropAnchor.BACK_WALL).count(2).as(PropKitRow.Mode.SPACED))
+                .row(PropKitRow.place('E').at(PropAnchor.SIDE_WALL).count(3).as(PropKitRow.Mode.CLUSTER))
+                .row(PropKitRow.place('g').at(PropAnchor.CORNER).count(1))
+                .row(PropKitRow.place('O').at(PropAnchor.FIELD).near("%").density(0.35f))
+                .row(PropKitRow.place('e').at(PropAnchor.FIELD).density(0.20f))
+                .build();
+    }
+
+    /** Salvage bay: a scrap heap in the middle, racks along the walls. DENSE. */
+    static PropKit salvageBayKit() {
+        return PropKit.signature(ID_SALVAGE_BAY).dense()
+                .row(PropKitRow.place("Cg%", 1f, 1f, 1f).at(PropAnchor.CENTRE).count(3, 6).as(PropKitRow.Mode.CLUSTER)
+                        .footprints(new int[]{ 3, 2 }))
+                .row(PropKitRow.place("L=", 1f, 1f).at(PropAnchor.ANY_WALL).count(1, 3))
+                .row(PropKitRow.place("Oe", 1f, 1f).at(PropAnchor.FIELD).count(1, 3))
+                .build();
+    }
+
+    /** The salvage bay when the floor's tight room is spent: a heap of at most three. */
+    static PropKit salvageBayRelaxedKit() {
+        return PropKit.signature(ID_SALVAGE_BAY)
+                .row(PropKitRow.place("Cg%", 1f, 1f, 1f).at(PropAnchor.CENTRE).count(2, 3).as(PropKitRow.Mode.CLUSTER)
+                        .footprints(new int[]{ 2, 2 }))
+                .row(PropKitRow.place("L=", 1f, 1f).at(PropAnchor.ANY_WALL).count(1, 3))
+                .row(PropKitRow.place("Oe", 1f, 1f).at(PropAnchor.FIELD).count(1, 3))
+                .build();
+    }
+
+    /** Supply cache: crate stacks in two corners and a locker run on the back wall. */
+    static PropKit supplyCacheKit() {
+        return PropKit.signature(ID_SUPPLY_CACHE)
+                .row(PropKitRow.place('C').at(PropAnchor.CORNER).count(2, 3).as(PropKitRow.Mode.CLUSTER))
+                .row(PropKitRow.place('C').at(PropAnchor.CORNER).count(2, 3).as(PropKitRow.Mode.CLUSTER))
+                .row(PropKitRow.place('L').at(PropAnchor.BACK_WALL).count(2, 3).as(PropKitRow.Mode.RUN))
+                .row(PropKitRow.place('O').at(PropAnchor.FIELD).count(0, 1))
+                .build();
+    }
+
+    /** The five regular-room kits (R23), drawn uniformly (a route profile's preferred kit counts double). */
+    static java.util.List<PropKit> regularKits() {
+        java.util.List<PropKit> kits = new java.util.ArrayList<>();
+        kits.add(officeKit());
+        kits.add(PropKit.plain(PropKit.ID_STOREROOM)
+                .row(PropKitRow.place('C').at(PropAnchor.CORNER).count(2, 3).as(PropKitRow.Mode.CLUSTER))
+                .row(PropKitRow.place('L').at(PropAnchor.SIDE_WALL).count(1, 2).as(PropKitRow.Mode.RUN))
+                .row(PropKitRow.place('O').at(PropAnchor.FIELD).count(0, 1).chance(0.3f))
+                .build());
+        kits.add(PropKit.plain(PropKit.ID_MAINTENANCE)
+                .row(PropKitRow.place('%').at(PropAnchor.SIDE_WALL).orAt(PropAnchor.BACK_WALL).count(1))
+                .row(PropKitRow.place('g').at(PropAnchor.NEAR).near("%").count(0, 1))
+                .row(PropKitRow.place('O').at(PropAnchor.NEAR).near("%").count(1, 2))
+                .build());
+        kits.add(PropKit.plain(PropKit.ID_AFTERMATH)
+                .row(PropKitRow.place('C').at(PropAnchor.ANY_WALL).count(0, 1))
+                .row(PropKitRow.place('m').at(PropAnchor.ANY_WALL).count(1))
+                .row(PropKitRow.place(".s", 1f, 1f).at(PropAnchor.TRAIL).count(2, 4))
+                .build());
+        kits.add(PropKit.plain(PropKit.ID_BARE).build());
+        return java.util.Collections.unmodifiableList(kits);
+    }
+
+    /** The OFFICE kit: a desk of terminals on the back wall (also the R20 terminal fallback). */
+    public static PropKit officeKit() {
+        return PropKit.plain(PropKit.ID_OFFICE)
+                .row(PropKitRow.place('T').at(PropAnchor.BACK_WALL).count(1, 2).as(PropKitRow.Mode.RUN))
+                .row(PropKitRow.place('L').at(PropAnchor.CORNER).count(0, 1))
+                .row(PropKitRow.place('#').at(PropAnchor.CORNER).count(0, 1).chance(0.3f))
+                .row(PropKitRow.place('m').at(PropAnchor.ANY_WALL).count(1).chance(0.2f))
+                .build();
     }
 
     // Builds an insertion-ordered symbol → sprite-id map from alternating (char, id) pairs.
@@ -463,6 +742,10 @@ public final class RoomBlueprints {
         private final Eligibility eligibility;
         private final SelectionWeight weight;
         private final BuildStep buildStep;
+        private RoomSizeWindow sizeWindow;
+        private PropKit kit;
+        private PropKit relaxedKit;
+        private java.util.List<PropKit> regularKits = java.util.Collections.emptyList();
 
         LambdaRoomBlueprint(String id, RoomKind kind, WallGroup wallGroup, RoomSupplyStance supplyStance,
                             RoomSymbolDemand demand,
@@ -485,5 +768,23 @@ public final class RoomBlueprints {
         @Override public float selectionWeight(RoomContext context) { return weight.of(context); }
         @Override public RoomSymbolDemand symbolDemand() { return demand; }
         @Override public void build(RoomBuildContext context) { buildStep.build(context); }
+        @Override public RoomSizeWindow sizeWindow() { return sizeWindow; }
+        @Override public PropKit kit() { return kit; }
+        @Override public PropKit relaxedKit() { return relaxedKit; }
+        @Override public java.util.List<PropKit> regularKits() { return regularKits; }
+
+        /** Gives the row its size window, kit and (for a DENSE kit) relaxed kit. */
+        LambdaRoomBlueprint layout(RoomSizeWindow roomWindow, PropKit roomKit, PropKit roomRelaxedKit) {
+            this.sizeWindow = roomWindow;
+            this.kit        = roomKit;
+            this.relaxedKit = roomRelaxedKit;
+            return this;
+        }
+
+        /** Gives the STANDARD row the regular-room kits (R23). */
+        LambdaRoomBlueprint regularKits(java.util.List<PropKit> kits) {
+            this.regularKits = kits;
+            return this;
+        }
     }
 }

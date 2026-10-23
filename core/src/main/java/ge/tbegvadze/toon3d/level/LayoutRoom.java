@@ -2,7 +2,9 @@ package ge.tbegvadze.toon3d.level;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * A ROOM as the shared layout engine sees it (level-generation-overhaul): an interior rectangle plus its
@@ -24,6 +26,15 @@ public final class LayoutRoom {
     private final List<DoorSocket> sockets = new ArrayList<>();
     /** The socket on this room's corridor toward the entrance (the entrance's first socket); null until set. */
     private DoorSocket primarySocket;
+
+    // Architecture exports (R17 FEATURE anchors) and the centre a feature claims (the HUB becomes its ring).
+    private final Map<String, List<int[]>> features = new LinkedHashMap<>();
+    private List<int[]> centreFeature;
+
+    // What the dresser did (R16-R21): the kit, whether it dressed DENSE (a TIGHT room), the lane band it kept.
+    private String      kitId;
+    private boolean     dense;
+    private List<int[]> laneBand;
 
     public LayoutRoom(int leftColumn, int bottomRow, int rightColumn, int topRow,
                       LevelLayoutReport.Role role, String blueprintId) {
@@ -92,5 +103,44 @@ public final class LayoutRoom {
 
     void setPrimarySocket(DoorSocket socket) {
         this.primarySocket = socket;
+    }
+
+    /** Exports named architecture tiles for FEATURE anchors (e.g. "core", "spokes", "alcove"). */
+    public void exportFeature(String name, List<int[]> tiles) {
+        features.put(name, new ArrayList<>(tiles));
+    }
+
+    /** The tiles a feature exported, or an empty list. */
+    public List<int[]> feature(String name) {
+        List<int[]> tiles = features.get(name);
+        return tiles == null ? Collections.emptyList() : Collections.unmodifiableList(tiles);
+    }
+
+    /** Claims the room's centre for an architecture feature: the HUB becomes the ring around these tiles. */
+    public void claimCentre(List<int[]> tiles) {
+        this.centreFeature = new ArrayList<>(tiles);
+    }
+
+    /** The architecture's centre claim, or null. */
+    public List<int[]> centreFeature() {
+        return centreFeature == null ? null : Collections.unmodifiableList(centreFeature);
+    }
+
+    void recordDressing(String dressedKitId, boolean dressedDense, List<int[]> band) {
+        this.kitId    = dressedKitId;
+        this.dense    = dressedDense;
+        this.laneBand = band == null ? null : new ArrayList<>(band);
+    }
+
+    public String      kitId()    { return kitId; }
+    public boolean     dense()    { return dense; }
+    public List<int[]> laneBand() { return laneBand == null ? null : Collections.unmodifiableList(laneBand); }
+
+    /** This room as the layout report records it. */
+    public LevelLayoutReport.RoomRecord toRecord() {
+        List<int[]> socketTiles = new ArrayList<>();
+        for (DoorSocket socket : sockets) socketTiles.add(new int[]{ socket.tileColumn, socket.tileRow });
+        return new LevelLayoutReport.RoomRecord(leftColumn, bottomRow, rightColumn, topRow, role, blueprintId,
+                kitId, dense, socketTiles, laneBand);
     }
 }
