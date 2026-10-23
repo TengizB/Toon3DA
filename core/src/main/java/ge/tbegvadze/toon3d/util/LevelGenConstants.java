@@ -56,6 +56,16 @@ public final class LevelGenConstants {
     // A 3-wide hall narrows to 1 wide for this many tiles before a socket (R13).
     public static final int   LEVEL_GEN_WIDE_HALL_TAPER_TILES      = 2;
 
+    // --- THE SPECIAL ROOM PLANNER (level-generation-overhaul R1-R5) ---
+    // The floor's special types come from the floor seed ^ this salt (NOT a footprint attempt seed, R3).
+    public static final long  SPECIAL_ROOM_SEED_SALT                 = 0x5BEC1A15L;
+    // One special per this many walkable footprint tiles, clamped to [MIN, MAX] (R2, GameMath).
+    public static final int   LEVEL_GEN_WALKABLE_TILES_PER_SPECIAL_ROOM = 260;
+    public static final int   LEVEL_GEN_SPECIAL_ROOMS_MIN            = 2;
+    public static final int   LEVEL_GEN_SPECIAL_ROOMS_MAX            = 4;
+    // Best-candidate sampling: random positions tried per special, keeping the one farthest from those placed (R5).
+    public static final int   LEVEL_GEN_SPECIAL_PLACEMENT_CANDIDATES = 12;
+
     // --- THE PROP ENGINE (level-generation-overhaul R15-R22) ---
     // The dresser's own stream: floor seed ^ this salt ^ the room's index mix, so dressing never shifts layout draws.
     public static final long  ROOM_DRESSING_SEED_SALT              = 0x5EEDD8E55L;

@@ -59,7 +59,7 @@ into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
 - [x] **CP4** — DONE WHEN: PropAnchor, PropKit/PropKitRow, RoomSizeWindow, LayoutRoom, RoomDresser exist; every
       RoomBlueprints row has window + kit (+ relaxed); STANDARD has the five regular kits; RoomBlueprint gains
       sizeWindow()/kit()/signatureSymbol() additively; unwired; build + test green.
-- [ ] **CP5** — DONE WHEN: SpecialRoomPlanner + GameMath.specialRoomCountForFootprint exist; tileset palette-request
+- [x] **CP5** — DONE WHEN: SpecialRoomPlanner + GameMath.specialRoomCountForFootprint exist; tileset palette-request
       helper adds kit demands + 'T'/'E' pins; unwired; build + test green.
 - [ ] **CP6** — DONE WHEN: ROOMS_MST runs pipeline A (G1); old selection/corridor/placeDoors/prop helpers/LARGE/
       retired rolls gone from LevelGenerator; buildRoomForBridge re-pointed; symbolsStampedInIsolation re-pointed;
@@ -142,3 +142,10 @@ into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
   the "spokes" feature = tiles FLANKING the spoke lines (architecture must export it that way).
   DEFERRED: LEVEL_GEN_SERVER_LOCKER_RATIO stays 0.30 (old racks still read it); set it to 0.35 (spec 65/35) at CP6.
   Scratch harness (not committed): /tmp/claude-0/sbx/.../DressSandbox.java dresses every kit in a min-size room.
+- CP5: `SpecialRoomPlanner.plan(floorSeed, targetWalkableTiles)` -> List<RoomBlueprint> (uniform, no replacement,
+  floor seed ^ SPECIAL_ROOM_SEED_SALT; call ONCE per floor with the RAW floor seed, outside the FootprintPlanner
+  lambda; pass the natural walkable size when the target is 0). `SpecialRoomPlanner.size(bp, attemptRandom, scale,
+  atMinimum)`, `ids(planned)`, `isSpecial(id)`, `specialPool(registry)`. `GameMath.specialRoomCountForFootprint(target)`.
+  `tileset.FloorSymbolPins.pin(requestBuilder, dresser.kitDemand())` adds the kit demand + 'T'/'E' pins; it replaces
+  the generator's ad-hoc barrel pin. Constants: SPECIAL_ROOM_SEED_SALT, LEVEL_GEN_WALKABLE_TILES_PER_SPECIAL_ROOM,
+  LEVEL_GEN_SPECIAL_ROOMS_MIN/MAX, LEVEL_GEN_SPECIAL_PLACEMENT_CANDIDATES.

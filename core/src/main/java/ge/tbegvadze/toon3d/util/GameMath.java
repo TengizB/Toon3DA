@@ -6668,6 +6668,24 @@ public final class GameMath {
         return Math.round(originalWalkableTiles * (1f - cut));
     }
 
+    /*
+     * Formula: specialRoomCountForFootprint — how many SPECIAL rooms a combat floor plans (level-generation-overhaul R2)
+     * Derivation:
+     *   One special per LEVEL_GEN_WALKABLE_TILES_PER_SPECIAL_ROOM (260) walkable tiles of the floor's footprint
+     *   target, rounded to nearest, clamped to [LEVEL_GEN_SPECIAL_ROOMS_MIN, LEVEL_GEN_SPECIAL_ROOMS_MAX] = [2, 4]:
+     *       count = clamp(round(targetWalkableTiles / 260), 2, 4)
+     *   e.g. ROOMS_MST floor 1 (565) -> 2, floor 2 (678) -> 3; LINEAR 350..560 -> 2; CAVERN 1050 -> 4.
+     *   It reads the target the FootprintPlanner hands the generator, so a later footprint change moves it.
+     * Edge cases: targetWalkableTiles <= 0 (no target) -> the minimum (2); round-half-up via Math.round.
+     */
+    public static int specialRoomCountForFootprint(int targetWalkableTiles) {
+        int minimum = LevelGenConstants.LEVEL_GEN_SPECIAL_ROOMS_MIN;
+        int maximum = LevelGenConstants.LEVEL_GEN_SPECIAL_ROOMS_MAX;
+        if (targetWalkableTiles <= 0) return minimum;
+        int count = Math.round(targetWalkableTiles / (float) LevelGenConstants.LEVEL_GEN_WALKABLE_TILES_PER_SPECIAL_ROOM);
+        return Math.max(minimum, Math.min(maximum, count));
+    }
+
     // =====================================================================================
     // MATCHUPS (balance-overhaul order 3) — damage class x enemy trait
     // =====================================================================================
