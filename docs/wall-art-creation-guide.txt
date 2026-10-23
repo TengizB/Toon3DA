@@ -140,6 +140,13 @@ CONTENTS
   which moves with the copy), the cavity blur (np.roll wraps a 3-face canvas, which is periodic) and the
   Bayer dither (256 % 4 == 0) are all translation-invariant. Surfaces use the same idea on a 3x3 canvas.
 
+  WALL FACES BAKE SMOOTH (wall-texture-grain-fix, lesson 15.24): bake_face calls kit.render(smooth=
+  walls.SMOOTH_SAMPLES = 2) - no Bayer dither, no surface grain, no lonely-pixel cleanup, a continuous ramp
+  (interpolated between its six steps), a soft specular edge, and 2x2 samples per texel box-filtered down so
+  edges and diagonals are anti-aliased. Same shapes, light rig and ramps; none of the speckle. Floors and
+  ceilings (bake_surface) keep the sprite bake. Sampling is per-face and still translation-invariant (a whole
+  number of samples per texel), so tiling is unchanged.
+
   The backing: one full-face slab PER COPY, overlapping its neighbours by ~12 px (`backing()`), never one
   slab spanning the canvas (its grain would not repeat).
 
@@ -524,6 +531,10 @@ brightest moods (sprite guide 4.5).
        sample at random.
   15.23 P4's "every 4th tile" + door frames makes STRUCTURE ~17% of exposed walls - as common as a BASE
        variant. A structure face must stay quiet; it is architecture, not a feature.
+  15.24 The sprite bake (Bayer dither, value-noise grain, six hard ramp steps, aliased edges) looked crafted
+       in a contact sheet and read as NOISE on a wall in play: the 3D view resamples the face, so the dither
+       and grain shimmer into speckle and every diagonal stair-steps. Walls now bake smooth (section 4).
+       Never reintroduce dither or grain on a wall face to "add texture" - texture comes from shapes.
 
 
 ====================================================================================================

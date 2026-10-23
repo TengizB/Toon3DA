@@ -715,10 +715,19 @@ def _shift(a, sx, sy, fill):
 # ---------------------------------------------------------------------------------------------------
 # The renderer
 # ---------------------------------------------------------------------------------------------------
-def render(layers, width, height, seed=3, glow_radius=5, glow_alpha=0.55, return_glow=False):
+def render(layers, width, height, seed=3, glow_radius=5, glow_alpha=0.55, return_glow=False, smooth=0):
     """layers: list of lists of Shape, back to front. Returns an RGBA PIL image, or (image, glow image)
-    when return_glow is set: the glow image holds the emissive pixels only (binary alpha)."""
-    Y, X = np.mgrid[0:height, 0:width].astype(float) + 0.5
+    when return_glow is set: the glow image holds the emissive pixels only (binary alpha).
+
+    smooth=N (N >= 1; the wall faces): the SMOOTH bake. No Bayer dither, no surface grain, no lonely-pixel
+    cleanup, a continuous ramp (interpolated between its six steps instead of snapped to one) and a soft
+    specular edge, rendered at N x N samples per pixel and box-filtered down so every edge and diagonal is
+    anti-aliased. The sprite look (dither, grain, hard ramp steps) reads as noise on a wall seen in the 3D
+    view; the smooth bake keeps the same shapes, light rig and ramps with none of the speckle."""
+    ss = max(int(smooth), 1)
+    out_w, out_h = width, height
+    width, height = width * ss, height * ss
+    Y, X = (np.mgrid[0:height, 0:width].astype(float) + 0.5) / ss
     mat_names = list(MATERIALS)
     layer_id = np.full((height, width), -1)
     Hfinal = np.zeros((height, width)); Mfinal = np.full((height, width), -1); Ifinal = np.zeros((height, width))
@@ -761,7 +770,8 @@ def render(layers, width, height, seed=3, glow_radius=5, glow_alpha=0.55, return
             m = MATERIALS[mat_names[mi]]
             if "grain" in m:
                 sel = inside & (M == mi)
-                H[sel] += m["grain"][0] * 10 * grain[sel]
+                if not smooth:
+                    H[sel] += m["grain"][0] * 10 * grain[sel]
         layer_id[inside] = li
         Hfinal[inside] = H[inside] + li * 1000   # later layers sit in front
         Mfinal[inside] = M[inside]
@@ -777,7 +787,7 @@ def render(layers, width, height, seed=3, glow_radius=5, glow_alpha=0.55, return
         same_f = _shift(layer_id, -sx, -sy, -1) == layer_id
         same_b = _shift(layer_id, sx, sy, -1) == layer_id
         fwd = np.where(same_f, fwd, np.minimum(Hn, 0) - 0.0); bwd = np.where(same_b, bwd, 0)
-        arr[:] = (fwd - bwd) * 0.5
+        arr[:] = (fwd - bwd) * 0.5 * ss
     N = np.dstack([-gx, -gy, np.ones_like(gx)])
     N /= np.linalg.norm(N, axis=2, keepdims=True)
 
@@ -785,13 +795,22 @@ def render(layers, width, height, seed=3, glow_radius=5, glow_alpha=0.55, return
     wrap = np.clip((N @ LIGHT + 0.35) / 1.35, 0, 1)             # soft terminator
     rim = (np.clip(N @ RIM, 0, 1) ** 2) * (1 - N[..., 2]) ** 0.6
     # cavity occlusion: lower than the neighbourhood -> darker
-    cav = np.clip((_blur(Hn, 3) - Hn) / 6.0, 0, 1)
+    cav = np.clip((_blur(Hn, 3 * ss) - Hn) / 6.0, 0, 1)
     # cast occlusion: pixels just behind a nearer layer
     occl = np.zeros((height, width))
-    for d in (1, 2, 3):
+    for d in range(1, 3 * ss + 1):
         for sx, sy in ((0, -d), (d, -d), (-d, -d), (d, 0), (-d, 0)):
-            occl = np.maximum(occl, (_shift(layer_id, sx, sy, -1) > layer_id) * (1 - (d - 1) / 3))
-    bay = BAYER[Y.astype(int) % 4, X.astype(int) % 4]
+            occl = np.maximum(occl, (_shift(layer_id, sx, sy, -1) > layer_id) * (1 - (d - 1) / (3 * ss)))
+    bay = np.zeros((height, width)) if smooth else BAYER[Y.astype(int) % 4, X.astype(int) % 4]
+
+    def ramp_colour(r, v):
+        """The ramp at v: snapped to a step (the sprite look) or interpolated between steps (smooth)."""
+        if not smooth:
+            return r[(v * len(r)).astype(int)]
+        pos = np.clip(v * len(r) - 0.5, 0, len(r) - 1)
+        lo = np.floor(pos).astype(int); hi = np.minimum(lo + 1, len(r) - 1)
+        f = (pos - lo)[:, None]
+        return r[lo] * (1 - f) + r[hi] * f
 
     rgb = np.zeros((height, width, 3)); shade_idx = np.full((height, width), -1)
     emissive_mask = np.zeros((height, width), bool)
@@ -807,13 +826,17 @@ def render(layers, width, height, seed=3, glow_radius=5, glow_alpha=0.55, return
             v = np.clip(v + bay[sel] * 0.08, 0, 0.999)
         idx = (v * len(r)).astype(int)
         shade_idx[sel] = idx + mi * 10
-        rgb[sel] = r[idx]
+        rgb[sel] = ramp_colour(r, v)
         if not m.get("emissive"):
             strength, shiny = m.get("spec", (0, 1))
             sp = strength * np.clip(N[sel] @ HALF, 0, 1) ** shiny
-            hot = sp > 0.28
             col = rgb[sel]
-            col[hot] = col[hot] * 0.35 + r[-1] * 0.65 + 25
+            if smooth:        # a soft highlight edge instead of a hard threshold
+                hot_w = np.clip((sp - 0.22) / 0.12, 0, 1)[:, None]
+                col = col * (1 - hot_w) + (col * 0.35 + r[-1] * 0.65 + 25) * hot_w
+            else:
+                hot = sp > 0.28
+                col[hot] = col[hot] * 0.35 + r[-1] * 0.65 + 25
             if "wet" in m:    # WET SHEEN (order 5): a tight second lobe -> a near-white glint on the lit curve
                 wet_strength, wet_shiny = m["wet"]
                 wsp = wet_strength * np.clip(N[sel] @ HALF, 0, 1) ** wet_shiny
@@ -825,14 +848,14 @@ def render(layers, width, height, seed=3, glow_radius=5, glow_alpha=0.55, return
                 gl = MATERIALS[m["glow"]]["ramp"]
                 level = np.clip(Gfinal[sel], 0, 1.4)
                 t = np.clip((Ifinal[sel] ** 0.8 * 1.05 + bay[sel] * 0.1) * level, 0, 0.999)
-                gcol = gl[(t * len(gl)).astype(int)]
+                gcol = ramp_colour(gl, t)
                 rgb[sel] = rgb[sel] * (1 - 0.65 * t[:, None]) + gcol * 0.65 * t[:, None]
                 emissive_mask |= sel & (Ifinal > 0.55) & (Gfinal > 0.5)
                 # the shade index must see the glow, or cleanup would merge lit and unlit membrane
                 shade_idx[sel] = shade_idx[sel] + 100 * (t * 6).astype(int)
 
     # cleanup: an isolated pixel (all 4 neighbours agree on another shade) takes the neighbours' colour
-    for _ in range(2):
+    for _ in range(0 if smooth else 2):
         n = [_shift(shade_idx, sx, sy, -2) for sx, sy in ((1, 0), (-1, 0), (0, 1), (0, -1))]
         lonely = solid & (n[0] == n[1]) & (n[1] == n[2]) & (n[2] == n[3]) & (n[0] != shade_idx) & (n[0] >= 0)
         if lonely.any():
@@ -840,10 +863,11 @@ def render(layers, width, height, seed=3, glow_radius=5, glow_alpha=0.55, return
             rgb[lonely] = src[lonely]; shade_idx[lonely] = n[0][lonely]
 
     # interior edge where a nearer layer overlaps: darken the far side
-    for sx, sy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+    edge = np.zeros((height, width), bool)     # one pixel wide at any sample rate
+    for sx, sy in [(ux * d, uy * d) for ux, uy in ((1, 0), (-1, 0), (0, 1), (0, -1)) for d in range(1, ss + 1)]:
         nb = _shift(layer_id, sx, sy, -1)
-        edge = solid & (nb > layer_id) & ~emissive_mask & ~_shift(emissive_mask, sx, sy, False)
-        rgb[edge] *= 0.45
+        edge |= solid & (nb > layer_id) & ~emissive_mask & ~_shift(emissive_mask, sx, sy, False)
+    rgb[edge] *= 0.45
 
     out = np.zeros((height, width, 4))
     out[..., :3] = np.clip(rgb, 0, 255); out[..., 3] = solid * 255
@@ -862,10 +886,27 @@ def render(layers, width, height, seed=3, glow_radius=5, glow_alpha=0.55, return
         ring |= new
     out[ring, :3] = ring_col[ring]; out[ring, 3] = 255
 
+    glow_rgb = out[..., :3]
+    if ss > 1:   # box-filter the samples down to pixels (colour weighted by coverage); a pixel glows when
+                 # at least half its samples do, in the mean colour of those samples (binary alpha kept)
+        def down(a):
+            return a.reshape(out_h, ss, out_w, ss, *a.shape[2:]).mean(axis=(1, 3))
+        alpha = out[..., 3:] / 255.0
+        cover = down(alpha)
+        rgb_down = down(out[..., :3] * alpha) / np.maximum(cover, 1e-6)
+        em = emissive_mask[..., None].astype(float)
+        em_frac = down(em)
+        glow_rgb = down(out[..., :3] * em) / np.maximum(em_frac, 1e-6)
+        emissive_mask = em_frac[..., 0] >= 0.5
+        Mfinal = Mfinal[ss // 2::ss, ss // 2::ss]
+        height, width = out_h, out_w
+        out = np.zeros((height, width, 4))
+        out[..., :3] = rgb_down; out[..., 3] = cover[..., 0] * 255
+
     glow_img = None
     if return_glow:
         g = np.zeros((height, width, 4))
-        g[emissive_mask, :3] = out[emissive_mask, :3]; g[emissive_mask, 3] = 255
+        g[emissive_mask, :3] = glow_rgb[emissive_mask]; g[emissive_mask, 3] = 255
         glow_img = Image.fromarray(g.astype(np.uint8), "RGBA")
 
     # smooth light spill around emissives (outside the silhouette only) -- presentation only
