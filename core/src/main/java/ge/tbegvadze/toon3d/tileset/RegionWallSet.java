@@ -47,9 +47,11 @@ public final class RegionWallSet {
                 Map<WallSlot, List<String>> slots = new EnumMap<>(WallSlot.class);
                 for (WallSlot slot : group.slots()) {
                     List<String> variants = new ArrayList<>();
-                    String stem = "wall_" + letter + "_" + group.idToken() + "_" + slot.idToken();
+                    // The HALL BASE (the default wall of most floors and rooms) wears the MEDICAL base faces.
+                    WallGroup faceGroup = (group == WallGroup.HALL && slot == WallSlot.BASE) ? WallGroup.MEDICAL : group;
+                    String stem = "wall_" + letter + "_" + faceGroup.idToken() + "_" + slot.idToken();
                     if (slot == WallSlot.BASE) {
-                        for (int variant = 0; variant < group.baseVariantCount(); variant++) {
+                        for (int variant = 0; variant < faceGroup.baseVariantCount(); variant++) {
                             variants.add(stem + "_" + variant);
                         }
                     } else {

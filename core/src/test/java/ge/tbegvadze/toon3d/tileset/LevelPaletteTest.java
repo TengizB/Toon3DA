@@ -25,7 +25,7 @@ class LevelPaletteTest {
         // historic 1:1 table.
         assertEquals("outer_facility", legacy.wallSetId());
         assertEquals("wall_a_containment_base_0", legacy.spriteIdOf('Z'));
-        assertEquals("wall_a_hall_base_0", legacy.spriteIdOf('x'));
+        assertEquals("wall_a_medical_base_0", legacy.spriteIdOf('x'));
         assertEquals("wall_a_medical_base_0", legacy.spriteIdOf('M'));
         assertEquals("wall_a_hall_light", legacy.spriteIdOf('S'));
         assertEquals("column_a_round", legacy.spriteIdOf('P'));
