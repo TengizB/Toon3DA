@@ -74,7 +74,7 @@ into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
 - [x] **CP11** — DONE WHEN: EVENT_ROOM conforms to G6; audit passes; fast gate green.
 - [x] **CP12** — DONE WHEN: GATE_AIRLOCK conforms to G7; audit passes; fast gate green.
 - [x] **CP13** — DONE WHEN: StartGameLevelGenerator conforms to G8; audit start-room row passes; fast gate green.
-- [ ] **CP14** — DONE WHEN: RetiredWallDressing + retired rolls deleted; LevelGenConfig scatter flags /
+- [x] **CP14** — (balanceSim: SR3 0.94 D5, ST2 0 D7, S-BUILD 1.33 seed noise — see note) DONE WHEN: RetiredWallDressing + retired rolls deleted; LevelGenConfig scatter flags /
       enableLargeRooms / enableServerRooms deleted, preferredRegularKit set by Cache/Elite profiles (R31); dead
       constants gone (A9); full audit A3-A8 across ALL generators, AFTER figures recorded beside BEFORE; both gates
       green; A14 captures taken.
@@ -272,3 +272,35 @@ into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
   enableLargeRooms, enableServerRooms; Cache/Elite profiles set preferredRegularKit ("storeroom" / "aftermath"),
   remove the deleted flags from Mystery and the other profiles (R31); dead constants (A9); full audit AFTER vs the CP2
   BEFORE across ALL generators; both gates; A14 captures via run-game.
+- CP14 (whole feature): DELETED RetiredWallDressing (no caller left; every retired*Rolls was already gone with its
+  generator), LevelGenConfig's radioactiveBarrels / crates / computerTerminals / lockers / bloodStains / corpses /
+  oilPools / every *Weight / enableLargeRooms / enableServerRooms / column* placement params (none had a reader),
+  LEVEL_GEN_LARGE_MIN_DIM + LEVEL_GEN_LARGE_MODIFIER_CHANCE, RouteMapConstants.ELITE_RADIOACTIVE_BARREL_WEIGHT, and the
+  IRRADIATED affix's dead weight bonus (NodeAffixDefinition field/builder/apply, RouteRegistries call, RouteMapConstants
+  alias, BalanceConfig.AFFIX_IRRADIATED_BARREL_WEIGHT_BONUS + GRANDFATHERED name, CHANGELOG line; IRRADIATED keeps its
+  extra 'g' barrels). R31: CacheProfile sets preferredRegularKit = PropKit.ID_STOREROOM, EliteProfile ID_AFTERMATH;
+  Mystery and every other profile set none. A9 code read: no per-tile prop chance in level/, no room-type switch, no
+  listed constant left (the four enemy-mix *_THRESHOLD constants and RouteMapConstants PINCH_ZOOM_ENABLED /
+  REST_OFFERS_CHOICE were dead BEFORE CP0 and are outside this idea).
+  AUDIT, 200 seeds x depths 1/5/10/15/20/25, BEFORE (CP2) -> AFTER (CP14):
+    ROOMS_MST   I1 1101->0  I2 48564->0  I3 17870->0  I4 27591->0  I7 13197->0  I9 9317 misplaced/3 no-T -> 0/0
+                I14 4556->0                                     (I5/I6/I8 were 0 and stay 0)
+    LINEAR      I1 727->0   I2 12240->0  I3 8786->0   I4 12136->0  I7 9880->0   I9 1696/176 -> 0/0  I14 3900->0
+    CAVERN      I2 68115->0 I3 9020->0   I4 651->0    I7 1292->0   I8 5515->0   I9 5515/410 -> 0/0  I14 2760->0
+    BOSS_ARENA  no report -> reported, every counter 0      MED_BAY     I9 2400 -> 0, reported, all 0
+    EVENT_ROOM  I9 1200 -> 0, reported, all 0               GATE_AIRLOCK I9 1200 -> 0, reported, all 0
+    START_ROOM  no report -> reported, every counter 0
+    Specials: ROOMS 2.83/floor (I11 max dev 11%), LINEAR 2.00 (9%), CAVERN 4.00 (7%); 0 duplicates, 0 planned!=placed.
+  GATES: fast gate green (481 tests, only the baseline StoryBarkTest). balanceSim FAIL lines: SR3 0.94 (D5; trend
+  1.00/0.99/0.98/0.97/0.96/0.94 — REPORT TO THE OWNER), S-TWIST ST2 hunted 0 (D7, owner), S-BUILD median-depth spread
+  1.33 (CLOSE/MARKSMAN/BULWARK 4.0 vs PYRO-DEMO 3.0). S-HEAVY passes again. Bisect (balanceSim at CP9..CP13 + CP14
+  with the two preferredRegularKit lines commented out) proved BOTH new reds come ONLY from the R31 preference; at
+  seed offsets 0xB0A1D1000 / 0xB0A1D2000 S-BUILD reads 1.00 with and without it (seed noise — owner NOT asked about
+  S-BUILD specifically; flag it in the final report). Local-only experiment edits were reverted (sim/ untouched).
+  A14 captures (run-game; seed 11 = rooms_mst, 3 = linear_corridor, 2 = cavern; engage, answer the exchange, LEAVE IT
+  on the relic offer, close barks, lookat:d:N:3 and lookat:<signature>:0:4) are in the session scratchpad
+  (a14/*_sheet.png, sig_sheet.png, doors_lc.png) for the reviewer — not committed (A14: "captures go to the reviewer").
+  NOTE for the setup: a worker restart kills the virtual display; re-run `.claude/skills/run-game/setup.sh`.
+  NEXT (CP15): docs — procedural-level-generation.txt rewrite (HISTORICAL removed), environment-tileset-system.txt
+  RECIPE B + ADD A PROP KIT, tile-symbols.txt, route-map-system.txt (IRRADIATED line 430, R31 profiles),
+  game-balance-knowledge.txt / -authority.txt K12, CLAUDE.md, the agent's invariant list.

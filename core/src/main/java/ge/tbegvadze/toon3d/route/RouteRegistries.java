@@ -404,10 +404,9 @@ public final class RouteRegistries {
      * here, no bespoke code path. Exposed (package-private) so tests can populate a fresh registry.
      */
     static void registerAffixes(NodeAffixRegistry registry) {
-        // IRRADIATED — extra radioactive barrels + a hazard-pool read.
+        // IRRADIATED — extra radioactive barrels stamped as hazard pools.
         registry.register(NodeAffixDefinition.builder(RouteMapConstants.AFFIX_IRRADIATED_ID, "IRRADIATED")
                 .ruleLine(RouteMapConstants.AFFIX_IRRADIATED_RULE_LINE)
-                .radioactiveBarrelWeightBonus(RouteMapConstants.AFFIX_IRRADIATED_BARREL_WEIGHT_BONUS)
                 .extraRadioactiveBarrels(RouteMapConstants.AFFIX_IRRADIATED_EXTRA_BARRELS)
                 .build());
 

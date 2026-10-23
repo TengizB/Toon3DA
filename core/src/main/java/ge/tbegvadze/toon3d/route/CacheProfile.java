@@ -19,8 +19,8 @@ import java.util.List;
  *   <li>Generator fixed to {@link GeneratorId#ROOMS_MST} for a consistent, tidy "rooms of crates"
  *       depot read (boss depths still defer to the arena — {@link GameMath#isBossFloor(int)} is the
  *       single authority, matching the other profiles).</li>
- *   <li>Config: bright (no unlit/flicker floors), NO hazards (radioactive barrels off), crates +
- *       lockers on, one large cargo bay, columns for depth.</li>
+ *   <li>Config: bright (no unlit/flicker floors), regular rooms leaning the STOREROOM kit (crates +
+ *       lockers, level-generation-overhaul R31), columns for depth.</li>
  *   <li>Threat + supply: the CACHE {@link NodeSupplySpec} (balance-overhaul order 2) — a light
  *       roster (0.30x threat, 0.35x bodies, never zero: a cache is not a free heal) and a net-GAIN
  *       plan of ammo (split by the weapons the player carries), heals, armour and chips, placed by
@@ -60,20 +60,15 @@ public final class CacheProfile implements NodeLevelProfile {
         return new LevelPlan(GeneratorId.ROOMS_MST, config, buildSetDressing(seed));
     }
 
-    /** A bright, hazard-free depot config: crates + lockers + a cargo bay. */
+    /** A bright depot config: STOREROOM-leaning regular rooms (crates + lockers) and columns. */
     private LevelGenConfig buildDepotConfig() {
         LevelGenConfig config = new LevelGenConfig();
         // Keep it bright — a safe read within 2 seconds of entering.
         config.unlitFloors      = false;
         config.flickeringFloors = false;
         config.normalFloors     = true;
-        // No hazards in a safe room.
-        config.radioactiveBarrels = false;
-        // The depot look: crates + lockers, one big cargo bay, columns for cover/visual depth.
-        config.crates           = true;
-        config.lockers          = true;
-        config.enableLargeRooms = true;
-        config.enableServerRooms = false;
+        // The depot look: regular rooms lean STOREROOM (crates + lockers, R31), columns for cover/visual depth.
+        config.preferredRegularKit = ge.tbegvadze.toon3d.level.PropKit.ID_STOREROOM;
         config.columns          = true;
         return config;
     }

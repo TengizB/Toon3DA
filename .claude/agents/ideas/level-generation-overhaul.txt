@@ -1020,6 +1020,11 @@ DECISIONS
       sightlines; NAIVE still avoids/guards ~0 and TACTICAL holds 0.91?  ->  Owner delegated the decision; chosen:
       accept as a layout effect, not a balance regression. No band and no number moves; S-HEAVY is reported beside
       SR3 at every later gate.  (2026-10-23)
+  D7  balanceSim S-TWIST ST2 "hunted floors played" (>= 1, never waived) read 0 after CP14's R31 kit preference
+      (CACHE -> STOREROOM, ELITE -> AFTERMATH); it read 3 before. HUNTED starts at depth 4 and TACTICAL runs die at a
+      median depth of 3-4, so the band rests on ~3 of 200 runs; on two other seed sets it read 4 / 0 with the
+      preference and 3 / 3 without. The preference places no supply and no spawn?  ->  Owner: keep R31, accept ST2
+      as a sampling artifact. No band and no number moves; ST2 is reported beside SR3.  (2026-10-23)
 
 
 OPEN QUESTIONS

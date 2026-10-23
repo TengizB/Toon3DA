@@ -2544,6 +2544,11 @@ THE TUNING LOOP the whole series was built to enable:
   Numbers chase feel; the schema keeps them honest.
 
 CHANGELOG
+  level-generation-overhaul / CP14 — BalanceConfig.AFFIX_IRRADIATED_BARREL_WEIGHT_BONUS (0.12) DELETED with its
+    BalanceSchema GRANDFATHERED name. It raised LevelGenConfig.radioactiveBarrelWeight, which only the per-tile prop
+    scatter read; that scatter left at CP6, so the bonus has had no effect since then, and R31 deletes the weight.
+    IRRADIATED keeps its real effect (AFFIX_IRRADIATED_EXTRA_BARRELS 'g' hazard pools). NO other number, band or
+    waiver moved.
   level-generation-overhaul / CP7 — BalanceConfig.LEVEL_GEN_PROP_CHANCE (0.13, SECTION 6) DELETED with its
     BalanceSchema GRANDFATHERED name (the list shrinks by one, as C-CONSTANT allows). Its last reader, the per-tile
     random prop scatter, is gone: rooms are furnished by prop kits under hard fill caps (level/RoomDresser,

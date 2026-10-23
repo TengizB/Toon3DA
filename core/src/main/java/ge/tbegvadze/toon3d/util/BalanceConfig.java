@@ -1945,8 +1945,6 @@ public final class BalanceConfig {
     public static final int   AFFIX_OVERCLOCKED_VAULT_AMMO_BOXES = 2;
     /** SWARM vault premium: extra owned-ammo boxes that pay for its raised threat. */
     public static final int   AFFIX_SWARM_VAULT_AMMO_BOXES       = 9;
-    /** IRRADIATED: extra radioactive-barrel weight on top of the ELITE base. */
-    public static final float AFFIX_IRRADIATED_BARREL_WEIGHT_BONUS = 0.12f;
     /** IRRADIATED: extra 'g' radioactive barrels stamped as hazard pools. */
     public static final int   AFFIX_IRRADIATED_EXTRA_BARRELS = 3;
     /** FORTIFIED: extra cover columns 'P' (a slugfest of angles). */

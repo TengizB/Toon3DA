@@ -148,22 +148,6 @@ public final class LevelGenConstants {
     // Keeps loop connections local so they add shortcuts rather than crossing the entire dungeon.
     public static final int   LEVEL_GEN_LOOP_MAX_DISTANCE     = 25;
 
-    // --- Room type system ---
-    // LARGE is now a size MODIFIER (not a room type/blueprint): every non-entrance room
-    // independently rolls a small chance to be stamped significantly larger than a standard
-    // room, while keeping whatever blueprint styling it would have received anyway (Room.isLarge,
-    // rolled in LevelGenerator.placeRooms() / LinearCorridorGenerator's side-room placement).
-    // LEVEL_GEN_LARGE_MIN_DIM is reused as: (a) the floor for a large-modified room's interior
-    // width AND height, and (b) the size gate for LARGE-class SIGNATURE rooms (e.g. POWER_PLANT).
-    public static final int   LEVEL_GEN_LARGE_MIN_DIM              = 9;
-    // Probability any non-entrance room independently rolls the large size modifier.
-    // This is the intended vehicle for the big set-piece rooms (STELLAR_OBSERVATORY, POWER_PLANT,
-    // COMMAND_CENTER) — see the STELLAR_OBSERVATORY size-gate note: the shared standard-room height
-    // cap (LEVEL_GEN_ROOM_MAX_HEIGHT) never produces a 13x13+ near-square footprint, so those rooms
-    // can only be hosted by a large-modified room. At the old 0.05 an oversized room was so rare that
-    // the observatory appeared in ~1% of standard levels and 0% of linear levels; raised so a couple
-    // of oversized rooms occur per level and the set-pieces have somewhere to live.
-    public static final float LEVEL_GEN_LARGE_MODIFIER_CHANCE      = 0.16f;
     // The linear generator's ENTRANCE room is always a small room of at most this interior side
     // (balance-overhaul order 2, E5): from its centre the spine — and the floor's first fight — must be
     // within FIRST_CONTACT_FIRST_FLOOR_MAX_WALK_TILES walk tiles.
