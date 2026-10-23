@@ -55,12 +55,12 @@ CONSUMED). Numbers live in ArtDirection (MOOD_<ID>_*), rows in LightingMoods.boo
 Tints are RGB multipliers whose Rec.601 luminance is in [0.95, 1.05] — the grade shifts HUE with
 distance, never exposure. Fog distances in tiles.
 
-  id                 region             near tint           far tint            fog       vignette  floor / ceiling (region set)
-  cool_steel         A OUTER FACILITY   (0.92,1.00,1.10)    (0.62,1.08,1.40)    1.5-11.0  0.40      outer_facility.floor / .ceiling
-  clinical_white     B RESEARCH WING    (1.00,1.00,0.98)    (0.80,1.12,0.92)    1.5-11.0  0.30      research_wing (= A) surfaces
-  amber_hot          C REACTOR DEPTHS   (1.10,0.98,0.80)    (1.55,0.86,0.40)    1.5-10.0  0.45      reactor_depths (= A) surfaces
-  corrupted_violet   D THE BREACH       (1.08,0.95,1.02)    (1.70,0.62,1.10)    1.0-8.0   0.55      the_breach (= A) surfaces
-  core_white_violet  E THE CORE         (0.98,0.98,1.12)    (1.05,0.80,1.85)    1.5-11.0  0.50      the_core (= A) surfaces
+  id                 region             near tint           far tint            fog       vignette  floor / ceiling
+  cool_steel         A OUTER FACILITY   (0.92,1.00,1.10)    (0.62,1.08,1.40)    1.5-11.0  0.40      deck_grating_steel / ceiling_strip_lights
+  clinical_white     B RESEARCH WING    (1.00,1.00,0.98)    (0.80,1.12,0.92)    1.5-11.0  0.30      lab_tile_white / ceiling_panel_grid
+  amber_hot          C REACTOR DEPTHS   (1.10,0.98,0.80)    (1.55,0.86,0.40)    1.5-10.0  0.45      reactor_grate_hot / ceiling_pipes
+  corrupted_violet   D THE BREACH       (1.08,0.95,1.02)    (1.70,0.62,1.10)    1.0-8.0   0.55      breach_flesh_membrane / ceiling_torn_conduit
+  core_white_violet  E THE CORE         (0.98,0.98,1.12)    (1.05,0.80,1.85)    1.5-11.0  0.50      core_circuit_plate / ceiling_lattice
 Horizon colours (packed RGBA): see ArtDirection MOOD_<ID>_HORIZON_FLOOR_PACKED / _CEILING_PACKED.
 
 Resolution (World.resolveLightingMood, called in buildLevelDependentResources before any renderer is
@@ -139,21 +139,27 @@ are graded as bodies.
 
 6. MATERIALS — render/SurfaceMaterialRegistry + SurfaceMaterials.bootstrap()
 ----------------------------------------------------------------------------
-FLOORS AND CEILINGS COME FROM THE REGION WALL SETS (generated-wall-art order 2, decision D10). Every region set
-ships a 64×64 (RenderConstants.SURFACE_MATERIAL_SIZE) floor and ceiling made with the enemy-art kit
-(docs/wall-art-creation-guide.txt 11.3): assets/textures/walls/generated/<set>.floor.png / .ceiling.png. The
-registry holds two materials per registered set id - "<set>.floor" and "<set>.ceiling"
-(SurfaceMaterials.floorMaterialId / ceilingMaterialId); an alias set (regions B-E until orders 3-4) loads the
-set it borrows; a surface that fails to load falls back to set A's. Each loader reads the PNG once (lazily, at
-the first floor build) and converts it to the packed-RGBA8888 int[] layout FloorCeilingRenderer samples:
-row-major `row*64+column`, row 0 = the tile's SOUTH edge (the image's bottom row), column 0 = west. Cached once
-and SHARED across floors (read-only).
-Each lighting mood binds its region's set surfaces (LightingMoods: cool_steel -> outer_facility, clinical_white ->
-research_wing, amber_hot -> reactor_depths, corrupted_violet -> the_breach, core_white_violet -> the_core). The
-mood resolution path, the pipeline, mips, bands and batching below are unchanged; only the texels changed. The
-ten procedural materials of visual-identity-order-1 are deleted.
+Ten 64×64 (RenderConstants.SURFACE_MATERIAL_SIZE) packed-RGBA8888 int[] textures, row-major
+`row*64+column`, row 0 = the tile's south edge, column 0 = west — the layout FloorCeilingRenderer
+samples. Generated on the CPU, deterministic (GameMath.combineHash, never java.util.Random), cached
+once and SHARED across floors (read-only).
+REVERTED (2026-10-23, owner request): generated-wall-art order 2 CP6 had replaced these with the region wall
+sets' floor/ceiling PNGs (<set>.floor.png / .ceiling.png); the owner judged them to look bad, so the floor and
+ceiling are back to the procedural materials below. The PNGs are still baked by walls.py and listed in the set
+manifest, but the engine does not read them.
 Value band (R9, pre-shade average luminance): floors 0.10-0.24, ceilings 0.06-0.18, so floor and
-ceiling always sit below the walls (set A: floor 0.176, ceiling 0.177 - measured by walls.luminance).
+ceiling always sit below the walls.
+  deck_grating_steel     steel plates, 32-texel seams, diamond tread, corner bolts
+  ceiling_strip_lights   32-texel panels with one fluorescent lens each (texture only, not a light)
+  lab_tile_white         16-texel tiles, value jitter, grout, the odd stain
+  ceiling_panel_grid     acoustic panels with a slim recessed light slot
+  reactor_grate_hot      coarse 16-texel grating (6-texel bars — an 8-texel period aliases into moire
+                         at backdrop distance), ember underglow in each cell, low-contrast chevron wear
+  ceiling_pipes          two pipes along X with highlight rows and clamp rings
+  breach_flesh_membrane  Worley-style cellular veins, wet specks, a stray deck-plate fragment
+  ceiling_torn_conduit   torn panel edges, hanging conduits, fleshy growth blobs
+  core_circuit_plate     orthogonal traces with node pads on an 8-grid
+  ceiling_lattice        diagonal lattice beams with crossing nodes
 
 
 Mip chain and LOD (render-quality follow-up): SurfaceMaterialRegistry caches, per material, 4 levels
@@ -216,9 +222,9 @@ The phone check is the owner's: build with RenderConstants.PERF_PROBE_FORCE_ON =
 
 7. RECIPE C — add a mood or a material
 --------------------------------------
-Add a MATERIAL: materials are a region set's floor + ceiling - a new region set row in tileset/RegionWallSets
-registers both automatically (docs/wall-art-creation-guide.txt RECIPES); keep them in the R9 band (measure with
-walls.luminance - never a committed test).
+Add a MATERIAL: one `register(id, generator)` row in SurfaceMaterials.bootstrap() plus its
+MATERIAL_ID_* constant in ArtDirection; keep it in the R9 band (measure the average luminance in a
+throwaway main — never a committed test); deterministic hashing only.
 Add a MOOD: the MOOD_<ID>_* constants in ArtDirection (near/far luminance in [0.95, 1.05]), one
 register() row in LightingMoods.bootstrap(), and name it from the region's RegionAmbience row
 (route/RouteRegistries). Bootstrap fails loud if either side is missing. No switch anywhere.

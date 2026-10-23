@@ -67,6 +67,16 @@ public final class ArtDirection {
     public static final String MOOD_ID_CORRUPTED_VIOLET = "corrupted_violet";
     public static final String MOOD_ID_CORE_WHITE_VIOLET = "core_white_violet";
 
+    public static final String MATERIAL_ID_DECK_GRATING_STEEL = "deck_grating_steel";
+    public static final String MATERIAL_ID_CEILING_STRIP_LIGHTS = "ceiling_strip_lights";
+    public static final String MATERIAL_ID_LAB_TILE_WHITE = "lab_tile_white";
+    public static final String MATERIAL_ID_CEILING_PANEL_GRID = "ceiling_panel_grid";
+    public static final String MATERIAL_ID_REACTOR_GRATE_HOT = "reactor_grate_hot";
+    public static final String MATERIAL_ID_CEILING_PIPES = "ceiling_pipes";
+    public static final String MATERIAL_ID_BREACH_FLESH_MEMBRANE = "breach_flesh_membrane";
+    public static final String MATERIAL_ID_CEILING_TORN_CONDUIT = "ceiling_torn_conduit";
+    public static final String MATERIAL_ID_CORE_CIRCUIT_PLATE = "core_circuit_plate";
+    public static final String MATERIAL_ID_CEILING_LATTICE = "ceiling_lattice";
 
     // ------------------------------------------------------------------ the five moods (tints are multipliers, may exceed 1)
 
