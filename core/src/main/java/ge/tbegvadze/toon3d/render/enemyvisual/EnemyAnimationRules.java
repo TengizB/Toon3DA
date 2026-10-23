@@ -54,7 +54,8 @@ public final class EnemyAnimationRules {
         },
         /**
          * Order 4: a SpecialAbility resolved — the ability's own clip from the ability rows when the creature
-         * ships it (BUFF_SELF, AREA_STRIKE), otherwise the row's clip (ATTACK), at the row's priority.
+         * ships it (BUFF_SELF, AREA_STRIKE; order 5 DEBUFF_PLAYER, SELF_DESTRUCT; order 6 SUMMON), otherwise the row's
+         * clip (ATTACK), at the row's priority.
          */
         ABILITY {
             @Override void apply(EnemyVisualLayer layer, EnemyAnimator animator, EnemyVisualEvent event, Row row) {
@@ -252,6 +253,8 @@ public final class EnemyAnimationRules {
         // Order 5: the Aberrations' abilities (the self-destruct row plays on each countdown turn).
         abilityClip(SpecialAbility.DEBUFF_PLAYER, EnemyClipId.DEBUFF_PLAYER);
         abilityClip(SpecialAbility.SELF_DESTRUCT, EnemyClipId.SELF_DESTRUCT);
+        // Order 6: the Undead's carrier (the summoned dead arrive through ALERTED, like any spawn).
+        abilityClip(SpecialAbility.SUMMON,        EnemyClipId.SUMMON);
 
         death(EnemyVisualEvent.DeathCause.SELF_DESTRUCT, EnemyClipId.DEATH_BURST, EnemyEffectSet.BurstId.DETONATE);
 

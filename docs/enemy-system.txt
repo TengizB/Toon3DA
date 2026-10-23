@@ -859,6 +859,11 @@ the normal DEATH). The Eye Tyrant's beam starts at the pupil (the frame's EMITTE
 the hover. No sim change. KNOWN (pre-existing, not fixed): chainAlertQueue is sized to the floor's STARTING enemy count,
 so several DORMANT enemies added after the floor starts that wake in one turn overflow it - only the capture tool's
 dormant spawns do that today (summons and the HUNTED hunter arrive awake).
+Order 6 (the Undead): BLIGHT_CORRUPTOR's SUMMON plays its own SUMMON clip (one EnemyClipId constant + one abilityClip
+row - the only runtime change of the order); the summoned dead arrive through ALERTED like any spawn. VORTEX_EYE's
+DEBUFF_PLAYER plays its clip and its bolt is the undead set's SOUL_BOLT (a per-creature override; the renderer does
+not hover VORTEX_EYE, so its hover is baked into the canvas). REVENANT's committed lunge (heavyWindUp CHARGE) holds the
+WIND_UP clip: it crouches behind its riot shield. No sim change.
 Rule (series G9): the visual layer never writes back to an enemy, the manager or the world. Adding a fire
 site is one fireVisual...(…) call; adding a moment is one enum constant plus its rule row in
 render/enemyvisual/EnemyAnimationRules (the rule table refuses to load with a moment unmapped).

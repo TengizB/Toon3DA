@@ -68,7 +68,9 @@ CONTENTS
     <creature>_rig.py                  one per creature: its rig function, pose defaults and clips
                                        (warden_rig.py, harvest_tick_rig.py, iron_stalker_rig.py; order 5:
                                        plague_hulk_rig.py, eye_tyrant_rig.py, gore_biter_rig.py, mire_wraith_rig.py,
-                                       sump_wretch_rig.py - the first Mire Wraith, kept for its own enemy)
+                                       sump_wretch_rig.py - the first Mire Wraith, kept for its own enemy; order 6:
+                                       ghoul_rig.py, crawler_rig.py, revenant_rig.py, vortex_eye_rig.py,
+                                       blight_corruptor_rig.py - the undead, on kit.Humanoid)
     bestiary.py                        the CREATURES table (rig, clips) + the command line
     sheet.py                           contact sheets
   assets/textures/enemies/generated/   shipped output per creature: <name>.atlas.png, <name>.glow.png,
@@ -187,11 +189,15 @@ because every pixel's value comes from a real surface normal lit by one consiste
     chitin, chitin_dk, bone, sac (translucent, ichor glow) creatures of harvested tissue
     flesh, flesh_dk, sclera, membrane (translucent,       (order 5) the aberrations: desaturated rose-grey and
       ichor glow), pupil                                  violet-grey, never red; every one carries the WET SHEEN
+    overalls, hazmat, labcoat, visor, deadskin,            (order 6) the undead: slate suit, olive-grey (never green)
+      spore (translucent, soul glow), redeye (emissive)   quarantine rubber, off-white lab coat, smoked glass (masks,
+                                                          visors, the riot shield), ash grey (a torn cuff, a split seam -
+                                                          never a face), soul-lit pods, the Ghoul's red eyes (owner D1)
     basalt, basalt_lt                                      stone (see lesson 12.2 before using)
     cyan, ichor, magma                                     emissives
 4.4 Family glow inks (one per family, so a family reads at a glance):
     MACHINE cyan (the Organization's light) | INSECT + ABERRATION ichor (harvested tissue, coral; shipped for both) |
-    UNDEAD soul [PLANNED: order 6: pale cold bone-white, low saturation] | GOLEM + DEMON magma
+    UNDEAD soul (shipped order 6: pale, cold, low saturation; the Ghoul's eyes are the one red exception) | GOLEM + DEMON magma
     (the planet's heat; elemental golems add their element on the surface).
 4.4b WET SHEEN (order 5): a material may carry wet=(strength, shininess) - a second, tight specular lobe that
     leaves a near-white glint (kit.WET_GLINT, never pure white) on the lit curve; the glint is its own cleanup shade.
@@ -280,7 +286,8 @@ because every pixel's value comes from a real surface normal lit by one consiste
       with smear frames). SHIPPED (order 5): DEBUFF_PLAYER (the Eye Tyrant's pinpoint iris, the Mire Wraith's volley
       with an "emit"), SELF_DESTRUCT (the Plague Hulk's countdown swell - a HOLD clip played as a one-shot, it stays
       one level up while the state holds), plus PRIMING (HELD by the SELF_DESTRUCTING state) and DEATH_BURST (variant
-      of DEATH for a self-destruct). An ability clip is named exactly as the SpecialAbility constant; the runtime maps
+      of DEATH for a self-destruct). SHIPPED (order 6): SUMMON (the Blight Corruptor's pods swell and split, 0.6 s) and
+      the Vortex Eye's DEBUFF_PLAYER (the vortex winds tight and lashes, "emit" at 0.28). An ability clip is named exactly as the SpecialAbility constant; the runtime maps
       the ability to it by a rule row (8.2) and plays ATTACK for a creature that does not ship one.
 7.4 Principles (they matter more at low frame counts): anticipation before every action; squash
     and stretch on impacts; overlapping action (cables, antennae, tails lag a frame); hold the key
@@ -311,6 +318,24 @@ because every pixel's value comes from a real surface normal lit by one consiste
                           (order 5) SECONDARY MOTION: keys for "<param>_jig" = a damped spring LAGGING the param's track
                           (flesh rolling after the breath, a shroud after the sway). Baked (a rig has no memory); a loop
                           integrates four periods so it wraps without a seam. Merge into the clip's keys.
+    Humanoid(pelvis, spine, neck, head, shoulder_half, hip_half, upper_arm, fore_arm, hand, thigh, shin, foot, arm_rest,
+             leg_rest)   (order 6) THE HUMANOID RIG: one skeleton, many bodies. joints(p) -> named canvas points (pelvis,
+                          waist, chest, neck, head, l_/r_ shoulder, elbow, wrist, hand, hip, knee, ankle, toe + the hand /
+                          foot / head / chest angles) from joint ANGLES in the pose: every limb angle is measured from
+                          straight DOWN and MIRRORED per side (+ = outward for both), children relative; torso / chest /
+                          neck / head lean; squat folds the legs; <limb>_fore foreshortens a whole limb toward the viewer,
+                          <side>_upper_fore the upper arm alone (the elbow brought forward - lesson 12.22). A NEGATIVE
+                          spine / neck / head hangs it upside down = a body on all fours seen head-on (the Crawler).
+                          Humanoid.params(**defaults) gives every skeleton parameter (0) for a rig's defaults.
+    hand(wrist, angle, side, length, mat, fingers=4, finger_length=, finger_r=, palm_r=, spread=, curl=, thumb=True)
+                          (order 6) a palm + chained fingers fanned about the hand; curl 0 open .. 1 a grab. For OPEN
+                          hands only (the Ghoul's reach) - never for a hand gripping a held object (lesson 12.21).
+    fold_lines(x1, y1, x2, y2, count, length, width=, mat=, angle=, jitter=, seed=, side=)   (order 6) seeded carved
+                          creases along a line: what turns a smooth capsule into cloth (elbows, knees, a pulled chest).
+    lag(clip, param, delay, duration, out_param=, fps=, loop=True)   (order 6) keys for "<param>_lag" = the param's own
+                          track `delay` seconds late (a hem, a badge, a hose following its limb; no spring, unlike jiggle).
+    Figure.transformed(xf)   (order 6) the figure carried through one more transform - layers, anchors, stencil
+                          positions (a whole-body collapse on DEATH, a NARROW of a too-wide creature).
     Xf                    a 2D affine transform. Image space: origin top-left, y DOWN, so a positive
                           angle turns CLOCKWISE on screen.
       Xf.move(dx, dy)  Xf.turn(angle, pivot)  Xf.scale(sx, sy, pivot)  Xf.reflect_x(axis)
@@ -382,13 +407,14 @@ because every pixel's value comes from a real surface normal lit by one consiste
     must be flipped (canvasHeight - y) when placed in the world's y-up space.
     Shipped clip names (the standard set, 7.3): IDLE, DORMANT, ALERT, MOVE, WIND_UP, ATTACK,
     HURT_LIGHT, HURT_HEAVY, DEFEND, WOUNDED, DEATH; ability clips BUFF_SELF, AREA_STRIKE (order 4), DEBUFF_PLAYER,
-    SELF_DESTRUCT, PRIMING, DEATH_BURST (order 5). The corpse frame is the last DEATH frame. Its
+    SELF_DESTRUCT, PRIMING, DEATH_BURST (order 5), SUMMON (order 6). The corpse frame is the last DEATH frame. Its
     lowest pixels may sit a few rows BELOW groundY (the Warden's wreck reaches row 236): parts lying
     toward the viewer read lower on screen. Place a frame by its offset on the canvas, never by
     snapping its bottom edge to the ground line.
     Anchors every creature reports: ground, hit_centre, eye; plus muzzle (anything that emits -
-    the Warden's prod tip, the Eye Tyrant's PUPIL (the beam leaves it), the Mire Wraith's maw) or mouth (the Harvest
-    Tick's jaws).
+    the Warden's prod tip, the Eye Tyrant's PUPIL (the beam leaves it), the Mire Wraith's maw, the Vortex Eye's eye ports)
+    or mouth (the Harvest Tick's jaws; order 6: the Ghoul's clamping hands, the Revenant's shield face, the Corruptor's
+    sprayer tip).
     Deterministic: the same script writes byte-identical atlases and manifests (rule R4).
 
 7.8 Previews for the owner (bestiary.py --preview DIR): an animated GIF per clip, nearest-neighbour
@@ -396,7 +422,8 @@ because every pixel's value comes from a real surface normal lit by one consiste
     <name>_strip.png, every clip as a labelled row of frames at 2x with the frame durations and the
     anchors marked. Previews are for the gate and are never committed.
 
-7.9 Atlas budget. Order 5: plague_hulk 98, eye_tyrant 96, mire_wraith 95, sump_wretch 96 (all 2048x2048),
+7.9 Atlas budget. Order 6: ghoul 93 (1024x2048), crawler 64 (1024x1024), revenant 62 (1024x2048), vortex_eye 97
+    (1024x1024), blight_corruptor 96 (1024x2048). Order 5: plague_hulk 98, eye_tyrant 96, mire_wraith 95, sump_wretch 96 (all 2048x2048),
     gore_biter 83 (1024x2048). The Warden (81 unique frames) packs into 1024x2048; the Harvest Tick (88) fills
     2048x2048 exactly; the Iron Stalker (100, 13 clips incl. two ability clips) fits 2048x2048. A creature that needs more clips gets them by lowering frame counts (a slow
     variant at a lower fps, shorter idles) or by splitting its atlas - a runtime change for the order
@@ -459,6 +486,7 @@ Nothing here changes a rule, a number or a turn: reactions are cosmetic and neve
     the enemy still holds a clip; DEATH by CAUSE is a DeathRow (SELF_DESTRUCT -> DEATH_BURST + the DETONATE burst, else
     DEATH), and the dying instance and its remains keep that clip. A hovered type (EYE_TYRANT) falls from its hover to
     the floor over ENEMY_VISUAL_HOVER_FALL_PORTION of its death clip (GameMath.hoverRemainingWhileFalling).
+    ORDER 6 row: abilityClip(SUMMON, SUMMON) - the summoned dead arrive through ALERTED like any spawn.
     MOVE: the simulation moves an enemy instantly; the visual layer slides a migrated body one MOVE cycle
     per tile (ENEMY_VISUAL_SLIDE_SECONDS_PER_TILE 0.33 s, max 0.5 s), never snapping back mid-slide.
     Idle phase = frac(enemyId x 0.618) x IDLE duration, so a pack never breathes in unison - and (order 5, A3) the MOVE
@@ -532,6 +560,12 @@ own metal and a tick bleeds its own ichor. The builder is .claude/skills/enemy-a
                 DRIP, MOTE (the wind-up / priming seep), SCUFF, SPIT + SPIT_TRAIL + SPIT_MUZZLE (the acid), DETONATE
                 (the self-destruct flash). Creature-only bursts taken through overrides: SPIT / SPIT_TRAIL / SPIT_MUZZLE,
                 ACID_SPLASH (IMPACT), SPLASH / SPLASH_HEAVY (the Wraith is half liquid), SCUFF (the Gore Biter's CHARGE).
+      undead    (order 6, the SOUL ink) WISP (soul shaken out of a wound), SOUL_FLASH (the soul leaving a body), SCRAP /
+                SCRAP_PALE (torn suit / lab-coat cloth), ASH (the resisted read: a dull puff of grime, no light), MOTE
+                (the wind-up seep). Creature-only, through overrides: EMBER (the Ghoul's red leak from its cracked
+                visor), ARMOUR_SPARK + ARMOUR_FLECK (RESIST_ARMOUR: a resisted hit rings off the Revenant's armour and
+                shield), SOUL_BOLT + BOLT_TRAIL + BOLT_MUZZLE (the Vortex Eye's projectile), SPORE + SPORE_PUFF (the Blight
+                Corruptor's hits, leak, charge and death are spore dust off its pods)
       status    FLAME, SMOKE, BUBBLE, STUN
     No gore: sparks, ichor, dust - never blood (R3, the premise's restraint).
 9.2 THE FX MANIFEST (FX_VERSION 1): "sprites" {NAME: emissive, mode life|loop, fps, frames[orientation][frame]
@@ -571,7 +605,8 @@ own metal and a tick bleeds its own ichor. The builder is .claude/skills/enemy-a
     the legacy sprite (until order 9). Rows today: ACID_DRONE warden, SHELL_BRUTE harvest_tick, IRON_STALKER
     iron_stalker, PLAGUE_HULK plague_hulk, EYE_TYRANT eye_tyrant, GORE_BITER gore_biter, MIRE_WRAITH
     mire_wraith, SUMP_WRETCH sump_wretch (sump-wretch-acid-death; a new type with no legacy art falls back to
-    the Mire Wraith's legacy region if its atlas fails to load).
+    the Mire Wraith's legacy region if its atlas fails to load), and (order 6) GHOUL ghoul, CRAWLER crawler, REVENANT
+    revenant, VORTEX_EYE vortex_eye, BLIGHT_CORRUPTOR blight_corruptor.
   - A creature's IMPACT burst doubles as its DEATH-SPLASH burst: EnemyVisualLayer.onAcidSplash plays it on
     every tile a death splash reaches (HazardManager.AcidSplashListener), at the tile's floor, or just in
     front of the camera when the tile is the viewer's own.
@@ -657,6 +692,20 @@ own metal and a tick bleeds its own ichor. The builder is .claude/skills/enemy-a
        chain merged INTO the torso layer, and flat bevelled slabs for cloth-like skin.
   12.20 (order 5) Wide creatures: narrow the whole figure about the centre line (NARROW, the STAND idea sideways)
        rather than redesign; widening effects (sag, swell) scale x much less than y.
+  12.21 (order 6) A hand GRIPPING A HELD OBJECT does not survive generation at this resolution. The Revenant's baton
+       (two attempts) was rejected as "cursed": curled finger chains on a turned wrist break into lumps, and a prop
+       angle keyed separately from the hand spins through the fist between keys. A rigid grip + a solid closed gauntlet
+       still read wrong. Give a humanoid a weapon that is ONE RIGID PLATE moved with the body (the riot shield: offset,
+       scale toward the viewer, tilt - the shield bash), or no held weapon; keep fists closed and unarticulated.
+  12.22 (order 6) Foreshortening a WHOLE arm toward the camera crushes it into a stub with a lump of a hand. Shorten the
+       upper arm alone (<side>_upper_fore: the elbow comes forward, the forearm and hand keep their size), and search
+       swing paths numerically: every interpolated frame - not only the keys - must keep joints and props on the canvas.
+  12.23 (order 6) The owner judges BODY PROPORTION from a single still, iteratively ("too thin", "thicker legs", "longer
+       body"). Change one rig constant per round (BULK, LEG_BULK, spine, arm lengths), send ONE before/after still, and
+       keep the previous version committed: a version matched to a reference image was judged "fat" and reverted.
+  12.24 (order 6) NO HUMAN FACE (owner rule for every undead): sealed in a hood, a respirator, a helmet - the only facial
+       feature is a pair of glowing eyes behind glass. The job is told by the suit (slate hazard suit, lab coat, riot
+       armour, hazmat), not the face.
 
 
 ====================================================================================================

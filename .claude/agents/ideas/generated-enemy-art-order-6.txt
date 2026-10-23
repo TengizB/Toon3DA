@@ -1,9 +1,32 @@
-STATUS: NOT IMPLEMENTED
+STATUS: IMPLEMENTED
 CATEGORY: Visual
 TITLE: Enemy visual rework 6 - the Undead (humanoid rig)
 CREATED: 2026-10-21
-IMPLEMENTED: -
+IMPLEMENTED: 2026-10-22
 ---
+
+IMPLEMENTATION NOTE (2026-10-22)
+--------------------------------
+Built as planned with the owner's overrides (DECISIONS D1-D7), which supersede VISUAL DESIGN where they clash:
+  - NO HUMAN FACE on any undead (D1): every one is sealed in a hood / respirator / helmet; at most glowing eyes behind
+    glass. The GHOUL is the owner's tall gas-masked figure (slate hazard suit, a long ribbed gas mask with ONE panoramic
+    visor, RED eyes - kit material `redeye`, an owner exception to G5), later made heavier with a longer body and arms
+    (D6; a reference-matched version was rejected as "fat" and reverted).
+  - The REVENANT carries a RIOT SHIELD, not a baton (D5): its attack is a shield bash, its WIND_UP a crouch behind the
+    raised shield. Two baton attempts were rejected ("the right hand is cursed") - guide lesson 12.21.
+  - A1: the owner asked to see every enemy's concept before any animation (D2), so all five concepts were shown at once
+    instead of the Ghoul alone; the early read happened before any clip was built.
+Kit growth (kit.py, every earlier creature and fx set byte-identical): materials APPENDED - overalls, hazmat, labcoat,
+visor, deadskin, spore (translucent, soul glow), redeye; `soul` (wall-art order 1) is the UNDEAD ink. Helpers: Humanoid
+(the humanoid rig; incl. <side>_upper_fore), hand, fold_lines, lag, Figure.transformed.
+Rig-level adjustments vs the approved stills: the Crawler is narrowed to 0.90 of its width and lifted 2 px (its rest pose
+spanned the canvas, so every clip clipped - lesson 12.20); the Ghoul's shins are 2 px shorter and its feet slimmer than the
+approved still (the heavier soles touched the canvas bottom in three clips) - invisible at game scale.
+RUNTIME CHANGE (the only one, data-driven): EnemyClipId.SUMMON + abilityClip(SpecialAbility.SUMMON, EnemyClipId.SUMMON) in
+EnemyAnimationRules. The `undead` effect set loads by family name with no code change; the Vortex Eye's bolt, the
+Ghoul's ember, the Revenant's armour spark and the Corruptor's spores are per-creature overrides. Wiring: five
+EnemyVisualRegistry rows. No sim change, no test (series G12).
+Reviewer r1: PASS (.claude/checkpoints/generated-enemy-art-order-6.reviewer-r1.md); the ABILITY rule's comment nit applied.
 
 Part of the generated-enemy-art series. Requires orders 1-5. Read generated-enemy-art.txt and
 docs/sprite-art-creation-guide.txt before starting.
@@ -158,7 +181,33 @@ ASSUMPTIONS
 
 DECISIONS
 ---------
-(none yet)
+  D1  OWNER OVERRIDE (2026-10-22, the /implement request; supersedes VISUAL DESIGN and AS2 where they clash): no human
+      face is ever visible - at most glowing eyes; every undead is covered (armour, hazard suit, hood, respirator,
+      helmet). One enemy is a TALL, THIN humanoid with disproportionately long legs, arms and fingers, in a hazard suit
+      and a gas mask with ONE glass visor (never two lenses) and glowing RED eyes; others may wear two-lens masks.
+      Built as the GHOUL. The red eyes are an owner-approved exception to G5 (material `redeye`).
+  D2  OWNER GATE ORDER (same request): the concept still of every enemy is shown and approved BEFORE any animation is
+      made; this replaces the Ghoul-alone early read of A1 / RISKS.
+  D3  GHOUL MASK (owner, 2026-10-22, after the first concept): a LONG gas mask. The owner supplied a reference image of
+      a figure in a hazard suit and gas mask, to be used as a loose reference only: ignore the device on its chest and
+      do not make the in-game enemy look too similar to it. Built as a long ribbed rubber respirator snout hanging to
+      the chest, ending in a filter canister, plus taped glove and boot cuffs; the slate suit, the single visor, the red
+      eyes and the long limbs stay ours.
+  D4  CONCEPTS APPROVED (owner, 2026-10-22: "Approved, now continue working on idea"): the five concept stills - the
+      Ghoul with the long mask (75aa234), Crawler, Revenant, Vortex Eye, Blight Corruptor (3b1bc07) - are approved.
+      Animation, effects and the clip gate follow (A1 met: the concepts were read before any clip was built).
+  D5  REVENANT WEAPON (owner, 2026-10-22, at the clip gate): the baton hand "is cursed" - it deformed and moved in
+      impossible ways - and the owner does not want this enemy to hold a club. Redesigned: a tall RIOT SHIELD on the left
+      arm replaces the baton, the right hand is a plain closed gauntlet that is never articulated, and the attack is a
+      SHIELD BASH (braced -> drawn back -> the shield driven at the viewer). WIND_UP = crouched behind the raised shield.
+      VISUAL DESIGN's "shock baton" and "overhead smash" are superseded.
+  D6  GHOUL BUILD (owner, 2026-10-22): "too thin, looks weak" -> thicker (no muscles), then heavier legs, then heavier
+      again with the body and the arms ~12% longer (approved). A version matched to the owner's reference image of a
+      hazard-suit figure was judged "fat" and reverted. Approved: BULK 1.6 (body, arms), LEG_BULK 1.8, spine 65, arms 50/47.
+  D7  ALL APPROVED (owner, 2026-10-22: "Approved now. You have my approve for everything. Now implement the idea
+      fully"): the five undead - Ghoul (D6), Crawler, Revenant (riot shield, D5), Vortex Eye, Blight Corruptor - their
+      clips, the undead effect set and the SUMMON runtime row. A2 met. D7 also stands as the owner's confirmation for A4 (the five
+      told apart at three tiles; the committed-state line-up at CP5 matches what the owner approved).
 
 
 OPEN QUESTIONS

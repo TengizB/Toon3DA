@@ -21,6 +21,11 @@ from eye_tyrant_rig import EYE_TYRANT, TYRANT_CLIPS
 from gore_biter_rig import GORE_BITER, BITER_CLIPS
 from sump_wretch_rig import SUMP_WRETCH, WRETCH_CLIPS
 from mire_wraith_rig import MIRE_WRAITH, WRAITH_CLIPS
+from ghoul_rig import GHOUL, GHOUL_CLIPS
+from crawler_rig import CRAWLER, CRAWLER_CLIPS
+from revenant_rig import REVENANT, REVENANT_CLIPS
+from vortex_eye_rig import VORTEX_EYE, VORTEX_CLIPS
+from blight_corruptor_rig import BLIGHT_CORRUPTOR, CORRUPTOR_CLIPS
 
 # creature -> (rig, clips). A new creature is one <name>_rig.py plus one row here.
 CREATURES = [
@@ -33,6 +38,13 @@ CREATURES = [
     (GORE_BITER, BITER_CLIPS),
     (MIRE_WRAITH, WRAITH_CLIPS),      # the second design (owner gate, 2026-10-22)
     (SUMP_WRETCH, WRETCH_CLIPS),      # the first Mire Wraith design, kept for a new enemy (owner, 2026-10-22)
+    # order 6: the UNDEAD (humanoid rig). Clip lists stay EMPTY until the owner approves the concept stills -
+    # use --stills for them; the default bake must not run on them before CP3 adds clips.
+    (GHOUL, GHOUL_CLIPS),
+    (CRAWLER, CRAWLER_CLIPS),
+    (REVENANT, REVENANT_CLIPS),
+    (VORTEX_EYE, VORTEX_CLIPS),
+    (BLIGHT_CORRUPTOR, CORRUPTOR_CLIPS),
 ]
 
 if __name__ == "__main__":

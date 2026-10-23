@@ -622,7 +622,9 @@ SUIT vs FACILITY — THE INK TABLE (the series' map; a new screen picks its row 
 ----------------------------------------------------
 Migrated enemy types (EnemyVisualRegistry rows: ACID_DRONE = warden, SHELL_BRUTE = harvest_tick, IRON_STALKER =
 iron_stalker - order 4, the insect family complete; order 5, the aberrations: PLAGUE_HULK = plague_hulk, EYE_TYRANT =
-eye_tyrant, GORE_BITER = gore_biter, MIRE_WRAITH = mire_wraith; sump-wretch-acid-death: SUMP_WRETCH = sump_wretch) are drawn
+eye_tyrant, GORE_BITER = gore_biter, MIRE_WRAITH = mire_wraith; sump-wretch-acid-death: SUMP_WRETCH = sump_wretch; order 6,
+the undead: GHOUL = ghoul, CRAWLER = crawler, REVENANT = revenant, VORTEX_EYE = vortex_eye, BLIGHT_CORRUPTOR =
+blight_corruptor) are drawn
 from generated clip atlases by render/enemyvisual, inside EnemyRenderer's pass 1; every other type keeps the
 legacy region path untouched until generated-enemy-art order 9.
   BODY      the frame from the body atlas, at its manifest offset on the 160x240 canvas, under EXACTLY the
@@ -655,6 +657,16 @@ legacy region path untouched until generated-enemy-art order 9.
             splash where it lands), sump_wretch (the first Mire Wraith, kept for its own low-level enemy: a slumped
             glowing sack that bursts into acid when it dies - its ACID_SPLASH burst plays on every tile the death
             splash reaches, through HazardManager.AcidSplashListener -> EnemyVisualLayer.onAcidSplash).
+            Order 6, UNDEAD (SOUL ink - pale, cold, low saturation, never the purple "special"; the facility's own staff
+            in what they wore to work, and NO HUMAN FACE IS EVER VISIBLE - owner rule: at most glowing eyes behind
+            glass): ghoul (tall, heavy-set, long arms and gloved fingers in a slate hazard suit, a long ribbed gas mask
+            with ONE panoramic visor and RED eyes - the owner-approved exception to V5's red; it reaches and clamps),
+            crawler (a lab technician on all fours seen head-on, clean-room hood, two-lens respirator, the coat split
+            down the spine leaking soul), revenant (riot armour, one cracked visor, a RIOT SHIELD - no club; it attacks
+            with a shield bash), vortex_eye (a researcher's isolation-helmet bust held up by a torn spiral of soul
+            light; it fires a soul bolt), blight_corruptor (a bulky olive-grey hazmat suit, a two-lens mask, soul-lit
+            spore pods; it splits them to SUMMON). The soul reads cold white under corrupted_violet and
+            core_white_violet (checked in-engine).
   REMAINS   the last DEATH frame stays on the tile for the floor, graded like a body, in place of the corpse
             decal (R5: drawing only). The legacy red hit spray does not draw on a migrated body.
 Measured (llvmpipe, same session, 6 enemies alerted in one room, 8 s each, two interleaved runs): animated
