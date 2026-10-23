@@ -502,37 +502,141 @@ def signature_accent(glow):
 
 
 # ---------------------------------------------------------------------------------------------------
-# DOORS - a painted livery sliding door with a porthole and rubber seal (an authored CLOSED door; the
-# slide is the engine's). Keycard doors add the lock panel and a frame stripe in the exact keycard ink.
+# DOORS - heavy powered bulkheads that must NOT read as wall (owner feedback 2026-10-23: the first set was a
+# grey livery leaf in the walls' own materials and vanished into them). Every door shares one thick angled
+# frame with LIT jamb + header strips, and a DARK armoured leaf, so the opening reads by value and light at
+# range; each kind then has its own silhouette, so the four differ by SHAPE, not only by ink:
+#   plain  - twin leaves parting on a toothed centre seam, a lit hub lock (cyan, the facility's ink)
+#   red    - a security blast door: stacked armour slats barred by two vertical lock bars
+#   yellow - a vault hatch: a ringed iris of six blades over the leaf
+#   blue   - a lab airlock: upper and lower leaves meeting at a horizontal seam, chevrons pointing at it
+# Keycard inks are exact (key_red / key_yellow / key_blue, guide 11.1) and stay on light strips, lamps and the
+# lock panel. The slide is the engine's - each face is an authored CLOSED door.
 # ---------------------------------------------------------------------------------------------------
-def door(ink=None):
-    def build(glow):
-        frame = [backing("darkmetal", bevel=0.5),
-                 slab([(4, -4), (252, -4), (252, 38), (4, 38)], "gunmetal", bevel=4, slope=0.9, k=0, prio=3),   # header
-                 slab([(4, -4), (30, -4), (30, 260), (4, 260)], "gunmetal", bevel=4, slope=0.9, k=0, prio=3),   # jambs
-                 slab([(226, -4), (252, -4), (252, 260), (226, 260)], "gunmetal", bevel=4, slope=0.9, k=0, prio=3)]
-        for y in range(54, 250, 40):
-            frame += [blob(17, y, 1.8, 1.8, "darkmetal", op="add", depth=1.6), blob(239, y, 1.8, 1.8, "darkmetal", op="add", depth=1.6)]
-        seal = [slab([(30, 38), (226, 38), (226, 258), (30, 258)], "rubber", bevel=3, slope=0.9, k=0)]
-        leaf = [panel(36, 42, 220, 262, "livery_dk", chamfer=6, bevel=6, slope=0.9, k=0, prio=2),
-                slab(chamfer_rect(46, 196, 210, 246, 4), "gunmetal", bevel=3, slope=0.9, op="add", depth=2.5),   # kick strip
-                limb(60, 150, 108, 150, 3.0, 3.0, "livery_dk", op="carve")]                                         # grab recess
-        for x in range(66, 200, 24):
-            leaf.append(limb(x, 206, x + 10, 236, 1.2, 1.2, "gunmetal", op="carve"))
-        leaf.append(blob(128, 98, 31, 31, "livery_dk", depth=5, op="carve"))                                 # porthole bore
-        port = [blob(128, 98, 29, 29, "rubber", depth=4, k=0), blob(128, 98, 22, 22, "rubber", depth=4, op="carve"),
-                blob(128, 98, 22, 22, "capsule", depth=2, k=0, prio=3, glow=0.0),
-                limb(114, 86, 122, 81, 1.0, 1.0, "frost", op="add", depth=0.5)]                                    # a glint scratch
-        stencils = [("R1-D", 46, 52, STENCIL)]
-        if ink:
-            lamp = lock_panel(196, 150, ink, w=26, h=42, glow=glow)
-            frame.append(slab([(34, 24), (222, 24), (222, 31), (34, 31)], ink, bevel=1.5, slope=1.0, op="add", depth=1.2,
-                              glow=glow))                                                                       # the frame stripe
-        else:
-            lamp = [slab(chamfer_rect(186, 138, 206, 162, 3), "darkmetal", bevel=2.5, slope=0.8, k=0),
-                    blob(196, 150, 3.5, 3.5, "cyan", depth=2.5, op="add", glow=glow)]
-        return Face([frame, seal, leaf, port, lamp], stencils=stencils)
-    return build
+def door_frame(ink, glow):
+    """The shared bulkhead frame: a thick gunmetal surround with 45-degree upper corners, a recessed dark
+    opening, a lit strip down each jamb and across the header in `ink`, bolt heads, and the header sign box.
+    -> (layers before the leaf, layers after the leaf)."""
+    l0 = [backing("darkmetal", bevel=0.5),
+          slab([(-4, -4), (260, -4), (260, 260), (-4, 260)], "gunmetal", bevel=5, slope=0.9, k=0, prio=3),
+          slab([(28, 52), (52, 28), (204, 28), (228, 52), (228, 262), (28, 262)], "darkmetal", bevel=6, slope=0.7,
+               op="carve")]
+    for y in (60, 110, 160, 210):
+        l0 += [blob(8, y, 2.0, 2.0, "darkmetal", op="add", depth=1.8), blob(248, y, 2.0, 2.0, "darkmetal", op="add", depth=1.8)]
+    # the light channels: carved grooves, then the lit strips in their own layer (lesson 15.15)
+    l0 += [limb(16, 46, 16, 246, 6.0, 6.0, "darkmetal", op="carve"), limb(240, 46, 240, 246, 6.0, 6.0, "darkmetal", op="carve"),
+           limb(56, 14, 200, 14, 6.0, 6.0, "darkmetal", op="carve")]
+    lights = [limb(16, 50, 16, 242, 3.6, 3.6, ink, glow=glow), limb(240, 50, 240, 242, 3.6, 3.6, ink, glow=glow),
+              limb(60, 14, 196, 14, 3.6, 3.6, ink, glow=glow),
+              limb(36, 14, 48, 14, 2.0, 2.0, ink, glow=glow), limb(208, 14, 220, 14, 2.0, 2.0, ink, glow=glow)]
+    # the floor sill: a ribbed threshold under the leaf
+    sill = [slab([(24, 246), (232, 246), (232, 262), (24, 262)], "gunmetal", bevel=2, slope=0.9, k=0, prio=6)]
+    for x in range(32, 228, 12):
+        sill.append(limb(x, 250, x, 258, 1.0, 1.0, "darkmetal", op="carve"))
+    return [l0, lights], [sill]
+
+
+def door_plain(glow):
+    """PLAIN: twin PALE painted leaves (lighter than any wall, inside the dark frame) parting on a toothed centre
+    seam, dark armour plates, a lit ring lock on the seam, a lit slit on each leaf. Cyan, the facility's ink."""
+    before, after = door_frame("cyan", glow)
+    teeth = [(128, 34), (128, 74), (120, 82), (136, 98), (120, 114), (136, 130), (120, 146), (136, 162), (128, 170),
+             (128, 250)]
+    left = [(34, 56), (56, 34)] + teeth + [(34, 250)]
+    right = [(200, 34), (222, 56), (222, 250)] + teeth[::-1]
+    leaf = [slab(left, "livery", bevel=6, slope=0.9, k=0, prio=4), slab(right, "livery", bevel=6, slope=0.9, k=0, prio=4)]
+    leaf += chain(teeth, 1.6, 1.6, "darkmetal", op="carve")
+    for x0, x1 in ((46, 108), (148, 210)):                                  # armour plates on each leaf
+        leaf.append(slab(chamfer_rect(x0, 48, x1, 112, 6), "darkmetal", bevel=3, slope=0.8, op="add", depth=2.5))
+        leaf.append(slab(chamfer_rect(x0, 180, x1, 238, 6), "darkmetal", bevel=3, slope=0.8, op="add", depth=2.5))
+        for y in (192, 204, 216, 228):
+            leaf.append(limb(x0 + 8, y, x1 - 8, y, 1.4, 1.4, "darkmetal", op="carve"))
+    slits = [limb(92, 124, 92, 166, 2.4, 2.4, "cyan", glow=glow), limb(164, 124, 164, 166, 2.4, 2.4, "cyan", glow=glow)]
+    hub = [blob(128, 122, 24, 24, "gunmetal", depth=6, k=0, prio=6), blob(128, 122, 17, 17, "darkmetal", depth=4, op="carve"),
+           blob(128, 122, 13, 13, "darkmetal", depth=3, k=0, prio=7)]
+    ring = [limb(128 + 15 * math.cos(a), 122 + 15 * math.sin(a), 128 + 15 * math.cos(a + 0.55), 122 + 15 * math.sin(a + 0.55),
+                 1.6, 1.6, "cyan", glow=glow) for a in [n * math.pi / 3 for n in range(6)]]
+    ring.append(blob(128, 122, 3.5, 3.5, "cyan", depth=2, glow=glow))
+    return Face(before + [leaf, slits + hub, ring] + after, stencils=[("D-01", 50, 64, STENCIL_LT)])
+
+
+def door_red(glow):
+    """RED - a SECURITY blast door: stacked bevelled armour slats, barred by two heavy vertical lock bars with
+    bolt heads; red lit slits between the slats and a red lock panel on the right bar."""
+    before, after = door_frame("key_red", glow)
+    leaf = [slab([(34, 56), (56, 34), (200, 34), (222, 56), (222, 250), (34, 250)], "darkmetal", bevel=4, slope=0.8, k=0, prio=4)]
+    slats = []
+    for y0 in range(40, 240, 40):                                            # five armour slats
+        slats.append(slab([(36, y0 + 6), (220, y0 + 6), (220, y0 + 34), (36, y0 + 34)], "gunmetal", bevel=5, slope=1.0, k=0,
+                          prio=5))
+    lit = [limb(110, y, 146, y, 1.6, 1.6, "key_red", glow=glow) for y in range(83, 240, 40)]
+    bars = []
+    for x in (72, 184):
+        bars.append(slab(chamfer_rect(x - 13, 38, x + 13, 246, 5), "gunmetal", bevel=6, slope=1.1, k=0, prio=7))
+        for y in (54, 100, 146, 192, 232):
+            bars.append(blob(x, y, 4.0, 4.0, "darkmetal", depth=3.5, op="add"))
+            bars.append(blob(x, y, 1.6, 1.6, "gunmetal", depth=1.0, op="add"))
+    lamp = lock_panel(184, 140, "key_red", w=30, h=46, glow=glow)
+    return Face(before + [leaf, slats, lit + bars, lamp] + after, stencils=[("SEC-R", 118, 54, STENCIL_LT)])
+
+
+def door_yellow(glow):
+    """YELLOW - a VAULT hatch: a heavy ring set into the leaf holding a six-blade iris, four clamp dogs on the
+    ring, a yellow lit ring inside it and a lit hub; the lock panel low on the right."""
+    before, after = door_frame("key_yellow", glow)
+    cx, cy = 128, 132
+    leaf = [slab([(34, 56), (56, 34), (200, 34), (222, 56), (222, 250), (34, 250)], "darkmetal", bevel=4, slope=0.8, k=0, prio=4)]
+    for x0, x1 in ((40, 72), (184, 216)):                                    # side ribs
+        for y in range(62, 242, 18):
+            leaf.append(limb(x0, y, x1, y, 1.8, 1.8, "gunmetal", op="add", depth=1.4))
+    ring = [blob(cx, cy, 84, 84, "gunmetal", depth=9, k=0, prio=6), blob(cx, cy, 70, 70, "darkmetal", depth=6, op="carve")]
+    for a in (0.25, 1.82, 3.39, 4.96):                                       # clamp dogs
+        ux, uy = math.cos(a), math.sin(a)
+        px, py = -uy, ux
+        p0x, p0y, p1x, p1y = cx + ux * 68, cy + uy * 68, cx + ux * 92, cy + uy * 92
+        ring.append(slab([(p0x - px * 9, p0y - py * 9), (p1x - px * 7, p1y - py * 7), (p1x + px * 7, p1y + py * 7),
+                          (p0x + px * 9, p0y + py * 9)], "gunmetal", bevel=3, slope=1.0, k=0, prio=7))
+    blades = []
+    for n in range(6):                                                       # the iris: six pinwheel blades
+        a0 = n * math.pi / 3
+        a1 = a0 + math.pi / 3
+        pts = [(cx + 10 * math.cos(a0 + 0.9), cy + 10 * math.sin(a0 + 0.9)),
+               (cx + 62 * math.cos(a0), cy + 62 * math.sin(a0)),
+               (cx + 62 * math.cos(a1), cy + 62 * math.sin(a1)),
+               (cx + 10 * math.cos(a1 + 0.9), cy + 10 * math.sin(a1 + 0.9))]
+        blades.append(slab(pts, "gunmetal", bevel=3.5, slope=0.9, k=0, prio=5 + 0.1 * n, tilt=(0.02 * math.cos(a0), 0.02 * math.sin(a0))))
+    lit = [limb(cx + 66 * math.cos(a), cy + 66 * math.sin(a), cx + 66 * math.cos(a + 0.5), cy + 66 * math.sin(a + 0.5),
+                2.0, 2.0, "key_yellow", glow=glow) for a in [n * math.pi / 6 + 0.08 for n in range(12)]]
+    hub = [blob(cx, cy, 14, 14, "gunmetal", depth=6, k=0, prio=8), blob(cx, cy, 6, 6, "key_yellow", depth=3, glow=glow, prio=9)]
+    lamp = lock_panel(200, 226, "key_yellow", w=26, h=34, glow=glow)
+    return Face(before + [leaf, ring, blades, lit + hub, lamp] + after, stencils=[("VLT-Y", 44, 228, STENCIL_LT)])
+
+
+def door_blue(glow):
+    """BLUE - a LAB AIRLOCK: an upper and a lower leaf meeting at a horizontal toothed seam, raised chevrons on
+    both pointing at the seam with blue lit cores, a lit seam bar, the lock panel on the left."""
+    before, after = door_frame("key_blue", glow)
+    seam = 146
+    teeth = [(34, seam)]
+    for x in range(34, 222, 24):
+        teeth += [(x + 12, seam - 7), (x + 24, seam)]
+    upper = [(34, 56), (56, 34), (200, 34), (222, 56), (222, seam)] + teeth[::-1]
+    lower = teeth + [(222, seam), (222, 250), (34, 250)]
+    leaves = [slab(upper, "darkmetal", bevel=5, slope=0.9, k=0, prio=4), slab(lower, "darkmetal", bevel=5, slope=0.9, k=0, prio=4)]
+    leaves += chain(teeth, 1.6, 1.6, "rubber", op="carve")
+    chev = []
+    lit = []
+    for n, (top, tip) in enumerate(((52, 94), (88, 130))):                   # upper chevrons point DOWN
+        chev.append(slab([(64, top), (128, tip - 22), (192, top), (192, top + 16), (128, tip - 6), (64, top + 16)],
+                         "gunmetal", bevel=3.5, slope=1.0, k=0, prio=5))
+        lit += chain([(80, top + 13), (128, tip - 15), (176, top + 13)], 1.8, 1.8, "key_blue", glow=glow)
+    for top, tip in ((236, 194), (200, 158)):                                # lower chevrons point UP
+        chev.append(slab([(64, top), (128, tip + 22), (192, top), (192, top - 16), (128, tip + 6), (64, top - 16)],
+                         "gunmetal", bevel=3.5, slope=1.0, k=0, prio=5))
+        lit += chain([(80, top - 13), (128, tip + 15), (176, top - 13)], 1.8, 1.8, "key_blue", glow=glow)
+    lit += [limb(40, seam - 12, 52, seam - 12, 1.6, 1.6, "key_blue", glow=glow), limb(204, seam - 12, 216, seam - 12, 1.6, 1.6, "key_blue", glow=glow)]
+    lamp = lock_panel(48, 190, "key_blue", w=24, h=40, glow=glow)
+    return Face(before + [leaves, chev, lit, lamp] + after, stencils=[("LAB-B", 156, 40, STENCIL_LT)])
 
 
 # COLUMNS - drawn by the column path as a wall stripe, so authored as a 256x256 face
@@ -630,8 +734,8 @@ for group, base, accent in ROOMS:
     WALLS += [wall(LETTER, group, "BASE", base(0), variant=0), wall(LETTER, group, "BASE", base(1), variant=1),
               wall(LETTER, group, "ACCENT", accent)]
 
-DOORS = [Entry(f"door_{LETTER}_plain", door()), Entry(f"door_{LETTER}_red", door("key_red")),
-         Entry(f"door_{LETTER}_yellow", door("key_yellow")), Entry(f"door_{LETTER}_blue", door("key_blue"))]
+DOORS = [Entry(f"door_{LETTER}_plain", door_plain), Entry(f"door_{LETTER}_red", door_red),
+         Entry(f"door_{LETTER}_yellow", door_yellow), Entry(f"door_{LETTER}_blue", door_blue)]
 COLUMNS = [Entry(f"column_{LETTER}_round", column_round), Entry(f"column_{LETTER}_square", column_square)]
 
 REGION = dict(letter=LETTER, seed=SEED, trim=TRIM, breach=BREACH, walls=WALLS, doors=DOORS, columns=COLUMNS,
