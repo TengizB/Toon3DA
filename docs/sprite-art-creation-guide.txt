@@ -769,6 +769,8 @@ is .claude/agents/ideas/generated-prop-art.txt (+ -order-<n>); its brief and rul
   rad          radioactive lime: hazard lamps, warning strips, emitter studs
   hot_iron     (order 3, owner D4) heated metal: deep red -> orange -> white-hot. Heat sources only (coils,
                exhausts, warning lamps); it always ramps through orange, so it never reads as the keycard red
+  (order 4 adds the body paint paint_oxide - a hazard drum's brick-brown, never a saturated red - and uses the
+  existing toxin ink, V5's POISONED green, for the toxic pool: the right semantic colour for once)
   Big glowing areas (a fluid column, a vortex, a screen's text) are PAINTED with numpy into the frame after the
   kit render, from these inks' ramps - the kit's translucent materials wash out to a pale tint at that size.
 
@@ -846,6 +848,18 @@ is .claude/agents/ideas/generated-prop-art.txt (+ -order-<n>); its brief and rul
             turbine whose four dark blades turn a quarter turn per loop over a hot-iron disc, two exhaust stacks
             with glowing lips and embers climbing and fading, and a control plate (trembling gauge needle, two
             neon cyan lamps as the cold counterpoint, a blinking hot-iron warning lamp). 16 frames @ 0.1 s.
+  barrels   (order 4) drum_bake(): the drum body is a tall ellipsoid (ry 2000) cropped to the drum rows - pure
+            cylinder shading from one primitive - with lid, bung, ribs and foot rendered over it.
+            explosive_barrel: paint_oxide drum, five hot-iron pressure slots that breathe, a hot lid seam, a
+            blinking hot-iron lamp, stencil VOLATILE. radioactive_barrel: lab-grey drum, a rad band with a dark
+            trefoil, glowing rad cracks, a glowing drip running down once per loop into a pulsing puddle.
+            16 frames @ 0.1 s each.
+  hazards   (order 4) fire ('i') and toxic ('q') are FIXED-char rows; the prop renderer's DYNAMIC pass (runtime
+            tiles from HazardManager) draws sheets too. Both are fully painted from periodic_noise(), value noise
+            that tiles every N cells, so a scroll of exactly one period per loop is seamless. fire: flames from a
+            vertically stretched noise field in the hot-iron ramp over a charred debris bed with glowing cracks,
+            sparks. toxic: a low toxin pool with drifting caustics, a dark crust rim, bubbles that swell and pop,
+            vapour. Hazards are drawn full-tile wide, so their canvas aspect does not matter.
 
 ADD A PROP
   [ ] brief from the master (14.1): what it IS, its cold body materials, its one or two neon accents, still or

@@ -129,7 +129,7 @@ Never graded (their tile light is unchanged from before this order — they keep
 shade they always had, so their colour is identical under every mood): enemy health bars, HP text, name tags, intent/telegraph
 icons, beam/affliction/shard/crust/haze overlays, boss enrage/repair tints and afterimages, the keycard
 aura, weapon-pickup tier glow, credit-chip aura, the shop machine's aura/window/status light/dispense
-drop/holo layers, hazard fire and toxic frames and the portal (PropRenderer: Level.isHazardDecal ||
+drop/holo layers, hazard fire and toxic sheets (generated, order 4) and the portal (PropRenderer: Level.isHazardDecal ||
 Level.isStairsDown — existing predicates, no symbol switch), enemy attack effects, impact particles, the
 guard shield, every vignette, and WALL EMISSIVES (the region set's glow atlas - lamps, seams, lock panels,
 consoles; generated-wall-art order 2, section 17: ungraded and unfogged, distance-faded to 0.6 and dimmed by

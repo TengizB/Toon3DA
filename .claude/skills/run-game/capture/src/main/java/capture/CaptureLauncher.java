@@ -206,6 +206,9 @@ public class CaptureLauncher extends ApplicationAdapter {
                 case "spawn":
                     spawnDormantEnemy(step[2], Integer.parseInt(step[3]), Integer.parseInt(step[4]));
                     break;
+                case "hazard":
+                    igniteHazard(step[2], Integer.parseInt(step[3]), Integer.parseInt(step[4]));
+                    break;
                 case "alert":
                     alertEnemy(Integer.parseInt(step[2]));
                     break;
@@ -678,6 +681,30 @@ public class CaptureLauncher extends ApplicationAdapter {
             system.getClass().getMethod(kill ? "onEnemyKilled" : "onEnemyHit", float.class, float.class, float.class,
                     int.class).invoke(system, worldX, worldY, 1f, amount);
             System.out.println("[capture] damage number " + amount + (kill ? " (kill)" : ""));
+        } catch (ReflectiveOperationException exception) {
+            exception.printStackTrace();
+        }
+    }
+
+    /**
+     * {@code hazard:fire|toxic:FORWARD:RIGHT} — HazardManager.igniteFire / igniteToxic on the tile FORWARD tiles ahead
+     * and RIGHT tiles to the player's right (generated-prop-art order 4: seeing the hazard sprites without waiting
+     * for a fight). The real ignite path, so the tile becomes 'i' / 'q' and the prop renderer's dynamic pass draws it.
+     * A dev hook, never game logic.
+     */
+    private void igniteHazard(String kind, int forward, int right) {
+        try {
+            Object world = worldObject();
+            Object player = fieldValue(world, "player");
+            float cellSize = Class.forName("ge.tbegvadze.toon3d.util.Constants").getField("CELL_SIZE").getFloat(null);
+            int directionX = Math.round(fieldFloat(player, "directionX"));
+            int directionY = Math.round(fieldFloat(player, "directionY"));
+            int column = (int) Math.floor(fieldFloat(player, "positionX") / cellSize) + directionX * forward + directionY * right;
+            int row = (int) Math.floor(fieldFloat(player, "positionY") / cellSize) + directionY * forward - directionX * right;
+            Object hazards = fieldValue(world, "hazardManager");
+            hazards.getClass().getMethod(kind.equals("fire") ? "igniteFire" : "igniteToxic", int.class, int.class, int.class)
+                    .invoke(hazards, column, row, 999);
+            System.out.println("[capture] hazard " + kind + " at " + column + "," + row);
         } catch (ReflectiveOperationException exception) {
             exception.printStackTrace();
         }

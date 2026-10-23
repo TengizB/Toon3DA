@@ -102,10 +102,6 @@ public class PropRenderer implements Renderable, Disposable {
     // The shared environment-sprite catalog (order-1), read for environment prop/decal heightMultipliers.
     // Bootstrapped in World.create() before any PropRenderer is built.
     private final EnvironmentSpriteRegistry spriteRegistry = TilesetRegistries.sprites();
-    // Animated hazard frames — fire ('i') and toxic ('q') cycle through these instead of using a
-    // single static entry in {@link #textures}. Built once at construction, disposed in dispose().
-    private final Texture[]               hazardFireFrames;
-    private final Texture[]               hazardToxicFrames;
     // Per-weapon ground billboard textures — keyed by ItemType, built once at startup.
     private final Map<ItemType, Texture>  weaponPickupTextures;
     private final Texture                 genericWeaponFallbackTexture;
@@ -184,57 +180,22 @@ public class PropRenderer implements Renderable, Disposable {
         this.weaponPickupGlowTexture      = generateGlowTexture();
         this.creditChipTextures           = buildCreditChipTextures();
         this.propSheets                   = new GeneratedPropSheets();
-        this.hazardFireFrames             = buildHazardFireFrames();
-        this.hazardToxicFrames            = buildHazardToxicFrames();
-    }
-
-    private static Texture[] buildHazardFireFrames() {
-        Texture[] frames = new Texture[HAZARD_ANIMATION_FRAME_COUNT];
-        for (int frameIndex = 0; frameIndex < frames.length; frameIndex++) {
-            frames[frameIndex] = generateHazardFireFrame(frameIndex, frames.length);
-        }
-        return frames;
-    }
-
-    private static Texture[] buildHazardToxicFrames() {
-        Texture[] frames = new Texture[HAZARD_ANIMATION_FRAME_COUNT];
-        for (int frameIndex = 0; frameIndex < frames.length; frameIndex++) {
-            frames[frameIndex] = generateHazardToxicFrame(frameIndex, frames.length);
-        }
-        return frames;
     }
 
     /**
-     * Resolves the texture to draw for a prop tile. Animated hazards ('i' fire, 'q' toxic) return the
-     * current cycling frame (with a per-tile phase offset). ENVIRONMENT props/decals (SOLID_PROP +
+     * Resolves the texture to draw for a prop tile. (The animated hazards 'i' / 'q' are generated prop sheets
+     * since generated-prop-art order 4, resolved by resolvePropSheet before this is asked.) ENVIRONMENT props/decals (SOLID_PROP +
      * FLOOR_DECAL) resolve symbol -> sprite id (this level's LevelPalette) -> Texture (the per-level
      * EnvironmentTextureSet) — this is the order-7 flip that lets a level's palette change what its props
      * look like. FIXED gameplay props (pickups, ammo, portal) return their own owned texture. Returns null
      * when the char has no texture.
      */
     private Texture resolvePropTexture(char propChar, int tileColumn, int tileRow) {
-        if (propChar == 'i') {
-            return hazardFireFrames[hazardFrameIndex(tileColumn, tileRow, hazardFireFrames.length)];
-        }
-        if (propChar == 'q') {
-            return hazardToxicFrames[hazardFrameIndex(tileColumn, tileRow, hazardToxicFrames.length)];
-        }
         String spriteId = level.getPalette().spriteIdOf(propChar);
         if (spriteId != null) {
             return environmentTextureSet.textureFor(spriteId);
         }
         return textures.get(propChar);
-    }
-
-    /**
-     * Frame index for an animated hazard tile at the current animation time. A per-tile phase
-     * offset (from the tile coordinates) desynchronises neighbouring tiles so a field of fire does
-     * not pulse in lockstep. Uses {@link Math#floorMod} so the result is always in [0, frameCount).
-     */
-    private int hazardFrameIndex(int tileColumn, int tileRow, int frameCount) {
-        int phaseOffset = tileColumn * 5 + tileRow * 11;
-        int baseFrame   = (int) (lightingTimeSeconds * HAZARD_ANIMATION_FPS);
-        return Math.floorMod(baseFrame + phaseOffset, frameCount);
     }
 
     /** Replaces the ground item list; called by World after each level build. */
@@ -996,8 +957,23 @@ public class PropRenderer implements Renderable, Disposable {
             if (depth <= PROP_BEHIND_PLAYER_EPSILON_TILES) continue;
             if (depth > MAX_PROP_DRAW_DISTANCE_TILES)      continue;
 
-            Texture texture = resolvePropTexture(prop.propChar, prop.tileColumn, prop.tileRow);
-            if (texture == null) continue;
+            // generated-prop-art order 4: runtime fire / toxic tiles (and any migrated prop) draw their prop sheet.
+            GeneratedPropSheet sheet = resolvePropSheet(prop.propChar);
+            Texture texture;
+            int sheetFrame = 0;
+            if (sheet != null) {
+                texture    = sheet.bodyTexture();
+                sheetFrame = sheet.frameIndexAt(lightingTimeSeconds, prop.tileColumn, prop.tileRow);
+            } else if (isGeneratedProp(prop.propChar)) {
+                continue;   // R5: a migrated prop whose sheet failed to load is not drawn
+            } else {
+                texture = resolvePropTexture(prop.propChar, prop.tileColumn, prop.tileRow);
+                if (texture == null) continue;
+            }
+            int sourceWidth   = sheet != null ? sheet.frameWidth()  : texture.getWidth();
+            int sourceHeight  = sheet != null ? sheet.frameHeight() : texture.getHeight();
+            int sourceOriginX = sheet != null ? sheet.frameOriginX(sheetFrame) : 0;
+            int sourceOriginY = sheet != null ? sheet.frameOriginY(sheetFrame) : 0;
 
             float screenCenterColumn = GameMath.spriteScreenColumnCenter(
                     tileOffsetX, tileOffsetY, directionX, directionY,
@@ -1011,7 +987,7 @@ public class PropRenderer implements Renderable, Disposable {
                 // Hazards span the full tile footprint, decoupled from the source texture aspect.
                 spriteScreenWidth = fullWallLineHeight * HAZARD_CELL_WIDTH_FILL;
             } else {
-                float aspectRatio = (float) texture.getWidth() / texture.getHeight();
+                float aspectRatio = (float) sourceWidth / sourceHeight;
                 spriteScreenWidth = spriteScreenHeight * aspectRatio;
             }
 
@@ -1042,8 +1018,8 @@ public class PropRenderer implements Renderable, Disposable {
             float clampedTop    = Math.min((float) WALL_PROJECTION_SCREEN_HEIGHT, drawTop);
             if (clampedTop <= clampedBottom) continue;
 
-            int textureWidth  = texture.getWidth();
-            int textureHeight = texture.getHeight();
+            int textureWidth  = sourceWidth;
+            int textureHeight = sourceHeight;
             int texSrcY       = GameMath.wallTextureClipSrcY(
                                     drawTop, WALL_PROJECTION_SCREEN_HEIGHT,
                                     spriteScreenHeight, textureHeight);
@@ -1076,7 +1052,7 @@ public class PropRenderer implements Renderable, Disposable {
                 batch.draw(texture,
                            screenColumn * columnWidth, clampedBottom,
                            columnWidth, clampedTop - clampedBottom,
-                           texSrcX, texSrcY, 1, texSrcHeight,
+                           sourceOriginX + texSrcX, sourceOriginY + texSrcY, 1, texSrcHeight,
                            false, false);
             }
             // This pass is unsorted and runs after the others: restore any nearer sprite these columns just
@@ -1088,12 +1064,26 @@ public class PropRenderer implements Renderable, Disposable {
                 if (Level.isPropOccluder(prop.propChar)) {
                     int texSrcX = (screenColumn - leftScreenColumn) * textureWidth / columnSpan;
                     texSrcX = MathUtils.clamp(texSrcX, 0, textureWidth - 1);
-                    recordOccluderColumn(screenColumn, depth, texture, opacityMask,
-                            texSrcX, texSrcY, texSrcHeight, clampedBottom, clampedTop);
+                    if (sheet != null) {
+                        if (sheet.hasOpaqueRun(sheetFrame, texSrcX, texSrcY, texSrcHeight)) {
+                            occluderBuffer.record(screenColumn, depth, texture, sourceOriginX + texSrcX,
+                                    sourceOriginY + texSrcY, texSrcHeight, clampedBottom, clampedTop,
+                                    batch.getPackedColor());
+                        }
+                    } else {
+                        recordOccluderColumn(screenColumn, depth, texture, opacityMask,
+                                texSrcX, texSrcY, texSrcHeight, clampedBottom, clampedTop);
+                    }
                 }
             }
             drawMuzzleLightPass(texture, firstColumn, lastColumn, leftScreenColumn, columnSpan,
-                    textureWidth, texSrcY, texSrcHeight, clampedBottom, clampedTop, depth, columnWidth);
+                    textureWidth, sourceOriginX, sourceOriginY + texSrcY, texSrcHeight, clampedBottom, clampedTop,
+                    depth, columnWidth);
+            if (sheet != null) {
+                drawPropGlowPass(sheet.glowTexture(), firstColumn, lastColumn, leftScreenColumn, columnSpan,
+                        textureWidth, sourceOriginX, sourceOriginY + texSrcY, texSrcHeight, clampedBottom, clampedTop,
+                        depth, columnWidth);
+            }
         }
 
         batch.setColor(Color.WHITE);
@@ -1115,12 +1105,6 @@ public class PropRenderer implements Renderable, Disposable {
         }
         for (Texture texture : textures.values()) {
             disposeProp(texture);
-        }
-        for (Texture frame : hazardFireFrames) {
-            disposeProp(frame);
-        }
-        for (Texture frame : hazardToxicFrames) {
-            disposeProp(frame);
         }
     }
 
@@ -1157,9 +1141,6 @@ public class PropRenderer implements Renderable, Disposable {
      */
     public static void registerTextureGenerators(TextureGeneratorRegistry registry) {
         // Solid props (registration order matches TilesetRegistries.registerSolidProps).
-        registry.register("prop_radioactive_barrel",
-                () -> loadOrGenerate(PROP_BARREL_RADIOACTIVE_PATH, generateBarrelTexture(false)));
-        registry.register("prop_explosive_barrel",   () -> generateBarrelTexture(true));
         registry.register("prop_locker",             PropRenderer::generateLockerTexture);
         registry.register("prop_crate",              PropRenderer::generateCrateTexture);
         registry.register("prop_camera",             PropRenderer::generateCameraTexture);
@@ -1190,23 +1171,6 @@ public class PropRenderer implements Renderable, Disposable {
     // all textures are generated at startup.
     // -------------------------------------------------------------------------
 
-    // Loads a texture from an asset file; falls back to the procedural generator when
-    // the file is absent so the game always runs even without real art assets.
-    private static Texture loadOrGenerate(String assetPath, Texture proceduralFallback) {
-        if (Gdx.files.internal(assetPath).exists()) {
-            Texture loaded = new Texture(Gdx.files.internal(assetPath));
-            loaded.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
-            disposeProp(proceduralFallback);
-            // A file-loaded texture has no generated opacity mask; build one so its
-            // transparent regions also stop occluding enemies behind it.
-            Pixmap loadedPixels = new Pixmap(Gdx.files.internal(assetPath));
-            COLUMN_OPACITY.put(loaded, computeColumnOpacity(loadedPixels));
-            loadedPixels.dispose();
-            return loaded;
-        }
-        return proceduralFallback;
-    }
-
     /**
      * Builds ONLY the FIXED-gameplay prop textures this renderer still owns (keycards, medical, armour,
      * portal, ammo). The ENVIRONMENT prop/decal art (solid props like barrels/terminals/lockers and floor
@@ -1233,8 +1197,7 @@ public class PropRenderer implements Renderable, Disposable {
         // Crystal spire (elemental-golem-verdant-spiresower) — a runtime SOLID prop stamped by the
         // SpireManager, resolved through this owned texture (its char is not a tileset palette symbol).
         map.put(EnemyConstants.SPIRE_TILE_CHAR, generateCrystalSpireTexture());
-        // 'i' (fire) and 'q' (toxic) are NOT static entries — they are animated and resolved
-        // per-frame from hazardFireFrames / hazardToxicFrames via resolvePropTexture().
+        // 'i' (fire) and 'q' (toxic) are generated prop sheets (generated-prop-art order 4), not textures here.
         return map;
     }
 
@@ -1453,138 +1416,6 @@ public class PropRenderer implements Renderable, Disposable {
         pixmap.fillTriangle(right, bottom, right - bottomRightLeg, bottom, right, bottom - bottomRightLeg);
         pixmap.fillTriangle(left,  bottom, left + bottomLeftLeg, bottom, left, bottom - bottomLeftLeg);
         pixmap.setBlending(previousBlending);
-    }
-
-    private static Texture generateBarrelTexture(boolean explosive) {
-        Pixmap pixmap = new Pixmap(64, 64, Pixmap.Format.RGBA8888);
-        if (explosive) {
-            // Volatile fuel drum — rounded crimson cylinder, hazard hoops, a stamped
-            // explosion-burst warning and hot seams where the contents leak light.
-            pixmap.setColor(0f, 0f, 0f, 0f);
-            pixmap.fill();
-
-            final int bodyLeft = 8, bodyRight = 56, bodyTop = 7, bodyBottom = 61;
-            // Cylindrical steel body: bright highlight band sits left-of-centre.
-            for (int column = bodyLeft; column < bodyRight; column++) {
-                float across = (column - bodyLeft) / (float) (bodyRight - bodyLeft - 1);
-                float curve  = 1f - Math.min(1f, Math.abs(across - 0.38f) * 2.0f);
-                float bodyRed   = 0.24f + 0.60f * curve;
-                float bodyGreen = 0.05f + 0.16f * curve;
-                float bodyBlue  = 0.04f + 0.10f * curve;
-                pixmap.setColor(bodyRed, bodyGreen, bodyBlue, 1f);
-                pixmap.fillRectangle(column, bodyTop, 1, bodyBottom - bodyTop);
-            }
-            // Rolled hoop rings — darker steel with a top highlight and spaced rivets.
-            int[] hoopRows = { 9, 20, 44, 55 };
-            for (int hoopRow : hoopRows) {
-                pixmap.setColor(0.16f, 0.05f, 0.04f, 1f);
-                pixmap.fillRectangle(bodyLeft, hoopRow, bodyRight - bodyLeft, 4);
-                pixmap.setColor(0.70f, 0.30f, 0.16f, 1f);
-                pixmap.fillRectangle(bodyLeft, hoopRow, bodyRight - bodyLeft, 1);
-                for (int rivetColumn = bodyLeft + 4; rivetColumn < bodyRight - 2; rivetColumn += 10) {
-                    pixmap.setColor(0.85f, 0.55f, 0.25f, 1f);
-                    pixmap.drawPixel(rivetColumn, hoopRow + 2);
-                }
-            }
-            // Top lid with a central bung valve.
-            pixmap.setColor(0.52f, 0.20f, 0.12f, 1f);
-            pixmap.fillRectangle(bodyLeft + 2, bodyTop - 2, bodyRight - bodyLeft - 4, 4);
-            pixmap.setColor(0.78f, 0.34f, 0.18f, 1f);
-            pixmap.fillRectangle(bodyLeft + 2, bodyTop - 2, bodyRight - bodyLeft - 4, 1);
-            pixmap.setColor(0.30f, 0.10f, 0.06f, 1f);
-            pixmap.fillCircle(32, bodyTop, 3);
-            pixmap.setColor(0.85f, 0.45f, 0.20f, 1f);
-            pixmap.fillCircle(32, bodyTop, 1);
-            // Bottom shadow lip.
-            pixmap.setColor(0.10f, 0.03f, 0.03f, 1f);
-            pixmap.fillRectangle(bodyLeft, bodyBottom - 2, bodyRight - bodyLeft, 2);
-
-            // Hot volatile seams: glowing cracks framing the warning plate.
-            int[] seamColumns = { 17, 46 };
-            for (int seamColumn : seamColumns) {
-                for (int seamRow = 23; seamRow < 42; seamRow++) {
-                    int crackColumn = seamColumn + (((seamRow / 4) % 3) - 1);
-                    pixmap.setColor(0.80f, 0.30f, 0.05f, 1f);
-                    pixmap.drawPixel(crackColumn - 1, seamRow);
-                    pixmap.drawPixel(crackColumn + 1, seamRow);
-                    pixmap.setColor(1.00f, 0.85f, 0.35f, 1f);
-                    pixmap.drawPixel(crackColumn, seamRow);
-                }
-            }
-            // Central warning plate with a stamped explosion burst.
-            pixmap.setColor(0.08f, 0.07f, 0.05f, 1f);
-            pixmap.fillRectangle(20, 24, 24, 16);
-            pixmap.setColor(0.92f, 0.78f, 0.06f, 1f);
-            drawRectOutline(pixmap, 20, 24, 24, 16);
-            int burstCenterX = 32, burstCenterY = 32;
-            pixmap.setColor(0.95f, 0.80f, 0.10f, 1f);
-            for (int spike = 0; spike < 8; spike++) {
-                double spikeAngleRadians = spike * Math.PI / 4.0;
-                int tipX = burstCenterX + (int) Math.round(Math.cos(spikeAngleRadians) * 9);
-                int tipY = burstCenterY + (int) Math.round(Math.sin(spikeAngleRadians) * 7);
-                double perpendicularRadians = spikeAngleRadians + Math.PI / 2.0;
-                int baseOffsetX = (int) Math.round(Math.cos(perpendicularRadians) * 2);
-                int baseOffsetY = (int) Math.round(Math.sin(perpendicularRadians) * 2);
-                pixmap.fillTriangle(burstCenterX + baseOffsetX, burstCenterY + baseOffsetY,
-                                    burstCenterX - baseOffsetX, burstCenterY - baseOffsetY,
-                                    tipX, tipY);
-            }
-            pixmap.setColor(0.98f, 0.45f, 0.08f, 1f);
-            pixmap.fillCircle(burstCenterX, burstCenterY, 3);
-            pixmap.setColor(1.00f, 0.92f, 0.55f, 1f);
-            pixmap.fillCircle(burstCenterX, burstCenterY, 1);
-        } else {
-            // Transparent background
-            pixmap.setColor(0f, 0f, 0f, 0f);
-            pixmap.fill();
-            // Cylinder gradient shading: left third darker, centre mid, right edge lighter
-            for (int column = 2; column < 62; column++) {
-                float red;
-                float green;
-                float blue;
-                if (column < 22) {
-                    red   = 0.08f;
-                    green = 0.22f;
-                    blue  = 0.08f;
-                } else if (column < 44) {
-                    red   = 0.14f;
-                    green = 0.42f;
-                    blue  = 0.14f;
-                } else {
-                    red   = 0.20f;
-                    green = 0.52f;
-                    blue  = 0.18f;
-                }
-                pixmap.setColor(red, green, blue, 1f);
-                pixmap.fillRectangle(column, 2, 1, 60);
-            }
-            // Two yellow warning rings
-            drawBand(pixmap, 12, 4, 0.88f, 0.76f, 0.05f);
-            drawBand(pixmap, 42, 4, 0.88f, 0.76f, 0.05f);
-            // Rim lip at top
-            pixmap.setColor(0.12f, 0.35f, 0.12f, 1f);
-            pixmap.fillRectangle(2, 2, 60, 4);
-            // Radiation trefoil: three 6px filled discs at 0°/120°/240° around centre, plus centre disc
-            float trefoilCenterX  = 32f;
-            float trefoilCenterY  = 27f;
-            float trefoilOrbitRadius = 8f;
-            pixmap.setColor(0.05f, 0.05f, 0.05f, 1f);
-            for (int lobeIndex = 0; lobeIndex < 3; lobeIndex++) {
-                float lobeAngleRadians = (float)(lobeIndex * 2.0 * Math.PI / 3.0);
-                int lobeX = (int)(trefoilCenterX + trefoilOrbitRadius * (float)Math.cos(lobeAngleRadians)) - 3;
-                int lobeY = (int)(trefoilCenterY + trefoilOrbitRadius * (float)Math.sin(lobeAngleRadians)) - 3;
-                pixmap.fillCircle(lobeX + 3, lobeY + 3, 3);
-            }
-            // Centre disc of trefoil
-            pixmap.fillCircle((int)trefoilCenterX, (int)trefoilCenterY, 2);
-            // Ooze drip streak from row 22 down 8 rows at column 20
-            pixmap.setColor(0.14f, 0.45f, 0.08f, 1f);
-            pixmap.fillRectangle(20, 22, 2, 8);
-            // Base glow puddle at bottom
-            pixmap.setColor(0.12f, 0.40f, 0.12f, 1f);
-            pixmap.fillRectangle(4, 59, 56, 3);
-        }
-        return finalize(pixmap);
     }
 
     private static Texture generateLockerTexture() {
@@ -3490,204 +3321,6 @@ public class PropRenderer implements Renderable, Disposable {
         pixmap.fillRectangle(stripRight - 2, centerRow - 5, 2, 10);
 
         return finalize(pixmap);
-    }
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // Animated terrain hazards — fire ('i') and toxic ('q').
-    //
-    // Both are authored as a short loop of procedurally-generated frames (built once at
-    // construction, cycled by PropRenderer at HAZARD_ANIMATION_FPS). Each frame is high
-    // resolution and authored to span the full tile footprint when billboarded.
-    //
-    // Pixmap convention: row 0 = top edge, so the tile floor is the LAST row (height-1) and
-    // anything that rises (flames, gas) moves toward row 0.
-    // ═══════════════════════════════════════════════════════════════════════════
-
-    // Fire frame canvas — wider than tall so a full-width bed of spiky tongues fits.
-    private static final int HAZARD_FIRE_FRAME_WIDTH  = 128;
-    private static final int HAZARD_FIRE_FRAME_HEIGHT = 112;
-    // Toxic frame canvas — wide and shallow so the gas cloud reads as a low hanging billow.
-    private static final int HAZARD_TOXIC_FRAME_WIDTH  = 160;
-    private static final int HAZARD_TOXIC_FRAME_HEIGHT = 96;
-
-    // Fire hazard ('i') — one animation frame. A full-width glowing ember bed topped by many
-    // sharply-tapered (spiky) flame tongues that lick upward, plus drifting embers. Tongue
-    // heights and sway are driven by the frame phase so the loop reads as living, flickering fire.
-    private static Texture generateHazardFireFrame(int frameIndex, int frameCount) {
-        int width  = HAZARD_FIRE_FRAME_WIDTH;
-        int height = HAZARD_FIRE_FRAME_HEIGHT;
-        Pixmap pixmap = new Pixmap(width, height, Pixmap.Format.RGBA8888);
-        pixmap.setColor(0f, 0f, 0f, 0f);
-        pixmap.fill();
-        java.util.Random random = new java.util.Random(0xF12EB1A2EL + frameIndex * 0x9E3779B9L);
-        int   floorY = height - 1;
-        float phase  = frameIndex / (float) frameCount * MathUtils.PI2;
-
-        // Glowing ember bed across the full width — hottest (yellow-white) at the floor, fading to
-        // deep red as it rises, with a wavy animated top edge.
-        int bedHeight = 30;
-        for (int column = 0; column < width; column++) {
-            float wave = MathUtils.sin(phase + column * 0.20f) * 3f
-                       + MathUtils.sin(phase * 1.7f + column * 0.07f) * 2f;
-            int bedTop = floorY - bedHeight - Math.round(wave);
-            for (int row = floorY; row >= bedTop && row >= 0; row--) {
-                float fraction = (floorY - row) / (float) Math.max(1, floorY - bedTop);
-                float red   = 1f;
-                float green = 0.62f - 0.48f * fraction;
-                float blue  = 0.14f * (1f - fraction);
-                float alpha = 1f - fraction * 0.45f;
-                pixmap.setColor(red, green, blue, alpha);
-                pixmap.drawPixel(column, row);
-            }
-        }
-
-        // Primary tongues — one per evenly-spaced slot so flames cover the whole tile width.
-        int tongueCount = 13;
-        for (int tongueIndex = 0; tongueIndex < tongueCount; tongueIndex++) {
-            float slot      = (tongueIndex + 0.5f) / tongueCount;
-            int   baseX     = Math.round(slot * width
-                              + (random.nextFloat() - 0.5f) * (width / (float) tongueCount));
-            float seed      = tongueIndex * 1.3f;
-            // Animated height: rises and falls with the frame phase; a mild centre bell keeps the
-            // middle of the fire taller than the edges for a natural flame silhouette.
-            float pulse     = 0.5f + 0.5f * MathUtils.sin(phase + seed);
-            float bell      = 0.70f + 0.30f * MathUtils.sin(slot * MathUtils.PI);
-            int   tongueHeight   = Math.round(height * (0.40f + 0.48f * pulse) * bell);
-            float baseHalfWidth  = width / (float) tongueCount * (0.55f + random.nextFloat() * 0.35f);
-            float swayAmplitude  = 6f + random.nextFloat() * 6f;
-            drawFlameTongue(pixmap, baseX, floorY, tongueHeight, baseHalfWidth, swayAmplitude,
-                            phase + seed);
-        }
-
-        // Secondary spikes — thin tall licks scattered on top for extra spikiness.
-        for (int spikeIndex = 0; spikeIndex < 8; spikeIndex++) {
-            int   baseX        = random.nextInt(width);
-            float pulse        = 0.5f + 0.5f * MathUtils.sin(phase * 1.3f + spikeIndex);
-            int   tongueHeight = Math.round(height * (0.55f + 0.40f * pulse));
-            drawFlameTongue(pixmap, baseX, floorY, tongueHeight, 3f + random.nextFloat() * 2f,
-                            9f, phase + spikeIndex);
-        }
-
-        // Drifting embers rising off the fire.
-        for (int emberIndex = 0; emberIndex < 16; emberIndex++) {
-            float emberFraction = random.nextFloat();
-            int   emberX = random.nextInt(width);
-            int   emberY = floorY - Math.round((0.20f + 0.75f * emberFraction) * height)
-                           - Math.round(MathUtils.sin(phase + emberIndex) * 4f);
-            if (emberY < 0 || emberY >= height) continue;
-            pixmap.setColor(1f, 0.85f + 0.10f * random.nextFloat(), 0.40f, 1f - emberFraction);
-            pixmap.drawPixel(emberX, emberY);
-        }
-        return finalize(pixmap);
-    }
-
-    // Draws a single spiky flame tongue rising from (baseX, floorY). The tongue tapers sharply to a
-    // point (spiky) and sways sideways more toward the tip; colour runs white-yellow hot at the
-    // base through orange to deep red at the fading tip.
-    private static void drawFlameTongue(Pixmap pixmap, int baseX, int floorY, int tongueHeight,
-                                        float baseHalfWidth, float swayAmplitude, float swayPhase) {
-        if (tongueHeight <= 0) return;
-        for (int step = 0; step <= tongueHeight; step++) {
-            float fraction = step / (float) tongueHeight;          // 0 at base, 1 at the tip
-            int   drawY    = floorY - step;                        // rise toward the top of the image
-            if (drawY < 0) break;
-            // Sharp power-law taper collapses the width fast near the tip → a pointed, spiky flame.
-            float taper      = (float) Math.pow(1f - fraction, 1.6f);
-            int   halfPixels = Math.max(0, Math.round(baseHalfWidth * taper));
-            float sway       = swayAmplitude * fraction * MathUtils.sin(swayPhase + fraction * 3.1f);
-            int   centerX    = Math.round(baseX + sway);
-            float red, green, blue;
-            if (fraction < 0.45f) {
-                float localFraction = fraction / 0.45f;            // white-yellow → orange
-                red   = 1f;
-                green = 0.95f - 0.35f * localFraction;
-                blue  = 0.55f - 0.45f * localFraction;
-            } else {
-                float localFraction = (fraction - 0.45f) / 0.55f;  // orange → deep red
-                red   = 1f - 0.15f * localFraction;
-                green = 0.60f - 0.50f * localFraction;
-                blue  = 0.10f * (1f - localFraction);
-            }
-            float alpha = 1f - fraction * fraction * 0.70f;         // soft fade toward the tip
-            pixmap.setColor(red, green, blue, alpha);
-            pixmap.fillRectangle(centerX - halfPixels, drawY, halfPixels * 2 + 1, 1);
-            // Brighter inner core on the lower half of the tongue.
-            if (fraction < 0.60f && halfPixels > 1) {
-                int coreHalf = halfPixels / 2;
-                pixmap.setColor(1f, 0.98f, 0.78f, alpha);
-                pixmap.fillRectangle(centerX - coreHalf, drawY, coreHalf * 2 + 1, 1);
-            }
-        }
-    }
-
-    // Toxic hazard ('q') — one animation frame. A billowing, full-width gas cloud built from many
-    // overlapping soft puffs (denser near the floor, wispier up top), brighter acid-green
-    // highlights, and rising bubbles. Puff positions drift with the frame phase so the cloud rolls.
-    private static Texture generateHazardToxicFrame(int frameIndex, int frameCount) {
-        int width  = HAZARD_TOXIC_FRAME_WIDTH;
-        int height = HAZARD_TOXIC_FRAME_HEIGHT;
-        Pixmap pixmap = new Pixmap(width, height, Pixmap.Format.RGBA8888);
-        pixmap.setColor(0f, 0f, 0f, 0f);
-        pixmap.fill();
-        java.util.Random random = new java.util.Random(0x70C1CAC1DL + frameIndex * 0x9E3779B9L);
-        int   floorY = height - 1;
-        float phase  = frameIndex / (float) frameCount * MathUtils.PI2;
-
-        // Main body — many large soft puffs, biased toward the floor so the cloud is densest low
-        // and thins out as it billows upward.
-        int puffCount = 44;
-        for (int puffIndex = 0; puffIndex < puffCount; puffIndex++) {
-            float slotX      = random.nextFloat();
-            float heightBias = random.nextFloat() * random.nextFloat();   // skewed toward 0 → low
-            float drift      = MathUtils.sin(phase + slotX * MathUtils.PI2) * 6f;
-            float bob        = MathUtils.sin(phase * 1.3f + puffIndex) * 3f;
-            int   centerX    = Math.round(slotX * width + drift);
-            int   centerY    = floorY - Math.round(heightBias * height + bob);
-            int   radius     = 10 + random.nextInt(16);
-            float red        = 0.20f + 0.16f * random.nextFloat();
-            float green      = 0.52f + 0.30f * random.nextFloat();
-            float blue       = 0.08f + 0.10f * random.nextFloat();
-            float coreAlpha  = 0.18f + 0.16f * random.nextFloat();
-            softPuff(pixmap, centerX, centerY, radius, red, green, blue, coreAlpha);
-        }
-
-        // Bright acid-green highlight puffs — smaller, near the dense lower mass.
-        for (int highlightIndex = 0; highlightIndex < 16; highlightIndex++) {
-            float slotX   = random.nextFloat();
-            float drift   = MathUtils.sin(phase + slotX * MathUtils.PI2) * 5f;
-            int   centerX = Math.round(slotX * width + drift);
-            int   centerY = floorY - Math.round(random.nextFloat() * height * 0.55f);
-            int   radius  = 5 + random.nextInt(8);
-            softPuff(pixmap, centerX, centerY, radius, 0.52f, 0.92f, 0.26f, 0.22f);
-        }
-
-        // Rising bubbles — small bright ringed dots drifting up through the cloud.
-        for (int bubbleIndex = 0; bubbleIndex < 11; bubbleIndex++) {
-            int bubbleX = random.nextInt(width);
-            int bubbleY = floorY - Math.round(random.nextFloat() * height * 0.7f)
-                          - Math.round(MathUtils.sin(phase + bubbleIndex) * 4f);
-            if (bubbleY < 0 || bubbleY >= height) continue;
-            int bubbleRadius = 1 + random.nextInt(3);
-            pixmap.setColor(0.80f, 1.0f, 0.45f, 0.85f);
-            pixmap.drawCircle(bubbleX, bubbleY, bubbleRadius);
-            pixmap.setColor(0.92f, 1.0f, 0.60f, 1f);
-            pixmap.drawPixel(bubbleX, bubbleY);
-        }
-        return finalize(pixmap);
-    }
-
-    // Draws a soft round gas puff: concentric filled discs from the outer radius inward, each with a
-    // quadratic alpha falloff. Relies on the Pixmap's default SourceOver blending so the overlaps
-    // accumulate into a dense core with a feathered, cloudy edge.
-    private static void softPuff(Pixmap pixmap, int centerX, int centerY, int radius,
-                                 float red, float green, float blue, float coreAlpha) {
-        for (int ring = radius; ring >= 1; ring--) {
-            float edgeFraction = ring / (float) radius;            // 1 at the edge → 0 at the centre
-            float alpha        = coreAlpha * (1f - edgeFraction) * (1f - edgeFraction);
-            if (alpha <= 0.003f) continue;
-            pixmap.setColor(red, green, blue, alpha);
-            pixmap.fillCircle(centerX, centerY, ring);
-        }
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

@@ -126,7 +126,6 @@ public final class RenderConstants {
     public static final float  MAX_PROP_DRAW_DISTANCE_TILES      = 12f;
     // Minimum positive depth before a prop is considered "in front" of the player
     public static final float  PROP_BEHIND_PLAYER_EPSILON_TILES  = 0.1f;
-    public static final String PROP_BARREL_RADIOACTIVE_PATH      = "textures/lab/barrel_radioactive.png";
 
     // Sub-cell columns ('P' tiles) — see docs/dda-raycasting-math.txt for ray-circle math
     // COLUMN_RADIUS_TILES = 0.25 → column 50% as wide as cell, leaving 0.25-tile gaps each side
@@ -175,11 +174,10 @@ public final class RenderConstants {
     // source texture's aspect ratio.
     public static final float HAZARD_CELL_WIDTH_FILL           = 1.0f;
 
-    // Animated hazard sprites: each hazard cycles through this many procedurally-generated frames
-    // at this rate. A per-tile phase offset (derived from tile coordinates) keeps neighbouring
-    // tiles from flickering in lockstep.
-    public static final int   HAZARD_ANIMATION_FRAME_COUNT     = 8;
-    public static final float HAZARD_ANIMATION_FPS             = 12f;
+    // The animated hazards are generated prop sheets (generated-prop-art order 4): their frames, rate and
+    // per-tile phase come from the sheet (render/propvisual). The two FIXED chars they are registered under:
+    public static final char  HAZARD_FIRE_CHAR                 = 'i';
+    public static final char  HAZARD_TOXIC_CHAR                = 'q';
 
     // Tile-Based Ambient Lighting — floor tiles ' ', 'l', 'u', 'f' carry brightness multipliers
     // finalShade = clamp(distanceShade * directionalMultiplier * tileBrightness, 0, MAX_LIGHTING_SHADE)

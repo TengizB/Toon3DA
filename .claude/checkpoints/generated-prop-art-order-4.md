@@ -39,8 +39,8 @@ same commit. Never `git add -A`.
 
 - [x] **CP0** — idea + this file committed and pushed.
 - [x] **CP1** — four sheets baked; previews sent; earlier sheets unchanged.
-- [ ] **CP2** — registry rows, dynamic pass on sheets, old generators + barrel_radioactive.png deleted; build green.
-- [ ] **CP3** — in-engine screenshots sent; docs updated.
+- [x] **CP2** — registry rows, dynamic pass on sheets, old generators + barrel_radioactive.png deleted; build green.
+- [x] **CP3** — in-engine screenshots sent; docs updated.
 - [ ] **CP4** — owner approval in DECISIONS; STATUS IMPLEMENTED.
 
 ## NOTES CARRIED FORWARD
@@ -48,3 +48,7 @@ same commit. Never `git add -A`.
   body is a tall ellipsoid (ry 2000) cropped to the drum rows = pure cylinder shading; lid/ribs/foot rendered over.
   Fire/toxic use periodic_noise() (tiles every N cells) so a scroll by one period loops seamlessly.
   assets/assets.txt lists textures/lab/barrel_radioactive.png - update it when that file is deleted (CP2).
+- CP2: build green except the known StoryBarkTest. RenderConstants HAZARD_FIRE_CHAR / HAZARD_TOXIC_CHAR replace
+  HAZARD_ANIMATION_*; the dynamic pass resolves sheets exactly like the main pass. CP3: run-game gained
+  `hazard:KIND:FORWARD:RIGHT` (dev driver; rerun setup.sh after editing capture/). Seed 7 floor 1 has 'E' and 'g';
+  shots cool_steel + amber_hot sent. CP4 waits on the OWNER.

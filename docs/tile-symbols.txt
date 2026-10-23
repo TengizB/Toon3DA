@@ -104,8 +104,10 @@ SOLID PROPS (block player movement; rendered as billboard sprites)
 On GENERATED floors every solid prop comes from a room's PROP KIT, the cave's formation / debris rules, the boss
 arena's cover / barrels or the shared supply pipeline — never a per-tile roll — and never stands in a door's
 clearance zone (Chebyshev 1 + 2 straight through) or a room's lane band. See docs/procedural-level-generation.txt.
-g   Radioactive barrel  Dark green hazard drum.                                0.65x wall height
-E   Explosive barrel    Crimson volatile drum: hazard hoops, stamped explosion burst, hot leaking seams. 0.65x wall height
+g   Radioactive barrel  Lab-grey drum, GENERATED + ANIMATED (generated-prop-art order 4): rad-lime band + trefoil,
+                        glowing cracks, a glowing drip into a pulsing puddle. 0.65x wall height
+E   Explosive barrel    Oxide-red VOLATILE drum, GENERATED + ANIMATED (generated-prop-art order 4): hot-iron pressure
+                        slots breathing, a hot lid seam, a blinking warning lamp. 0.65x wall height
 T   Computer terminal   Free-standing Organization console, GENERATED + ANIMATED (generated-prop-art order 1): phosphor-green
                         scrolling text screen, backlit keys, blinking lamps. 0.80x wall height
                         GENERATED placement (R20): only in terminal kits (office, server room, research lab,
@@ -149,11 +151,13 @@ i   Fire hazard         Burning floor (idea 4, Pillar 3). DYNAMIC — spawned/sp
                         runtime by HazardManager; ticks BURNING on any host standing on it
                         (player AND enemies), spreads along spreadable floor/stain tiles, and
                         chain-detonates explosive barrels. May also be hand-placed in a level
-                        file to seed a fire room. Walkable. 0.30x wall height.
+                        file to seed a fire room. Walkable. 0.30x wall height. Picture: a GENERATED animated sheet
+                        (generated-prop-art order 4) - hot-iron flames over burning debris, sparks.
 q   Toxic hazard        Acid/toxic pool (idea 4, Pillar 3). DYNAMIC — area-denial pool that
                         ticks POISONED on any host standing on it; a Plague Hulk leaves one
                         where it dies. Creeps slowly; may be hand-placed to seed a toxic room.
-                        Walkable. 0.16x wall height.
+                        Walkable. 0.16x wall height. Picture: a GENERATED animated sheet (generated-prop-art
+                        order 4) - a glowing toxin-green pool, crusted rim, bubbles, vapour.
 ?   Magnetic deck plating Raised mag-deck grating marking the catwalk ring / walking lanes.
                         STELLAR_OBSERVATORY room only. Walkable. 0.18x wall height.
 ]   Zero-g debris scatter Tiny weightless-looking debris (bolts, shards, a data-slate) with
