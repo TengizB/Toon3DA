@@ -99,6 +99,8 @@ MATERIALS = {
     # KEYCARD inks: the exact keycard colours (RenderConstants.KEYCARD_AURA_*: red 1.00/0.18/0.16, yellow
     # 1.00/0.86/0.18, blue 0.22/0.58/1.00), emissive, so no mood shifts them. Only on keycard doors (guide 11.1).
     # The upper three steps ARE the exact colour; the lower ones only shade a lamp's rim.
+    # steel_lt: the DOORS' brushed light steel - near white, cool, glossy; off every wall's value band (doors are landmarks)
+    "steel_lt":    dict(ramp=ramp("30353b", "5a6168", "8a9198", "b5bbc0", "d8dcdf", "f1f3f4"), spec=(0.55, 40), grain=(0.015, 6)),
     "key_red":     dict(ramp=ramp("4d0e0c", "801714", "bf2320", "ff2e29", "ff2e29", "ff2e29"), emissive=True),
     "key_yellow":  dict(ramp=ramp("4d420e", "806e17", "bfa423", "ffdb2e", "ffdb2e", "ffdb2e"), emissive=True),
     "key_blue":    dict(ramp=ramp("112d4d", "1c4a80", "2a6fbf", "3894ff", "3894ff", "3894ff"), emissive=True),

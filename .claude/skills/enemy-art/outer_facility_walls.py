@@ -502,37 +502,203 @@ def signature_accent(glow):
 
 
 # ---------------------------------------------------------------------------------------------------
-# DOORS - a painted livery sliding door with a porthole and rubber seal (an authored CLOSED door; the
-# slide is the engine's). Keycard doors add the lock panel and a frame stripe in the exact keycard ink.
+# DOORS - the face IS the leaf: no frame, edge to edge (owner feedback 2026-10-23, third pass; the frame is
+# the wall around it). A near-white brushed steel leaf (kit material steel_lt - a value no wall uses) carrying
+# its LOCKING MECHANISM in plain sight in dark gunmetal, so a door reads as a door by value and by machinery.
+# Each kind has its own mechanism, so the four differ by shape, not only by ink:
+#   plain  - a pneumatic latch: two pistons driving edge bolts from a centre gear, a small cyan call panel
+#   red    - a SECURITY door: six deadbolts on two vertical linkage bars, a keypad card terminal between them
+#   yellow - a VAULT: a big exposed gear driving four lock arms to the edges, a card terminal low right
+#   blue   - a LAB door: two hydraulic rams clamping a lock beam, a pressure gauge, a card terminal
+# Keycard inks are exact (key_red / key_yellow / key_blue, guide 11.1) and live on the card terminal (screen
+# text, slot, status lamp) and a few mechanism status lamps. The slide is the engine's - a CLOSED door.
 # ---------------------------------------------------------------------------------------------------
-def door(ink=None):
-    def build(glow):
-        frame = [backing("darkmetal", bevel=0.5),
-                 slab([(4, -4), (252, -4), (252, 38), (4, 38)], "gunmetal", bevel=4, slope=0.9, k=0, prio=3),   # header
-                 slab([(4, -4), (30, -4), (30, 260), (4, 260)], "gunmetal", bevel=4, slope=0.9, k=0, prio=3),   # jambs
-                 slab([(226, -4), (252, -4), (252, 260), (226, 260)], "gunmetal", bevel=4, slope=0.9, k=0, prio=3)]
-        for y in range(54, 250, 40):
-            frame += [blob(17, y, 1.8, 1.8, "darkmetal", op="add", depth=1.6), blob(239, y, 1.8, 1.8, "darkmetal", op="add", depth=1.6)]
-        seal = [slab([(30, 38), (226, 38), (226, 258), (30, 258)], "rubber", bevel=3, slope=0.9, k=0)]
-        leaf = [panel(36, 42, 220, 262, "livery_dk", chamfer=6, bevel=6, slope=0.9, k=0, prio=2),
-                slab(chamfer_rect(46, 196, 210, 246, 4), "gunmetal", bevel=3, slope=0.9, op="add", depth=2.5),   # kick strip
-                limb(60, 150, 108, 150, 3.0, 3.0, "livery_dk", op="carve")]                                         # grab recess
-        for x in range(66, 200, 24):
-            leaf.append(limb(x, 206, x + 10, 236, 1.2, 1.2, "gunmetal", op="carve"))
-        leaf.append(blob(128, 98, 31, 31, "livery_dk", depth=5, op="carve"))                                 # porthole bore
-        port = [blob(128, 98, 29, 29, "rubber", depth=4, k=0), blob(128, 98, 22, 22, "rubber", depth=4, op="carve"),
-                blob(128, 98, 22, 22, "capsule", depth=2, k=0, prio=3, glow=0.0),
-                limb(114, 86, 122, 81, 1.0, 1.0, "frost", op="add", depth=0.5)]                                    # a glint scratch
-        stencils = [("R1-D", 46, 52, STENCIL)]
-        if ink:
-            lamp = lock_panel(196, 150, ink, w=26, h=42, glow=glow)
-            frame.append(slab([(34, 24), (222, 24), (222, 31), (34, 31)], ink, bevel=1.5, slope=1.0, op="add", depth=1.2,
-                              glow=glow))                                                                       # the frame stripe
-        else:
-            lamp = [slab(chamfer_rect(186, 138, 206, 162, 3), "darkmetal", bevel=2.5, slope=0.8, k=0),
-                    blob(196, 150, 3.5, 3.5, "cyan", depth=2.5, op="add", glow=glow)]
-        return Face([frame, seal, leaf, port, lamp], stencils=stencils)
-    return build
+def leaf(seams=(), vents=None):
+    """The steel leaf (layer 0): edge to edge, a carved inset line at the leaf edges, horizontal panel seams,
+    optional vent slots (y0, y1) and a riveted tread plate at the foot. -> shapes."""
+    out = [slab([(-4, -4), (260, -4), (260, 260), (-4, 260)], "steel_lt", bevel=1.5, slope=0.6, k=0),
+           limb(5, -4, 5, 260, 0.9, 0.9, "steel_lt", op="carve"), limb(251, -4, 251, 260, 0.9, 0.9, "steel_lt", op="carve"),
+           limb(-4, 4, 260, 4, 0.9, 0.9, "steel_lt", op="carve")]
+    for y in seams:
+        out.append(limb(8, y, 248, y, 0.9, 0.9, "darkmetal", op="carve"))
+        for x in range(16, 248, 24):
+            out.append(blob(x, y + 5, 1.2, 1.2, "steel_lt", op="add", depth=0.8))
+    if vents:
+        y0, y1 = vents
+        for n in range(4):
+            y = y0 + (y1 - y0) * (n + 0.5) / 4
+            out.append(limb(44, y, 212, y, 1.6, 1.6, "darkmetal", op="carve"))
+    out.append(slab([(8, 222), (248, 222), (248, 252), (8, 252)], "steel_lt", bevel=1.2, slope=0.6, op="add", depth=1.2))
+    for row, y in enumerate(range(228, 250, 7)):                             # tread plate: alternating lozenges
+        for x in range(16 + (row % 2) * 6, 244, 12):
+            out.append(blob(x, y, 3.0, 1.0, "steel_lt", op="add", depth=0.7, angle=0.6 if (x // 12 + row) % 2 else -0.6))
+    return out
+
+
+def mount(x0, y0, x1, y1, chamfer=4):
+    """A dark mounting plate the mechanism sits on, with corner screws. -> shapes (its own layer)."""
+    out = [slab(chamfer_rect(x0, y0, x1, y1, chamfer), "darkmetal", bevel=1.5, slope=0.7, k=0, prio=2)]
+    for x, y in ((x0 + 5, y0 + 5), (x1 - 5, y0 + 5), (x0 + 5, y1 - 5), (x1 - 5, y1 - 5)):
+        out.append(blob(x, y, 1.4, 1.4, "gunmetal", op="add", depth=1.0))
+    return out
+
+
+def gear(cx, cy, r, teeth, mat="gunmetal", holes=0, prio=5):
+    """A toothed gear: a disc, `teeth` square teeth round it, a hub and optional lightening holes."""
+    out = [blob(cx, cy, r, r, mat, depth=4, k=0, prio=prio)]
+    for n in range(teeth):
+        a = n * 2 * math.pi / teeth
+        ux, uy, px, py = math.cos(a), math.sin(a), -math.sin(a), math.cos(a)
+        w = math.pi * r / teeth * 0.55
+        out.append(slab([(cx + ux * (r - 2) - px * w, cy + uy * (r - 2) - py * w), (cx + ux * (r + 4) - px * w * 0.7, cy + uy * (r + 4) - py * w * 0.7),
+                         (cx + ux * (r + 4) + px * w * 0.7, cy + uy * (r + 4) + py * w * 0.7), (cx + ux * (r - 2) + px * w, cy + uy * (r - 2) + py * w)],
+                        mat, bevel=1.5, slope=0.8, k=0, prio=prio))
+    for n in range(holes):
+        a = n * 2 * math.pi / holes + 0.4
+        out.append(blob(cx + math.cos(a) * r * 0.58, cy + math.sin(a) * r * 0.58, r * 0.18, r * 0.18, mat, op="carve", depth=3))
+    out.append(blob(cx, cy, r * 0.28, r * 0.28, mat, op="add", depth=2.0))
+    out.append(blob(cx, cy, r * 0.10, r * 0.10, "darkmetal", op="carve", depth=2.0))
+    return out
+
+
+def piston(x0, y, x1, rod_to, r=6):
+    """A horizontal pneumatic piston: a cylinder x0..x1 with end caps and a polished rod to `rod_to`."""
+    lo, hi = min(x0, x1), max(x0, x1)
+    out = [slab([(lo, y - r), (hi, y - r), (hi, y + r), (lo, y + r)], "gunmetal", bevel=r * 0.8, slope=1.2, k=0, prio=5)]
+    for x in (lo + 3, hi - 3):
+        out.append(slab([(x - 3, y - r - 1.5), (x + 3, y - r - 1.5), (x + 3, y + r + 1.5), (x - 3, y + r + 1.5)], "gunmetal",
+                        bevel=r * 0.9, slope=1.2, k=0, prio=6))
+    out.append(limb(x1, y, rod_to, y, r * 0.38, r * 0.38, "steel_lt", prio=7))
+    return out
+
+
+def ram(x, y0, y1, rod_to, r=8):
+    """A vertical hydraulic ram: a cylinder y0..y1, collars, and a rod down to `rod_to`."""
+    out = [slab([(x - r, y0), (x + r, y0), (x + r, y1), (x - r, y1)], "gunmetal", bevel=r * 0.8, slope=1.2, k=0, prio=5)]
+    for y in (y0 + 4, (y0 + y1) / 2, y1 - 4):
+        out.append(slab([(x - r - 1.5, y - 3), (x + r + 1.5, y - 3), (x + r + 1.5, y + 3), (x - r - 1.5, y + 3)], "gunmetal",
+                        bevel=r * 0.9, slope=1.2, k=0, prio=6))
+    out.append(limb(x, y1, x, rod_to, r * 0.4, r * 0.4, "steel_lt", prio=7))
+    return out
+
+
+def bolt(x0, x1, y, h=7):
+    """A deadbolt: a bar from x0 to the leaf edge x1 with a rounded nose, and a guide bracket over it."""
+    out = [slab([(min(x0, x1), y - h), (max(x0, x1), y - h), (max(x0, x1), y + h), (min(x0, x1), y + h)], "steel_lt",
+                bevel=h * 0.5, slope=1.0, k=0, prio=5)]
+    gx = (x0 + x1) / 2
+    out.append(slab([(gx - 5, y - h - 3), (gx + 5, y - h - 3), (gx + 5, y + h + 3), (gx - 5, y + h + 3)], "gunmetal",
+                    bevel=h * 0.9, slope=1.2, k=0, prio=6))
+    out += [blob(gx, y - h, 1.2, 1.2, "gunmetal", op="add", depth=0.8), blob(gx, y + h, 1.2, 1.2, "gunmetal", op="add", depth=0.8)]
+    return out
+
+
+def card_terminal(cx, cy, ink, glow, keypad=True):
+    """A KEYCARD TERMINAL: a gunmetal housing, a dark screen with lines of text in the keycard ink, a status
+    lamp, the card slot with its ink guide light, and (optionally) a 3x4 keypad. -> (housing layer, lit layer)."""
+    h = 70 if keypad else 46
+    x0, y0, x1, y1 = cx - 21, cy - h / 2, cx + 21, cy + h / 2
+    housing = [slab(chamfer_rect(x0, y0, x1, y1, 4), "gunmetal", bevel=2.5, slope=0.9, k=0, prio=6),
+               slab(chamfer_rect(x0 + 5, y0 + 5, x1 - 5, y0 + 21, 2), "darkmetal", bevel=1.2, slope=0.8, op="add", depth=1.0),
+               limb(x0 + 8, y0 + 30, x1 - 12, y0 + 30, 1.6, 1.6, "darkmetal", op="carve"),          # the card slot
+               blob(x0 + 4, y0 + 2, 1.0, 1.0, "darkmetal", op="add", depth=0.6), blob(x1 - 4, y1 - 2, 1.0, 1.0, "darkmetal", op="add", depth=0.6)]
+    if keypad:
+        for row in range(4):
+            for col in range(3):
+                bx, by = x0 + 11 + col * 10, y0 + 40 + row * 7.5
+                housing.append(slab(chamfer_rect(bx - 3.5, by - 2.6, bx + 3.5, by + 2.6, 1), "steel_lt", bevel=1.0, slope=0.9,
+                                    op="add", depth=1.0))
+    lit = [limb(x0 + 9, y0 + 10, x1 - 14, y0 + 10, 0.8, 0.8, ink, glow=glow),                       # screen text
+           limb(x0 + 9, y0 + 14, x1 - 20, y0 + 14, 0.8, 0.8, ink, glow=glow),
+           limb(x0 + 9, y0 + 18, x1 - 11, y0 + 18, 0.8, 0.8, ink, glow=glow),
+           limb(x0 + 9, y0 + 34, x1 - 13, y0 + 34, 0.7, 0.7, ink, glow=glow),                       # slot guide light
+           blob(x1 - 7, y0 + 30, 2.2, 2.2, ink, depth=1.2, glow=glow)]                               # status lamp
+    return housing, lit
+
+
+def door_plain(glow):
+    """PLAIN: a pneumatic latch - two pistons from a centre gear drive bolts into both leaf edges; a small call
+    panel with a cyan lamp."""
+    l0 = leaf(seams=(66, 194), vents=(20, 50))
+    plate = mount(10, 104, 246, 160)
+    mech = gear(128, 132, 18, 12, holes=4)
+    mech += piston(52, 132, 100, 110) + piston(204, 132, 156, 146)
+    mech += [slab([(10, 124), (40, 124), (40, 140), (10, 140)], "gunmetal", bevel=4, slope=1.2, k=0, prio=5),
+             slab([(216, 124), (246, 124), (246, 140), (216, 140)], "gunmetal", bevel=4, slope=1.2, k=0, prio=5),
+             limb(40, 132, 52, 132, 2.2, 2.2, "steel_lt", prio=7), limb(204, 132, 216, 132, 2.2, 2.2, "steel_lt", prio=7)]
+    panel_ = [slab(chamfer_rect(186, 168, 226, 210, 3), "gunmetal", bevel=2.5, slope=0.9, k=0, prio=6),
+              blob(198, 192, 5, 5, "steel_lt", op="add", depth=1.4), blob(214, 192, 5, 5, "steel_lt", op="add", depth=1.4)]
+    lit = [blob(198, 192, 3, 3, "cyan", depth=1.2, glow=glow), limb(192, 176, 220, 176, 1.0, 1.0, "cyan", glow=glow),
+           blob(128, 132, 2.0, 2.0, "cyan", depth=1.0, glow=glow)]
+    return Face([l0, plate, mech, panel_, lit], stencils=[("D-01", 18, 76, STENCIL), ("P-LATCH", 18, 168, STENCIL)])
+
+
+def door_red(glow):
+    """RED - a SECURITY door: two vertical linkage bars each throwing three deadbolts into the leaf edge, a
+    rack gear on each bar, and the keypad card terminal between them."""
+    l0 = leaf(seams=(28, 214))
+    plates = mount(10, 40, 82, 206) + mount(174, 40, 246, 206)
+    mech = []
+    for bar_x, edge in ((62, 8), (194, 248)):
+        mech += [slab(chamfer_rect(bar_x - 6, 46, bar_x + 6, 200, 2), "gunmetal", bevel=4, slope=1.2, k=0, prio=5)]
+        for y in range(52, 198, 8):                                          # the rack teeth
+            mech.append(limb(bar_x - 6, y, bar_x + 6, y, 0.7, 0.7, "darkmetal", op="carve"))
+        for y in (70, 123, 176):
+            mech += bolt(bar_x, edge, y)
+        mech += gear(bar_x + (14 if edge < 128 else -14), 123, 8, 8, prio=6)
+    housing, lit = card_terminal(128, 124, "key_red", glow, keypad=True)
+    lit += [blob(62, 40, 2.0, 2.0, "key_red", depth=1.0, glow=glow), blob(194, 40, 2.0, 2.0, "key_red", depth=1.0, glow=glow)]
+    return Face([l0, plates, mech, housing, lit], stencils=[("SEC-R", 112, 72, STENCIL), ("AUTH-ONLY", 110, 172, STENCIL)])
+
+
+def door_yellow(glow):
+    """YELLOW - a VAULT: a big exposed gear on a round mount drives four lock arms out to edge bolts at the
+    corners; a card terminal low on the right."""
+    cx, cy = 128, 112
+    l0 = leaf(seams=(206,))
+    plate = [blob(cx, cy, 62, 62, "darkmetal", depth=3, k=0, prio=2)]
+    for n in range(12):
+        a = n * math.pi / 6
+        plate.append(blob(cx + 57 * math.cos(a), cy + 57 * math.sin(a), 1.4, 1.4, "gunmetal", op="add", depth=1.0))
+    arms = []
+    for ex, ey in ((14, 20), (242, 20), (14, 196), (242, 196)):
+        ax, ay = cx + (ex - cx) * 0.25, cy + (ey - cy) * 0.25
+        arms += [limb(ax, ay, ex, ey, 4.0, 4.0, "gunmetal", prio=4),
+                 slab(chamfer_rect(ex - 8, ey - 8, ex + 8, ey + 8, 3), "gunmetal", bevel=3, slope=1.0, k=0, prio=5),
+                 blob(ex, ey, 2.2, 2.2, "darkmetal", op="add", depth=1.0)]
+    mech = gear(cx, cy, 44, 22, holes=6, prio=6)
+    mech += [slab([(cx - 7 + dx, cy - 4), (cx + 7 + dx, cy - 4), (cx + 7 + dx, cy + 4), (cx - 7 + dx, cy + 4)], "gunmetal",
+                  bevel=2, slope=1.0, op="add", depth=1.5) for dx in (0,)]
+    housing, lit = card_terminal(206, 206, "key_yellow", glow, keypad=False)
+    lit += [blob(cx, cy, 2.4, 2.4, "key_yellow", depth=1.0, glow=glow)]
+    return Face([l0, plate, arms, mech, housing, lit], stencils=[("VAULT-Y", 18, 214, STENCIL)])
+
+
+def door_blue(glow):
+    """BLUE - a LAB door: two hydraulic rams press clamp jaws onto a lock beam across the leaf; a pressure
+    gauge between them with hoses to both rams; a keypad card terminal under the gauge."""
+    l0 = leaf(seams=(206,), vents=(14, 34))
+    plates = mount(18, 40, 62, 200) + mount(194, 40, 238, 200)
+    mech = ram(40, 46, 124, 160) + ram(216, 46, 124, 160)
+    mech += [slab(chamfer_rect(10, 172, 246, 190, 3), "gunmetal", bevel=4, slope=1.2, k=0, prio=5)]         # the lock beam
+    for x in range(24, 240, 16):
+        mech.append(blob(x, 181, 1.4, 1.4, "darkmetal", op="add", depth=0.9))
+    jaws = []
+    for x in (40, 216):
+        jaws += [slab(chamfer_rect(x - 14, 158, x + 14, 172, 3), "gunmetal", bevel=3, slope=1.1, k=0, prio=8),
+                 slab(chamfer_rect(x - 14, 190, x + 14, 200, 3), "gunmetal", bevel=3, slope=1.1, k=0, prio=8)]
+    gauge = [blob(128, 66, 22, 22, "gunmetal", depth=4, k=0, prio=6), slab([(128 + 17 * math.cos(n * math.pi / 12), 66 + 17 * math.sin(n * math.pi / 12)) for n in range(24)], "frost", bevel=1.0,
+                   slope=0.5, k=0, prio=7)]                                  # a flat dial face
+    for n in range(9):
+        a = math.pi * (0.75 + n * 1.5 / 8)
+        gauge.append(limb(128 + 12 * math.cos(a), 66 + 12 * math.sin(a), 128 + 15 * math.cos(a), 66 + 15 * math.sin(a),
+                          0.6, 0.6, "darkmetal", prio=8))
+    gauge += [limb(128, 66, 139, 57, 1.3, 0.6, "darkmetal", prio=8), blob(128, 66, 2.2, 2.2, "darkmetal", prio=8)]
+    hoses = chain([(108, 72), (84, 84), (60, 88), (48, 80)], 2.4, 2.4, "rubber", prio=3) + \
+            chain([(148, 72), (172, 84), (196, 88), (208, 80)], 2.4, 2.4, "rubber", prio=3)
+    housing, lit = card_terminal(128, 130, "key_blue", glow, keypad=False)
+    lit += [blob(40, 52, 2.0, 2.0, "key_blue", depth=1.0, glow=glow), blob(216, 52, 2.0, 2.0, "key_blue", depth=1.0, glow=glow)]
+    return Face([l0, plates, hoses, mech, gauge, jaws, housing, lit], stencils=[("LAB-B", 18, 214, STENCIL)])
 
 
 # COLUMNS - drawn by the column path as a wall stripe, so authored as a 256x256 face
@@ -630,8 +796,8 @@ for group, base, accent in ROOMS:
     WALLS += [wall(LETTER, group, "BASE", base(0), variant=0), wall(LETTER, group, "BASE", base(1), variant=1),
               wall(LETTER, group, "ACCENT", accent)]
 
-DOORS = [Entry(f"door_{LETTER}_plain", door()), Entry(f"door_{LETTER}_red", door("key_red")),
-         Entry(f"door_{LETTER}_yellow", door("key_yellow")), Entry(f"door_{LETTER}_blue", door("key_blue"))]
+DOORS = [Entry(f"door_{LETTER}_plain", door_plain), Entry(f"door_{LETTER}_red", door_red),
+         Entry(f"door_{LETTER}_yellow", door_yellow), Entry(f"door_{LETTER}_blue", door_blue)]
 COLUMNS = [Entry(f"column_{LETTER}_round", column_round), Entry(f"column_{LETTER}_square", column_square)]
 
 REGION = dict(letter=LETTER, seed=SEED, trim=TRIM, breach=BREACH, walls=WALLS, doors=DOORS, columns=COLUMNS,

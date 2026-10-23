@@ -49,6 +49,8 @@ MANIFEST_VERSION = 1
 FOCAL_MARGIN = 8           # a focal shape keeps >= this many px from the tile edge (guide section 4)
 GLOW_FRAME_FLOOR = 0.06    # a glow frame "off" is baked just above kit.GLOW_DEAD, so the lamp's dark rim
                            # is in that frame's glow image and covers the lit lamp of the base face
+GLOW_BUDGET = 0.06         # emissive share of a wall / column face (guide E7)
+DOOR_GLOW_BUDGET = 0.12    # a door is a beacon, not backdrop: its lit frame may cover more (guide 11.1)
 GROUPS = ("HALL", "MEDICAL", "SECURITY", "CONTAINMENT", "MACHINERY", "RESEARCH", "STORAGE", "SIGNATURE")
 HALL_SLOTS = ("BASE", "STRUCTURE", "LIGHT", "SERVICE", "VENT", "MARKER", "BREACH")
 ROOM_SLOTS = ("BASE", "ACCENT")
@@ -407,8 +409,9 @@ def write_region(name, out_dir, preview_dir=None, log=print):
         results = pool.map(_bake_entry, range(len(entries)))
     for e, (img, glow, extra) in zip(entries, results):
         coverage = float((np.asarray(glow)[..., 3] > 0).mean())
-        if coverage > 0.06:
-            log(f"  WARNING {e.id}: glow covers {coverage:.1%} of the face (budget ~6%)")
+        budget = DOOR_GLOW_BUDGET if e.id.startswith("door_") else GLOW_BUDGET
+        if coverage > budget:
+            log(f"  WARNING {e.id}: glow covers {coverage:.1%} of the face (budget ~{budget:.0%})")
         baked.append((mip_chain(img, glow), extra, coverage))
         log(f"  {e.id}: glow {coverage:.2%}" + (f", {len(e.frames)} glow frames" if e.frames else ""))
 

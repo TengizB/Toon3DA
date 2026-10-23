@@ -67,7 +67,7 @@ CONTENTS
       no red medical cross, no hazard-yellow stripes, SUIT_AMBER never. Keycard colours appear only on
       keycard doors (section 11.1).
   E7  READABILITY BEATS MOOD (V8). Walls are the backdrop: mid-value, never brighter than the enemies in
-      front of them; emissive pixels small (<= ~6% of a face).
+      front of them; emissive pixels small (<= ~6% of a face; doors <= ~12%, section 11.1).
   E8  THE 2D GAME IS UNTOUCHED. Art never adds or removes a tile symbol, never changes walkability, a
       rule, a balance number, a spawn or a supply slot. Which wall picture a tile shows is cosmetic.
   E9  OWNER APPROVAL GATE. No region set enters the game before the owner has seen it (section 14)
@@ -348,7 +348,7 @@ brightest moods (sprite guide 4.5).
   - Emissive pixels (emissive materials, and translucent ones where thick) are copied into the GLOW image
     at the same rect (binary alpha). The engine draws them over the graded wall with NORMAL blend,
     exempt from the mood grade (art-direction V6), so a lamp keeps its colour in every region.
-  - Glow per face <= ~6% of its pixels; on BASE walls none or a continuous line only (R-3).
+  - Glow per face <= ~6% of its pixels (doors ~12%, 11.1); on BASE walls none or a continuous line only (R-3).
   - Animation is a 2-8 frame cycle of the GLOW layer only (the base face stays one image). Bake each
     frame by calling the builder at that frame's glow level; keep only its glow image. A frame level of 0
     ("off") is baked at walls.GLOW_FRAME_FLOOR = 0.06, just above kit.GLOW_DEAD, so the dark tube is IN that
@@ -369,6 +369,17 @@ brightest moods (sprite guide 4.5).
      key_red / key_yellow / key_blue, whose top three ramp steps ARE those values), so no mood shifts it; it must read at 6 tiles in the
      region's mood. The plain door must read as a door against its region's walls at 4 tiles by shape
      (frame, seam, porthole), never by colour. Door slide animation is the engine's - author a closed door.
+     DOORS ARE NOT BACKDROP (owner feedback 2026-10-23, three passes). The face IS the door leaf, edge to
+     edge - NO FRAME (the wall around it is the frame). The leaf is NEAR-WHITE brushed steel (kit material
+     steel_lt - a value no wall uses) carrying its LOCKING MECHANISM in plain sight in dark gunmetal on
+     dark mounting plates, and each kind has its own mechanism so plain / red / yellow / blue differ by
+     shape, not only by ink (region A: a pneumatic latch - two pistons from a centre gear to edge bolts /
+     six polished deadbolts on two rack-toothed linkage bars / a big exposed gear driving four corner lock
+     arms / two hydraulic rams clamping a lock beam under a pressure gauge). Every KEYCARD door carries a
+     small CARD TERMINAL (outer_facility_walls.card_terminal: housing, dark screen with text lines, card
+     slot + guide light, status lamp, optional keypad) - the ink lives there and on a few status lamps.
+     Not cartoonish: real hardware proportions, thin seams, a tread-plate kick band, no fat neon tubes.
+     Door glow budget ~12% of the face.
 11.2 COLUMNS - round and square per region, authored as 256x256 faces (the column path draws a stripe). A
      round column is built from tilted STAVES (slabs with tilt = the cylinder's slope at their centre): a
      smooth dome's slow gradient dithers into blotches (lesson 15.17).
@@ -535,6 +546,11 @@ brightest moods (sprite guide 4.5).
        in a contact sheet and read as NOISE on a wall in play: the 3D view resamples the face, so the dither
        and grain shimmer into speckle and every diagonal stair-steps. Walls now bake smooth (section 4).
        Never reintroduce dither or grain on a wall face to "add texture" - texture comes from shapes.
+  15.25 Doors took three passes (2026-10-23). 1: built from the walls' own grammar (livery leaf, gunmetal
+       frame, one ink stripe), one silhouette for all four - a door was hard to find. 2: dark armour, a lit
+       frame, chunky stacked plates, an iris and chevrons - it stood out but looked like a cartoon. 3
+       (shipped): no frame, a near-white steel leaf with real locking hardware and a keycard terminal. A
+       door is a landmark: its own value, readable machinery, a different mechanism per kind (11.1).
 
 
 ====================================================================================================
@@ -562,8 +578,11 @@ brightest moods (sprite guide 4.5).
      STORAGE a roll-up shutter in guide channels / ACCENT the shutter half up, a dark gap, a crate's edge.
      SIGNATURE crew quarters: four lockers with scratched-off name plates, "Q7-1" / ACCENT one locker ajar,
            dark inside, a shelf, a scarf left on its hook (no figure, no photo face - 15.16).
-     DOORS a framed livery sliding leaf, porthole, grab recess, ribbed kick strip; plain = cyan lamp; keycard
-           = lock panel + header stripe in the exact ink. COLUMNS round = eight painted staves with the rail
+     DOORS (regenerated 2026-10-23) frameless near-white steel_lt leaves with the lock in plain sight:
+           plain = pneumatic latch, cyan call panel; red = six deadbolts on two linkage bars + keypad card
+           terminal; yellow = a big gear driving four corner lock arms + card terminal; blue = two hydraulic
+           rams clamping a lock beam, a pressure gauge + card terminal.
+           COLUMNS round = eight painted staves with the rail
            ring; square = a boxed cable riser. FLOOR dark deck plates under a worn rubber runner (0.176).
            CEILING concrete panels, a cable tray, dark strip-lamp housings (0.177).
      Story details (W8): ring serials, the evacuation board, scratched name plates, the left scarf, the seep.
