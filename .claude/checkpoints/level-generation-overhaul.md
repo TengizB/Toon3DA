@@ -71,7 +71,7 @@ into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
 - [x] **CP8** — (balanceSim: S-HEAVY 0.30+ under D6, SR3 0.97 under D5) DONE WHEN: CAVERN runs G3; audit passes CAVERN; both gates green.
 - [x] **CP9** — DONE WHEN: BOSS_ARENA conforms to G4; audit passes; BossArenaGeneratorTest + fast gate green.
 - [x] **CP10** — DONE WHEN: MED_BAY conforms to G5; audit passes; fast gate green.
-- [ ] **CP11** — DONE WHEN: EVENT_ROOM conforms to G6; audit passes; fast gate green.
+- [x] **CP11** — DONE WHEN: EVENT_ROOM conforms to G6; audit passes; fast gate green.
 - [ ] **CP12** — DONE WHEN: GATE_AIRLOCK conforms to G7; audit passes; fast gate green.
 - [ ] **CP13** — DONE WHEN: StartGameLevelGenerator conforms to G8; audit start-room row passes; fast gate green.
 - [ ] **CP14** — DONE WHEN: RetiredWallDressing + retired rolls deleted; LevelGenConfig scatter flags /
@@ -246,3 +246,10 @@ into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
   Audit 200 x 6: every counter 0 (ward fill 0.038, bays <= 0.125). Fast gate green (only the baseline StoryBarkTest).
   NEXT (CP11): EVENT_ROOM per G6 — approach ends at a DOOR socket into the room; 'W' station = CENTRE feature; 'T' and
   '%' flush to walls; corpse/oil decals optional.
+- CP11 (EVENT_ROOM, G6): the chamber is a LayoutRoom ("event_room"); the approach ends at roomLeft - 2 and enters
+  through a DOOR socket at (roomLeft - 1, centerRow); the 'W' station is `room.claimCentre`; `EventRoomGenerator.
+  eventKit()` ("event": 'T' SIDE_WALL x1, '%' CORNER x1, 'm' ANY_WALL x1 at 0.5) goes through the RoomDresser. The
+  console's 'f' light and the optional approach oil stay (the corpse draw moved into the kit's own stream). Audit 200 x
+  6: every counter 0 (fill 0.028). Fast gate green (only the baseline StoryBarkTest).
+  NEXT (CP12): GATE_AIRLOCK per G7 — 'B' is the threshold room's single entrance socket in its left wall, flanked by
+  shell; the 3-wide approach runs up to that wall; keycard 'b' stays on the approach; 'T' + '%' flush.
