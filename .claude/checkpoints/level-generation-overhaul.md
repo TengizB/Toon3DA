@@ -68,7 +68,7 @@ into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
 - [x] **CP7** — (balanceSim: SR3 0.98 under D5, S-HEAVY NAIVE 0.31 under D6) DONE WHEN: LINEAR runs pipeline A with G2; STORAGE_BAY/REACTOR/bridge/native props/roulette gone;
       eligible/selectionWeight + weight/chance/depth/cap constants deleted; RoomBlueprintRegistryTest updated;
       LEVEL_GEN_PROP_CHANCE + GRANDFATHERED entry deleted (CHANGELOG); audit passes LINEAR; both gates green.
-- [ ] **CP8** — DONE WHEN: CAVERN runs G3; audit passes CAVERN; both gates green.
+- [x] **CP8** — (balanceSim: S-HEAVY 0.30+ under D6, SR3 0.97 under D5) DONE WHEN: CAVERN runs G3; audit passes CAVERN; both gates green.
 - [ ] **CP9** — DONE WHEN: BOSS_ARENA conforms to G4; audit passes; BossArenaGeneratorTest + fast gate green.
 - [ ] **CP10** — DONE WHEN: MED_BAY conforms to G5; audit passes; fast gate green.
 - [ ] **CP11** — DONE WHEN: EVENT_ROOM conforms to G6; audit passes; fast gate green.
@@ -193,3 +193,34 @@ into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
   decision D6 (idea file): accept as a layout effect, no band moves, report S-HEAVY + SR3 at every later gate.
   NEXT (CP8): CAVERN on G3 — walled chambers with sockets, specials first, formations/debris rules, ChamberType typing
   dropped, 'T' out of the cave body; then delete the cave constants it stops reading. Both gates.
+- CP8 (CAVERN on G3): `CavernGenerator` rewritten on the shared engine. CA cave unchanged (noise/smooth/region audit);
+  then `placeChamber(grid, rooms, w, h, role, id, requireOverlap[, maximumSockets])` — up to CAVE_CHAMBER_TRIES samples
+  inside the footprint window (fields windowLeft/Bottom/Right/Top, set in initNoise, 2 tiles in from the border), clear
+  of other chambers (ROOM_MARGIN) and of tunnels (tunnelMask +1), needing >= 1 SocketPlan (a legal R10 socket whose
+  straight tunnel hits cave floor within CAVE_SOCKET_TUNNEL_MAX without passing within 1 of another chamber); the first
+  SPECIAL_PLACEMENT_CANDIDATES valid positions compete, most interior cave floor wins. Specials first (no overlap
+  requirement; window-minimum retry), then the entrance (overlap, then without), moved to rooms[0]; then regulars.
+  `rejoinSeveredCave` (R9): a stranded open region is erased if tiny and chamber-free, else a CorridorRouter bypass
+  around every footprint (multi-source BFS picks the ends). Then hangDoors, architecture, 'p' at the entrance centre,
+  biomes (floor moods + walkable decals, never on a socket outer tile), dressRooms (+R20), FORMATIONS + DEBRIS
+  (`placeSolid` = plug check incl. neighbours + reachability count; `isCaveSolidTile` = plain floor outside
+  footprint/tunnel/spawn radius/clearance with open width >= 3 on both axes), validate, repair, stairs (farthest plain
+  floor, never a socket/tunnel/clearance tile). ChamberType, decorate*, retired wall rolls, stalagmite and per-tile
+  prop rolls are GONE; 'T' is out of DERELICT_NEST's scatter.
+  DIVERGENCE from G3 "0..2 regular chambers": ONE regular chamber is always required (R20 terminal guarantee — a
+  special's kit may place a terminal but cannot promise one), >= LEVEL_GEN_CAVE_TERMINAL_CHAMBER_MIN_DIM (5) square with
+  ONE socket (3-socket 4x4 chambers left the OFFICE kit no legal wall). Rolled regulars 0..2 still apply (max(1, roll)).
+  New constants: CAVE_REGULAR_CHAMBERS_MAX, CAVE_SOCKETS_MIN/MAX, CAVE_SOCKET_TUNNEL_MAX, CAVE_BYPASS_SEED_SALT,
+  CAVE_TERMINAL_CHAMBER_MIN_DIM, CAVE_FORMATION_* (MIN_OPEN 20, PER_BIOME_MAX 3, GROTTO_MULTIPLIER 2, CLUSTER_MAX 3,
+  SOCKET_DISTANCE 3), CAVE_DEBRIS_CLUSTER_MAX 3, CAVE_SOLID_MIN_PASSAGE_WIDTH 3, CAVE_SOLID_CLUSTER_TRIES 60. Deleted:
+  CAVE_CHAMBER_MIN/MAX, CAVE_STALAGMITE_CHANCE, CAVE_BIOME_WALL/PROP_CHANCE, CAVE_BIOME_PROP_MIN_OPEN,
+  CAVE_BIOME_CLUSTER_SIZE and the MEDICAL_/ARMORY_/CRYO_/CONTAINMENT_ chamber-typing block. `LayoutSupport.openRegion`
+  added. Audit I9 explain now lists the floor's rooms.
+  Audit 200 seeds x 6 depths, CAVERN (BEFORE in CP2 notes: I2 69508, I3 9180, I8 5694, I9 5694/406, I14 2764...):
+  every counter I1-I9/I13/I14/I16 = 0; 4.00 specials/floor (planner N from the cave's footprint), I11 max deviation 7%
+  (depth-1 slice 22%, every type present), fill regular max 0.120 / special 0.200 / dense 0.245, tight 8.4%, 10.39
+  doors/floor. Fast gate: only the baseline StoryBarkTest; snapshot (ROOMS_MST) unchanged. balanceSim: S-HEAVY NAIVE
+  0.30 (402 committed; prints 0.30, fails above it — D6) and SR3 0.97 (3.36 vs 3.47 — D5; it has drifted 1.00 / 0.99 /
+  0.98 / 0.97 over CP5-CP8: REPORT THE TREND to the owner at the end). S-NAVIGATION NAIVE stalled 0.05 (in band).
+  NEXT (CP9): BOSS_ARENA per G4 — the arena door passes R14, cover/barrels outside its clearance (verify, do not
+  re-tune), antechamber STAGING (1 'L' flush on each side wall, outside the start->door lane); attach a layout report.

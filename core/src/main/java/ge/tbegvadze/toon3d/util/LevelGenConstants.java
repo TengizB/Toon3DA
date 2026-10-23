@@ -243,34 +243,6 @@ public final class LevelGenConstants {
     // NEW ROOM TYPES — level generator configuration
     // -------------------------------------------------------------------------
 
-    // MEDICAL_BAY — guaranteed once per level (reliable heal stop)
-    public static final int   LEVEL_GEN_MEDICAL_BAY_MIN_WIDTH    = 7;
-    public static final int   LEVEL_GEN_MEDICAL_BAY_MIN_HEIGHT   = 6;
-    public static final float LEVEL_GEN_MEDICAL_WALL_CHANCE      = 0.70f; // 'M' dominant
-
-    // ARMORY — present in ~80% of levels, at most once
-    public static final float LEVEL_GEN_ARMORY_CHANCE            = 0.80f;
-    public static final int   LEVEL_GEN_ARMORY_MIN_WIDTH         = 6;
-    public static final int   LEVEL_GEN_ARMORY_MIN_HEIGHT        = 6;
-    public static final float LEVEL_GEN_ARMORY_BLAST_WALL_CHANCE = 0.50f; // 'X' dominant
-    // Probability that a LARGE room (when no ARMORY weapon was placed) gets a weapon pickup
-    // Probability that a STANDARD room gets a random weapon spawn.
-
-    // CRYO_CHAMBER — ~25% of levels, at most 2
-    public static final float LEVEL_GEN_CRYO_CHANCE              = 0.25f;
-    public static final int   LEVEL_GEN_CRYO_MIN_WIDTH           = 7;
-    public static final int   LEVEL_GEN_CRYO_MIN_HEIGHT          = 7;
-    public static final float LEVEL_GEN_CRYO_WALL_CHANCE         = 0.70f; // 'Z' dominant
-    public static final int   LEVEL_GEN_CRYO_MAX                 = 2;
-
-    // CONTAINMENT_BLOCK — ~16% of levels, at most 2
-    public static final float LEVEL_GEN_CONTAINMENT_CHANCE       = 0.16f;
-    public static final int   LEVEL_GEN_CONTAINMENT_MIN_WIDTH    = 8;
-    public static final int   LEVEL_GEN_CONTAINMENT_MIN_HEIGHT   = 6;
-    public static final float LEVEL_GEN_CONTAINMENT_GLASS_CHANCE = 0.40f; // 'N' cell fronts
-    public static final float LEVEL_GEN_CONTAINMENT_BIO_CHANCE   = 0.15f; // 'Q' approach
-    public static final int   LEVEL_GEN_CONTAINMENT_MAX          = 2;
-
     // RESEARCH_LAB — uncommon sci-fi set-piece; at most 1 per level
     public static final int   LEVEL_GEN_RESEARCH_LAB_SCORCH_MAX     = 5;
 
@@ -409,10 +381,21 @@ public final class LevelGenConstants {
     // Probability per drunkard-walk step that the step moves toward the target.
     public static final float LEVEL_GEN_CAVE_TUNNEL_STRAIGHTNESS  = 0.70f;
 
-    // Rectangular chambers stamped into the cave (the Room-type bridge).
-    public static final int   LEVEL_GEN_CAVE_CHAMBER_MIN          = 2;
-    public static final int   LEVEL_GEN_CAVE_CHAMBER_MAX          = 4;
+    // Walled chambers stamped into the cave (level-generation-overhaul G3): the planned specials first, then the
+    // entrance, then 0..REGULAR_CHAMBERS_MAX regular chambers sized from the CHAMBER_* window below. Each chamber
+    // samples up to CHAMBER_TRIES positions.
+    public static final int   LEVEL_GEN_CAVE_REGULAR_CHAMBERS_MAX = 2;
     public static final int   LEVEL_GEN_CAVE_CHAMBER_TRIES        = 40;
+    // Each chamber gets SOCKETS_MIN..MAX sockets on the sides nearest cave floor, each joined to it by a straight
+    // 1-wide tunnel of at most SOCKET_TUNNEL_MAX carved tiles.
+    public static final int   LEVEL_GEN_CAVE_SOCKETS_MIN          = 1;
+    public static final int   LEVEL_GEN_CAVE_SOCKETS_MAX          = 3;
+    public static final int   LEVEL_GEN_CAVE_SOCKET_TUNNEL_MAX    = 6;
+    // The regular chamber a cave must hold when no planned special's kit places a terminal (R20): at least this
+    // interior on each side, one socket, so the OFFICE kit always finds a wall for its terminal.
+    public static final int   LEVEL_GEN_CAVE_TERMINAL_CHAMBER_MIN_DIM = 5;
+    // Seed salt for the bypass tunnels that rejoin cave the forced shells cut off (R9).
+    public static final long  LEVEL_GEN_CAVE_BYPASS_SEED_SALT     = 0x5C0FFEE1L;
     public static final int   LEVEL_GEN_CAVE_CHAMBER_MIN_WIDTH    = 4;
     public static final int   LEVEL_GEN_CAVE_CHAMBER_MAX_WIDTH    = 7;
     public static final int   LEVEL_GEN_CAVE_CHAMBER_MIN_HEIGHT   = 4;
@@ -425,8 +408,20 @@ public final class LevelGenConstants {
 
     // Probability per cave floor tile of receiving a decal (blood, oil, scorch, corpse).
     public static final float LEVEL_GEN_CAVE_DECAL_CHANCE           = 0.05f;
-    // Probability per eligible open-cave tile of receiving a stalagmite column 'P'.
-    public static final float LEVEL_GEN_CAVE_STALAGMITE_CHANCE      = 0.03f;
+    // Cave body solids (G3) come from two rules only. FORMATIONS: 'P' stalagmite clusters of 1..CLUSTER_MAX, only
+    // where the 5x5 window holds >= MIN_OPEN open tiles, never within SOCKET_DISTANCE of a socket, at most
+    // PER_BIOME_MAX clusters per biome (x GROTTO_MULTIPLIER in a crystal grotto). DEBRIS: the biome feature
+    // clusters below, 1..DEBRIS_CLUSTER_MAX props flush against cave wall. Neither may sit where the open width
+    // across it, on either axis, is under MIN_PASSAGE_WIDTH.
+    public static final int   LEVEL_GEN_CAVE_FORMATION_MIN_OPEN       = 20;
+    public static final int   LEVEL_GEN_CAVE_FORMATIONS_PER_BIOME_MAX = 3;
+    public static final int   LEVEL_GEN_CAVE_FORMATION_GROTTO_MULTIPLIER = 2;
+    public static final int   LEVEL_GEN_CAVE_FORMATION_CLUSTER_MAX    = 3;
+    public static final int   LEVEL_GEN_CAVE_FORMATION_SOCKET_DISTANCE = 3;
+    public static final int   LEVEL_GEN_CAVE_DEBRIS_CLUSTER_MAX       = 3;
+    public static final int   LEVEL_GEN_CAVE_SOLID_MIN_PASSAGE_WIDTH  = 3;
+    // Placement attempts per formation / debris cluster before it is skipped.
+    public static final int   LEVEL_GEN_CAVE_SOLID_CLUSTER_TRIES      = 60;
     // Minimum Chebyshev distance from player spawn at which cave-body enemies may appear.
     public static final int   LEVEL_GEN_CAVE_SPAWN_SAFE_RADIUS      = 6;
     // Supply regions in a cave (balance-overhaul order 2): the open cave body is cut into fixed pockets
@@ -453,18 +448,9 @@ public final class LevelGenConstants {
     // Number of distinct biome regions seeded into one cave level.
     public static final int   LEVEL_GEN_CAVE_BIOME_MIN              = 3;
     public static final int   LEVEL_GEN_CAVE_BIOME_MAX              = 5;
-    // Probability a cave-body wall bordering floor is reskinned with a biome wall.
-    public static final float LEVEL_GEN_CAVE_BIOME_WALL_CHANCE      = 0.55f;
-    // Probability per eligible open cave tile of receiving a scattered biome prop.
-    public static final float LEVEL_GEN_CAVE_BIOME_PROP_CHANCE      = 0.035f;
-    // Minimum walkable cardinal neighbours a tile needs before a solid biome prop
-    // may be stamped there (pinch-guard so winding tunnels never seal shut).
-    public static final int   LEVEL_GEN_CAVE_BIOME_PROP_MIN_OPEN    = 3;
-    // Feature clusters (pod nests, barrel piles, console banks) stamped per biome.
+    // Debris clusters (pod nests, barrel piles, console banks) stamped per biome, flush against cave wall (G3).
     public static final int   LEVEL_GEN_CAVE_BIOME_FEATURE_MIN      = 1;
     public static final int   LEVEL_GEN_CAVE_BIOME_FEATURE_MAX      = 2;
-    // Maximum props stamped per feature cluster.
-    public static final int   LEVEL_GEN_CAVE_BIOME_CLUSTER_SIZE     = 4;
     // Probability a feature cluster upgrades its anchor to a rare set-piece prop.
     public static final float LEVEL_GEN_CAVE_BIOME_LANDMARK_CHANCE  = 0.45f;
     // Minimum Chebyshev distance from player spawn before any solid biome prop appears.

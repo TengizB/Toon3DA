@@ -399,7 +399,13 @@ public final class LevelQualityAudit {
         }
         if (COMBAT.contains(tally.name) && !usableTerminal) {
             tally.floorsWithoutTerminal++;
-            explain(tally, "I9 no usable 'T' (any 'T'=" + anyTerminal + ")", -1, -1);
+            StringBuilder roomIds = new StringBuilder();
+            for (LevelLayoutReport.RoomRecord room : rooms) {
+                roomIds.append(' ').append(room.blueprintId).append('/').append(room.kitId)
+                       .append(' ').append(room.rightColumn - room.leftColumn - 1).append('x')
+                       .append(room.topRow - room.bottomRow - 1);
+            }
+            explain(tally, "I9 no usable 'T' (any 'T'=" + anyTerminal + ") rooms:" + roomIds, -1, -1);
         }
         if (anyTerminal && !"prop_terminal".equals(palette.spriteIdOf('T'))) tally.offSpriteTerminalFloors++;
     }

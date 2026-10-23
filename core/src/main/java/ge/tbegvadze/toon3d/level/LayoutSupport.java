@@ -320,6 +320,18 @@ final class LayoutSupport {
         return reached;
     }
 
+    /** The 4-connected standable region containing a tile (walls, solid props and columns bound it). */
+    static List<int[]> openRegion(char[][] grid, int startColumn, int startRow) {
+        List<int[]> region = new ArrayList<>();
+        boolean[][] reached = reachableFrom(grid, startColumn, startRow);
+        for (int tileRow = 0; tileRow < grid.length; tileRow++) {
+            for (int tileColumn = 0; tileColumn < grid[0].length; tileColumn++) {
+                if (reached[tileRow][tileColumn]) region.add(new int[]{ tileColumn, tileRow });
+            }
+        }
+        return region;
+    }
+
     private static int countReachable(char[][] grid, int[] from) {
         int count = 0;
         for (boolean[] row : reachableFrom(grid, from[0], from[1])) for (boolean cell : row) if (cell) count++;
