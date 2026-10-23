@@ -24,6 +24,7 @@ the frame's level (_scale_glow), keeping only the frame's glow image. Do not key
 """
 import json
 import math
+import multiprocessing
 import os
 import random
 import sys
@@ -42,6 +43,8 @@ SURFACE = 64               # a floor / ceiling is SURFACE x SURFACE, tiling in b
 MIPS = 3                   # 256, 128, 64 (guide 12: past ~8 tiles the fog covers the rest)
 PADDING = 2                # duplicated edge texels around every atlas rect (Nearest never bleeds)
 ATLAS_LIMIT = 2048
+SMOOTH_SAMPLES = 2         # wall faces bake SMOOTH (kit.render): no dither, no grain, continuous ramps, and
+                           # 2x2 samples per texel so edges and diagonals are anti-aliased (wall-texture-grain-fix)
 MANIFEST_VERSION = 1
 FOCAL_MARGIN = 8           # a focal shape keeps >= this many px from the tile edge (guide section 4)
 GLOW_FRAME_FLOOR = 0.06    # a glow frame "off" is baked just above kit.GLOW_DEAD, so the lamp's dark rim
@@ -280,7 +283,8 @@ def bake_face(face, seed, glow=1.0):
     layers = [kit.tile_copies(layer, FACE, 3, 1) for layer in face.layers]
     if glow != 1.0:
         layers = _scale_glow(layers, glow)
-    img, glow_img = kit.render(layers, 3 * FACE, FACE, seed=seed, glow_radius=0, return_glow=True)
+    img, glow_img = kit.render(layers, 3 * FACE, FACE, seed=seed, glow_radius=0, return_glow=True,
+                                smooth=SMOOTH_SAMPLES)
     img = img.crop((FACE, 0, 2 * FACE, FACE))
     glow_img = glow_img.crop((FACE, 0, 2 * FACE, FACE))
     for st in face.stencils:
@@ -379,19 +383,29 @@ def _paste_padded(sheet, im, x, y):
     sheet.paste(big, (x - PADDING, y - PADDING))
 
 
+_BAKE_JOBS = []
+
+
+def _bake_entry(i):
+    """One entry's face, its glow and its extra glow frames (a worker of write_region's pool)."""
+    e, seed = _BAKE_JOBS[i]
+    img, glow = bake_face(e.builder(1.0), seed)
+    extra = [bake_face(e.builder(1.0), seed, glow=level)[1] for level, _ in (e.frames or [])[1:]]
+    return img, glow, extra
+
+
 def write_region(name, out_dir, preview_dir=None, log=print):
     region = REGIONS[name]
     seed = region["seed"]
     entries = region["walls"] + region["doors"] + region["columns"]
     baked = []   # per entry: mips [(rgb, glow)], extra glow frames [glow images]
     for e in entries:
-        face = e.builder(1.0)
-        _check_face(e.id, face, log)
-        img, glow = bake_face(face, seed)
-        extra = []
-        if e.frames:
-            for level, _ in e.frames[1:]:
-                extra.append(bake_face(e.builder(1.0), seed, glow=level)[1])
+        _check_face(e.id, e.builder(1.0), log)
+    global _BAKE_JOBS
+    _BAKE_JOBS = [(e, seed) for e in entries]
+    with multiprocessing.get_context("fork").Pool() as pool:   # every face bakes alone: same pixels, in parallel
+        results = pool.map(_bake_entry, range(len(entries)))
+    for e, (img, glow, extra) in zip(entries, results):
         coverage = float((np.asarray(glow)[..., 3] > 0).mean())
         if coverage > 0.06:
             log(f"  WARNING {e.id}: glow covers {coverage:.1%} of the face (budget ~6%)")
