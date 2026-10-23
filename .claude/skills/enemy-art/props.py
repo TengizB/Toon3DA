@@ -498,7 +498,156 @@ def make_portal():
     return Prop("portal", PORTAL_W, PORTAL_H, PORTAL_FRAMES, PORTAL_FRAME_SECONDS, frame)
 
 
-PROPS = {"terminal": make_terminal, "bio_pod": make_pod, "portal": make_portal}
+# ---------------------------------------------------------------------------------------------------
+# AI CORE NODE ('J') - the PATTERN ARCHIVE: a floor-to-ceiling compute column storing the reprint patterns
+# ---------------------------------------------------------------------------------------------------
+CORE_W, CORE_H = 144, 256
+CORE_FRAMES, CORE_FRAME_SECONDS = 24, 0.1
+CORE_WINDOW = (42, 46, 102, 198)             # x0, y0, x1, y1: the glass down the front
+CORE_HEART = (72, 120)                       # the pulsing core in the middle of the wafer stack
+CORE_WAFERS = 9
+CORE_GLASS = (6, 12, 16)
+CORE_RAD_HOT = (235, 255, 150)
+LED_ON = {"phosphor": (110, 255, 130), "neon_cyan": (90, 240, 255), "rad": (215, 255, 90)}
+
+
+def ai_core_body():
+    """The static steel: plinth, chassis, side rails, collar, cables into the ceiling, readout plate."""
+    x0, y0, x1, y1 = CORE_WINDOW
+    plinth = [
+        slab([(10, 226), (134, 226), (138, 255), (6, 255)], "gunmetal", bevel=5, slope=0.9),
+        slab(chamfer_rect(40, 232, 104, 246, 2), "livery_dk", bevel=2, slope=0.9, op="add", depth=1.0),
+        slab(chamfer_rect(10, 249, 134, 252, 1), "rad", bevel=1.2, slope=0.9, op="add", depth=1.0, glow=1.1),
+    ]
+    for vx in (16, 22, 122, 128):
+        plinth.append(limb(vx, 232, vx, 245, 0.9, 0.9, "darkmetal", op="carve"))
+    chassis = [
+        slab(chamfer_rect(26, 22, 118, 228, 4), "darkmetal", bevel=5, slope=0.9),
+        slab(chamfer_rect(x0 - 6, y0 - 6, x1 + 6, y1 + 6, 4), "gunmetal", bevel=4, slope=0.9, op="add", depth=1.5),
+        slab(chamfer_rect(x0, y0, x1, y1, 3), "darkmetal", bevel=3, slope=0.9, op="carve"),
+        slab(chamfer_rect(x0 + 1, y0 + 1, x1 - 1, y1 - 1, 3), "pupil", bevel=1.0, slope=0.8, op="add", depth=0.4),
+        slab(chamfer_rect(46, 206, 98, 222, 2), "livery_dk", bevel=2, slope=0.9, op="add", depth=1.2),   # readout
+    ]
+    rails = []
+    for rx0, rx1 in ((14, 30), (114, 130)):
+        rails += [slab(chamfer_rect(rx0, 20, rx1, 230, 3), "gunmetal", bevel=4, slope=0.9),
+                  slab(chamfer_rect(rx0 + 4, 44, rx1 - 4, 204, 2), "darkmetal", bevel=1.5, slope=0.9, op="carve")]
+        for ry in (32, 214):
+            rails.append(blob((rx0 + rx1) / 2, ry, 1.8, 1.8, "darkmetal", op="add"))
+    collar = [
+        slab(chamfer_rect(8, 8, 136, 26, 4), "gunmetal", bevel=5, slope=0.9),
+        slab(chamfer_rect(20, 0, 124, 10, 2), "darkmetal", bevel=3, slope=0.9),
+        limb(44, 0, 44, 12, 5, 5, "rubber"), limb(72, 0, 72, 12, 6.5, 6.5, "rubber"), limb(100, 0, 100, 12, 5, 5, "rubber"),
+    ]
+    for rx in (14, 40, 72, 104, 130):
+        collar.append(blob(rx, 17, 1.6, 1.6, "darkmetal", op="add"))
+    return [plinth, chassis, rails, collar]
+
+
+def ai_core_window(body, glow, k, yy, xx):
+    """The archive inside the glass, painted: dark glass, cyan-edged memory wafers, the data spine with pulses
+    climbing it, and the rad-lime core breathing in the middle."""
+    x0, y0, x1, y1 = CORE_WINDOW
+    t = 2 * math.pi * k / CORE_FRAMES
+    win = ((xx >= x0 + 2) & (xx < x1 - 2) & (yy >= y0 + 2) & (yy < y1 - 2)).astype(float)
+    paint(body, glow, win, CORE_GLASS, glow_too=False)
+    hx, hy = CORE_HEART
+    # a faint cyan haze in the glass, strongest down the middle column
+    haze = np.exp(-((xx - hx) / 14.0) ** 2) * win
+    paint(body, glow, haze * 0.18, (40, 170, 190))
+    # memory wafers: plates seen a little from above - a dim top face, a bright edge-lit lip, node dots
+    spacing = (y1 - y0 - 8) / CORE_WAFERS
+    for i in range(CORE_WAFERS):
+        wy = y0 + 7 + i * spacing
+        if abs(wy + 2 - hy) < 22:
+            continue                                                                   # the heart's gap
+        shimmer = 0.75 + 0.25 * math.sin(t * 2 + i * 1.3)
+        inset = 2 * np.clip(1 - np.abs(yy - wy) / 4, 0, 1)                             # top face narrows
+        top = ((yy >= wy - 4) & (yy < wy) & (xx >= x0 + 6 + 4) & (xx < x1 - 6 - 4)).astype(float)
+        lip = ((yy >= wy) & (yy < wy + 2) & (xx >= x0 + 6) & (xx < x1 - 6)).astype(float)
+        under = ((yy >= wy + 2) & (yy < wy + 4) & (xx >= x0 + 7) & (xx < x1 - 7)).astype(float)
+        paint(body, glow, top * 0.45 * shimmer, (30, 110, 128))
+        paint(body, glow, lip * shimmer, (120, 245, 255))
+        paint(body, glow, under * 0.5, (8, 40, 48), glow_too=False)
+        for nx in range(x0 + 10, x1 - 8, 8):                                           # node dots on the lip
+            lit = random.Random(i * 97 + nx + (k // 3) * 13).random() < 0.5
+            if lit:
+                d = np.zeros(body.shape[:2]); d[int(wy) - 2:int(wy) - 1, nx:nx + 2] = 1
+                paint(body, glow, d, (200, 255, 255))
+    # the data spine and its pulses (they climb a whole window height per loop: seamless)
+    spine = np.exp(-((xx - hx) / 1.1) ** 2) * win
+    paint(body, glow, spine * 0.8, (110, 240, 255))
+    span = y1 - y0
+    for j in range(4):
+        py = y1 - ((j * span / 4 + span * k / CORE_FRAMES) % span)
+        pulse = np.exp(-((xx - hx) ** 2 / 2.5 + (yy - py) ** 2 / 10.0)) * win
+        paint(body, glow, np.clip(pulse * 1.4, 0, 1), (230, 255, 255))
+    # the core: a rad-lime halo, an outer ring with three arcs orbiting (one third turn per loop: seamless),
+    # an inner ring, and a white-hot heart, all breathing
+    breathe = 0.9 + 0.1 * math.sin(t)
+    r = np.hypot(xx - hx, yy - hy)
+    ang = np.arctan2(yy - hy, xx - hx)
+    halo = np.exp(-(r / (20 * breathe)) ** 2) * win
+    arcs = (np.cos(3 * (ang - t / 3)) > 0.35).astype(float)
+    outer = np.clip(1 - np.abs(r - 16) / 1.6, 0, 1) * arcs * win
+    inner = np.clip(1 - np.abs(r - 9 * breathe) / 2.2, 0, 1) * win
+    heart = np.exp(-(r / (5.5 * breathe)) ** 2) * win
+    paint(body, glow, halo * 0.55, (120, 190, 30))
+    paint(body, glow, outer, (190, 255, 70))
+    paint(body, glow, inner, (215, 255, 110))
+    paint(body, glow, heart, CORE_RAD_HOT)
+
+
+def ai_core_leds(body, glow, k):
+    """Status LEDs down both rail slots: a seeded pattern that steps every two frames (12 states per loop)."""
+    step = k // 2
+    for side, cx in enumerate((22, 122)):
+        for row in range(20):
+            y = 50 + row * 8
+            rnd = random.Random(side * 1000 + row * 31 + step * 7)
+            if rnd.random() < 0.45:
+                continue
+            ink = "rad" if rnd.random() < 0.12 else rnd.choice(("phosphor", "neon_cyan"))
+            m = np.zeros(body.shape[:2]); m[y:y + 2, cx - 1:cx + 2] = 1
+            paint(body, glow, m, LED_ON[ink])
+
+
+def ai_core_readout(body, glow, k):
+    """A small phosphor bar graph on the readout plate under the window."""
+    rnd = random.Random(55)
+    phases = [rnd.uniform(0, 2 * math.pi) for _ in range(10)]
+    t = 2 * math.pi * k / CORE_FRAMES
+    m = np.zeros(body.shape[:2])
+    for i, ph in enumerate(phases):
+        hgt = int(2 + 8 * (0.5 + 0.5 * math.sin(t * (1 + i % 3) + ph)))
+        x = 50 + i * 4.6
+        m[220 - hgt:220, int(x):int(x) + 3] = 1
+    paint(body, glow, m, (90, 240, 120))
+
+
+def make_ai_core():
+    base = bake(ai_core_body(), CORE_W, CORE_H, seed=709)
+    yy, xx = np.mgrid[0:CORE_H, 0:CORE_W].astype(float)
+
+    def frame(k):
+        body, glow = base[0].copy(), base[1].copy()
+        ai_core_window(body, glow, k, yy, xx)
+        ai_core_leds(body, glow, k)
+        ai_core_readout(body, glow, k)
+        # data pulses carried on up the centre cable into the ceiling
+        cable = ((xx >= 70) & (xx < 75) & (yy < 12)).astype(float)
+        cy = 12 - ((k * 3) % 12)
+        paint(body, glow, cable * np.exp(-((yy - cy) / 1.5) ** 2), (150, 245, 255))
+        img = finish(body)
+        kit.stencil(img, "PTN-ARC", 46, 236, (150, 156, 164))
+        body = np.asarray(img, float).copy()
+        bloom(glow, 4, 1.3, cap=0.45)
+        return body, glow
+
+    return Prop("ai_core", CORE_W, CORE_H, CORE_FRAMES, CORE_FRAME_SECONDS, frame)
+
+
+PROPS = {"terminal": make_terminal, "bio_pod": make_pod, "portal": make_portal, "ai_core": make_ai_core}
 
 
 # ---------------------------------------------------------------------------------------------------

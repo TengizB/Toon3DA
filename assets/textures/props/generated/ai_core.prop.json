@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "id": "ai_core",
+  "frameWidth": 144,
+  "frameHeight": 256,
+  "frameCount": 24,
+  "columns": 14,
+  "frameSeconds": 0.1
+}
