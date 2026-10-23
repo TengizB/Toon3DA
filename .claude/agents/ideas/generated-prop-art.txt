@@ -72,6 +72,11 @@ OWNER DECISIONS (series-wide)
       "this door's key").
   D2  (2026-10-23) Order 1 = computer terminal, bio-pod (the specimen tube), exit portal. Later orders are
       added by the owner.
+  D4  (owner, 2026-10-23) HOT IRON RED joins the neon inks ("some red neon light ... more like a hot iron red"):
+      the glow of heated metal - deep red through orange to a white-hot core - for heat sources (coils,
+      exhausts, warning lamps). It is not the keycard red (no flat saturated red; it always ramps to orange).
+      The '@' special-equipment picture is NOT reworked: '@' is the shop tile, drawn by ShopMachineRenderer,
+      and the prop picture is never shown in play (owner: "generator only").
   D3  (default, 2026-10-23) One prop set for every region in order 1. Region-specific prop variants (like the
       region wall sets) are a later order's question, not assumed.
 
@@ -80,3 +85,4 @@ ORDERS
 ------
   order 1  generated-prop-art-order-1.txt  the kit's prop bake + the runtime + terminal, bio-pod, portal
   order 2  generated-prop-art-order-2.txt  the AI core node ('J') as the floor-to-ceiling pattern archive
+  order 3  generated-prop-art-order-3.txt  the generator ('%') with the HOT IRON red ink

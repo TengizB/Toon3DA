@@ -1,0 +1,62 @@
+STATUS: IN PROGRESS
+CATEGORY: Visual
+TITLE: Generated props 3 - generator (hot iron red)
+CREATED: 2026-10-23
+IMPLEMENTED: -
+---
+
+Order 3 of the generated-prop-art series. Read generated-prop-art.txt (brief, PS1-PS8, D1-D4) and
+docs/sprite-art-creation-guide.txt section 14 first. Requested by the owner 2026-10-23: "Now the generator and
+special equipment. And make it have some red neon light as well. Or more like a hot iron red." Asked, the
+owner narrowed it to the GENERATOR ONLY ('@' special equipment is the shop tile; its prop picture never shows).
+
+
+OVERVIEW
+--------
+The generator ('%', sprite prop_generator - power plants, airlocks, event rooms, the clinic, reactor sumps) is
+rebuilt with the kit as an animated heavy power unit whose heat is the accent: a new HOT IRON ink (master D4).
+
+
+SCOPE
+-----
+IN   hot_iron ink appended to kit.MATERIALS; make_generator() + PROPS row; generator sheet; one
+     GeneratedPropRegistry row prop_generator -> generator; delete generateGeneratorTexture + its generator
+     row; docs (guide 14.2 + 14.7, tile-symbols '%', art-direction ink list, CLAUDE.md order list).
+OUT  '@' (owner). Height stays 0.85 (a machine you stand beside, not a column). Placement, solidity (V4).
+
+
+VISUAL DESIGN
+-------------
+GENERATOR ('%', 0.85 wall height, canvas 176 x 216, 16 frames @ 0.1 s, loops)
+  A heavy steel power unit on a skid. Cold steel body (gunmetal housing, darkmetal fin stacks both sides, a
+  lab-grey control plate) and HEAT as the accent:
+  - COIL BAY: a recessed bay down the front behind vertical guard bars; through the gaps, stacked induction
+    windings glowing HOT IRON - dark red at the edges, orange, a white-hot band - with a heat wave rolling up.
+  - TURBINE: a round fan housing on top; dark blades turn over a hot-iron glow (the fan pulls the heat up).
+  - EXHAUSTS: two stacks at the top corners with glowing hot-iron lips and embers drifting up and fading.
+  - CONTROL PLATE: a gauge whose needle trembles, two neon cyan status lamps (the cold counterpoint) and one
+    hot-iron warning lamp that blinks.
+  - A rad lime hazard strip on the skid. Stencil GEN-04.
+  Static steel = one kit render; every moving or glowing part painted per frame.
+
+
+ACCEPTANCE CRITERIA
+-------------------
+  A1 deterministic bake; the earlier sheets unchanged.  A2 in game, animated, ungraded hot-iron glow; no old
+  picture in code.  A3 build green (StoryBarkTest aside).  A4 docs.  A5 owner approval in DECISIONS.
+
+
+CHECKPOINTS
+-----------
+  CP0 idea + checkpoint.  CP1 bake + previews.  CP2 wiring + build.  CP3 screenshots + docs.  CP4 approval.
+
+
+DECISIONS
+---------
+  (owner, 2026-10-23) Generator only; hot-iron red accent (master D4).
+  (default) Keep the cyan status lamps as a cold counterpoint, so the red reads as heat, not alarm.
+
+
+OPEN QUESTIONS
+--------------
+  (none)
