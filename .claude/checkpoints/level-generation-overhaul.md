@@ -69,7 +69,7 @@ into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
       eligible/selectionWeight + weight/chance/depth/cap constants deleted; RoomBlueprintRegistryTest updated;
       LEVEL_GEN_PROP_CHANCE + GRANDFATHERED entry deleted (CHANGELOG); audit passes LINEAR; both gates green.
 - [x] **CP8** — (balanceSim: S-HEAVY 0.30+ under D6, SR3 0.97 under D5) DONE WHEN: CAVERN runs G3; audit passes CAVERN; both gates green.
-- [ ] **CP9** — DONE WHEN: BOSS_ARENA conforms to G4; audit passes; BossArenaGeneratorTest + fast gate green.
+- [x] **CP9** — DONE WHEN: BOSS_ARENA conforms to G4; audit passes; BossArenaGeneratorTest + fast gate green.
 - [ ] **CP10** — DONE WHEN: MED_BAY conforms to G5; audit passes; fast gate green.
 - [ ] **CP11** — DONE WHEN: EVENT_ROOM conforms to G6; audit passes; fast gate green.
 - [ ] **CP12** — DONE WHEN: GATE_AIRLOCK conforms to G7; audit passes; fast gate green.
@@ -224,3 +224,15 @@ into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
   0.98 / 0.97 over CP5-CP8: REPORT THE TREND to the owner at the end). S-NAVIGATION NAIVE stalled 0.05 (in band).
   NEXT (CP9): BOSS_ARENA per G4 — the arena door passes R14, cover/barrels outside its clearance (verify, do not
   re-tune), antechamber STAGING (1 'L' flush on each side wall, outside the start->door lane); attach a layout report.
+- CP9 (BOSS_ARENA, G4): verified, not re-tuned — the door sits in the arena's bottom wall row (R14 flank holds) and
+  cover/barrels keep BOSS_ARENA_KEEP_CLEAR_RADIUS (3) from the door mouth / centre lane, wider than the clearance zone
+  (audit I1/I3 = 0 over 1200 floors). Added: `dressStaging` (one 'L' flush on each antechamber side wall at the middle
+  row, drawn every attempt, no random draw) and a layout report — the arena (rectangle widened by
+  BOSS_ARENA_ALCOVE_DEPTH so the alcoves are interior, id "boss_arena") and the antechamber (id "staging"), both
+  REGULAR, both holding the one door as their socket. Lanes are REPORTED, not computed by the audit: the arena's lane
+  is the door mouth's keep-clear approach (the cover scatter is the fight's design and stays — G4), the antechamber's
+  is the start tile's centre-column walk to the door +-1. Audit 200 x 6: every counter 0, fill max 0.057.
+  BossArenaGeneratorTest + fast gate green (only the baseline StoryBarkTest). No balance input moved (no gate needed).
+  NEXT (CP10): MED_BAY per G5 — approach ends at a DOOR socket in the ward's left wall; each pod alcove opens through
+  one OPEN socket; fixed flush CLINIC kit ('&' beds SPACED on alcove far walls, 'I' in two ward corners, 'T' flush on
+  ward top + bottom walls, '%' flush in one corner); 'W' auto-doc = CENTRE feature, lane routed around it; zero enemies.
