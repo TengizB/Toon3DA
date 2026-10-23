@@ -293,10 +293,12 @@ final class LayoutSupport {
         if (!Level.isWall(cell) && !Level.isPropSolid(cell) && !Level.isColumn(cell)) return;
         for (LayoutRoom room : rooms) {
             if (!room.isShellTile(tileColumn, tileRow)) continue;
+            // R9: a shell tile is only ever opened as a legal socket; where none fits the carve stops here
+            // rather than cutting a raw gap (the carve is already counted, and the audit reports what stays stranded).
             if (DoorwayRules.canPlaceSocket(room, tileColumn, tileRow, grid[0].length, grid.length)) {
                 DoorwayRules.openSocket(grid, room, tileColumn, tileRow);
-                return;
             }
+            return;
         }
         grid[tileRow][tileColumn] = 'l';
     }

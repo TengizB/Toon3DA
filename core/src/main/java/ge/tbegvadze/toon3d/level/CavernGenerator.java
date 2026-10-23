@@ -229,8 +229,9 @@ public class CavernGenerator implements ILevelGenerator, SupplySlotProvider {
             placeFormations(grid, footprint, biomes, rooms);
             placeDebris(grid, footprint, biomes, rooms);
         }
-        DoorwayRules.Validation validation = DoorwayRules.validate(grid, rooms);
+        // The repair backstop runs before the doorway guard, so a socket it opens is validated too.
         int repairCarves = LayoutSupport.repairConnectivity(grid, rooms, spawnColumn, spawnRow);
+        DoorwayRules.Validation validation = DoorwayRules.validate(grid, rooms);
         stampStairsDown(grid, rooms);
 
         // Encounter (E1-E5) and supply (S1) through the shared pipeline, on the finished cave.

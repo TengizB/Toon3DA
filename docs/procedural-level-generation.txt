@@ -38,7 +38,8 @@ LevelFinisher. Grid convention: (0,0) = bottom-left, Y-up, grid[tileRow][tileCol
                     R20 terminal guarantee.
   g. HALLS          LayoutSupport.dressHalls: spaced 'P' columns on 3-wide hall spines, sparse hall decals.
                     CAVERN instead runs its two cave-body rules (FORMATIONS + DEBRIS).
-  h. GUARDS         DoorwayRules.validate (R14), LayoutSupport.repairConnectivity (R30, target 0).
+  h. GUARDS         LayoutSupport.repairConnectivity (R30, target 0; a shell tile is only opened as a legal socket,
+                    never cut), then DoorwayRules.validate (R14) — so a socket a repair opened is validated too.
   i. GATE + STAIRS  the keycard gate (ROOMS_MST), the one exit.
   j. POPULATE       the SHARED FLOOR PIPELINE (encounter, supply, group barrels) — below.
   k. FINISH         LevelFinisher (walls) + the palette, Level.attachLayoutReport.
@@ -229,7 +230,8 @@ every reachable tile and the exit stay reachable. R-HAZARD audits it.
 
 PASSAGES. Two backstops, both expected to be no-ops on a finished layout (audit I7 / I14 = 0):
   1. LayoutSupport.repairConnectivity (R30): while any standable tile is unreachable from the spawn, carve an L
-     to it — and where that L meets a shell it opens a legal SOCKET instead of cutting the shell.
+     to it — and where that L meets a shell it opens a legal SOCKET, or stops there when none fits; it never
+     cuts a shell. It runs before the doorway guard.
   2. FloorPopulator.clearPluggedPassages: any solid blocked on both sides of one axis and open on both sides of
      the other is turned back into floor.
   Runtime: the shop machine '@' (World.tryMakeMachineCandidate) rejects door-clearance tiles and keeps its open

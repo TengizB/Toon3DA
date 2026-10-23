@@ -29,8 +29,8 @@ import java.util.Random;
  *    e   architecture  each blueprint's build(): floor lighting, rotunda, lab alcove, pillar slots
  *    f   dressing   RoomDresser: every room from its kit (R15-R22), the R20 terminal guarantee
  *    g   halls      spaced columns on 3-wide halls, sparse walkable decals (R28)
- *    h   validate   DoorwayRules.validate (R14) — a guard; construction keeps it at zero
- *    i   repair (a no-op backstop, R30), keycard gate, stairs in the deepest room
+ *    h   repair (a no-op backstop, R30), then DoorwayRules.validate (R14) — guards; construction keeps both at zero
+ *    i   keycard gate, stairs in the deepest room
  *    j   encounter + supply + barrels through the shared FloorPopulator (unchanged contracts)
  *    k   LevelFinisher walls; the palette pins every placed kit's symbols and 'T' / 'E' (R29)
  * </pre>
@@ -163,10 +163,11 @@ public class LevelGenerator implements ILevelGenerator, SupplySlotProvider {
         dresser = new RoomDresser(grid, rooms, seed);
         LayoutSupport.dressRooms(dresser, rooms, config);
         LayoutSupport.dressHalls(grid, rooms, wideHallSpines, dresser, random);
-        DoorwayRules.Validation validation = DoorwayRules.validate(grid, rooms);
 
-        // i — connectivity backstop, keycard gate, stairs.
+        // i — connectivity backstop (before the doorway guard, so a socket a repair opens is validated too),
+        // keycard gate, stairs.
         int repairCarves = LayoutSupport.repairConnectivity(grid, rooms, entrance.centerColumn(), entrance.centerRow());
+        DoorwayRules.Validation validation = DoorwayRules.validate(grid, rooms);
         int[] roomDepths = computeRoomDepths(rooms, mstEdges);
         boolean[] gatedRooms = config.enableLockAndKey ? placeLockAndKeyGate(grid, rooms, roomDepths) : null;
         stampStairsDown(grid, rooms, roomDepths, gatedRooms);

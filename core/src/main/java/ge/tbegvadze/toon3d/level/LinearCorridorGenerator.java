@@ -180,8 +180,9 @@ public class LinearCorridorGenerator implements ILevelGenerator, SupplySlotProvi
         List<List<int[]>> hallSpines = new ArrayList<>(spineLines);
         LayoutSupport.dressHalls(grid, rooms, hallSpines, dresser, random);
         for (int[] column : plazaColumns) LayoutSupport.tryHallColumn(grid, column[0], column[1], dresser);
-        DoorwayRules.Validation validation = DoorwayRules.validate(grid, rooms);
+        // The repair backstop runs before the doorway guard, so a socket it opens is validated too.
         int repairCarves = LayoutSupport.repairConnectivity(grid, rooms, entrance.centerColumn(), entrance.centerRow());
+        DoorwayRules.Validation validation = DoorwayRules.validate(grid, rooms);
         stampStairsDown(grid, rooms, spinePosition);
 
         // Encounter (E1-E5) and supply (S1) through the shared pipeline, on the finished layout.

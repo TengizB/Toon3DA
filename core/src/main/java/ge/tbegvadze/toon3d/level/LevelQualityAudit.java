@@ -57,9 +57,10 @@ public final class LevelQualityAudit {
     private static final Set<String> COMBAT = new HashSet<>(Arrays.asList(
             GeneratorId.ROOMS_MST.name(), GeneratorId.LINEAR_CORRIDOR.name(), GeneratorId.CAVERN.name()));
 
-    private static final float FILL_CAP_REGULAR = 0.12f;
-    private static final float FILL_CAP_SPECIAL = 0.22f;
-    private static final float FILL_CAP_DENSE   = 0.40f;
+    // The rules' own numbers, so a retune moves the audit with them.
+    private static final float FILL_CAP_REGULAR = ge.tbegvadze.toon3d.util.LevelGenConstants.LEVEL_GEN_ROOM_FILL_CAP_REGULAR;
+    private static final float FILL_CAP_SPECIAL = ge.tbegvadze.toon3d.util.LevelGenConstants.LEVEL_GEN_ROOM_FILL_CAP_SPECIAL;
+    private static final float FILL_CAP_DENSE   = ge.tbegvadze.toon3d.util.LevelGenConstants.LEVEL_GEN_ROOM_FILL_CAP_DENSE;
 
     private LevelQualityAudit() {}
 
@@ -487,12 +488,12 @@ public final class LevelQualityAudit {
             int distanceToCorner = onHorizontalSide
                     ? Math.min(column - room.leftColumn, room.rightColumn - column)
                     : Math.min(row - room.bottomRow, room.topRow - row);
-            boolean legal = distanceToCorner >= 2;
+            boolean legal = distanceToCorner >= ge.tbegvadze.toon3d.util.LevelGenConstants.LEVEL_GEN_SOCKET_CORNER_MIN_DISTANCE;
             for (int[] other : openings) {
                 if (other == opening) continue;
                 boolean sameSide = onHorizontalSide ? other[1] == row : other[0] == column;
                 int spacing = onHorizontalSide ? Math.abs(other[0] - column) : Math.abs(other[1] - row);
-                if (sameSide && spacing < 3) legal = false;
+                if (sameSide && spacing < ge.tbegvadze.toon3d.util.LevelGenConstants.LEVEL_GEN_SOCKET_MIN_SPACING) legal = false;
             }
             int outerColumn = column, outerRow = row;
             if (row == room.bottomRow) outerRow--;

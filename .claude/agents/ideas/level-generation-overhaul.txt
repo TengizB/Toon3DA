@@ -4,6 +4,27 @@ TITLE: Level gen overhaul - designed props, real doors, specials
 CREATED: 2026-10-23
 IMPLEMENTED: -
 ---
+IMPLEMENTATION NOTE (2026-10-23) — where the build diverged from the plan, each recorded in the checkpoint file:
+  - LayoutRoom (+ DoorSocket / DoorwayRules) landed at CP3 with the doorway rules, not with CP6's rebuild.
+  - LevelGeneratorSnapshotTest was re-baselined THREE times (CP3: barrels leave door clearance, R26; CP6: the
+    ROOMS_MST rebuild; CP7: barrels never take a terminal's last open side), each with a dated note — A12 said once.
+  - RoomBlueprintRegistryTest / RoomBlueprintBuildDemandTest / TilesetExtensibilityAcceptanceTest were updated at CP6
+    (when the tiers they pinned disappeared), not CP7. No test was added or weakened.
+  - CorridorRouter charges a TURN cost (LEVEL_GEN_ROUTE_TURN_COST 3): staircase routes broke widened halls.
+  - BARE kit: 2-4 pillars (count(2,4)) rather than "two"; LINEAR's "crate cover" interior variant was dropped
+    (only four-pillars / avenue / altar remain — crates in a regular room are the STOREROOM kit's job).
+  - CAVERN always keeps ONE regular chamber (G3 says 0..2): R20's terminal guarantee needs a room to re-dress, and
+    it is >= LEVEL_GEN_CAVE_TERMINAL_CHAMBER_MIN_DIM square with one socket so the OFFICE kit finds a wall.
+  - GroupBarrelPlacer also refuses a terminal's last open side (R20; found by the audit).
+  - BalanceConfig.AFFIX_IRRADIATED_BARREL_WEIGHT_BONUS was deleted too (CP14, R31: it raised a deleted weight read only
+    by the deleted scatter); CHANGELOG line; GRANDFATHERED shrinks by one more.
+  - The boss arena and the start room REPORT their lane bands (the arena's = the door mouth's keep-clear approach;
+    G4 keeps its cover layout) instead of letting the audit compute one.
+  - Docs mostly landed at CP15 rather than in each code checkpoint (end state per A15).
+  - After review: the repair backstop never cuts a raw shell gap (it opens a legal socket or stops) and runs BEFORE
+    DoorwayRules.validate; the audit reads the fill caps and socket rules from LevelGenConstants.
+  - balanceSim carries three red bands, each by owner decision: SR3 (D5, D8), S-HEAVY (D6, green again at HEAD),
+    S-TWIST ST2 (D7), S-BUILD (D8).
 
 
 OVERVIEW
@@ -1025,6 +1046,11 @@ DECISIONS
       median depth of 3-4, so the band rests on ~3 of 200 runs; on two other seed sets it read 4 / 0 with the
       preference and 3 / 3 without. The preference places no supply and no spawn?  ->  Owner: keep R31, accept ST2
       as a sampling artifact. No band and no number moves; ST2 is reported beside SR3.  (2026-10-23)
+  D8  Reviewer B#1: two red balanceSim bands had no owner decision — S-BUILD median-depth spread 1.33 (CLOSE / MARKSMAN
+      / BULWARK 4.0 vs PYRO-DEMO 3.0; appears only with the R31 kit preference, reads 1.00 on two other seed sets with
+      and without it) and SR3 sliding 1.00 / 0.99 / 0.98 / 0.97 / 0.96 / 0.94 (3.36 vs 3.56) across the checkpoints?
+      ->  Owner: accept both — S-BUILD as seed noise from the R31 reshuffle, the SR3 drift as a side effect of the new
+      layouts. No band or number moves; SR3 is flagged for balance-overhaul order 7's playtest round.  (2026-10-23)
 
 
 OPEN QUESTIONS

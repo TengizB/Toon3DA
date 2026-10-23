@@ -227,13 +227,12 @@ public final class LevelGenConstants {
     // NEW ROOM TYPES — level generator configuration
     // -------------------------------------------------------------------------
 
-    // RESEARCH_LAB — uncommon sci-fi set-piece; at most 1 per level
+    // RESEARCH_LAB architecture
     public static final int   LEVEL_GEN_RESEARCH_LAB_SCORCH_MAX     = 5;
 
     // -------------------------------------------------------------------------
-    // STELLAR_OBSERVATORY — true-circle rotunda landmark room. RARE set-piece; at most 1 per
-    // level (assignRoomTypes() only ever attempts this once per generate() call). See the
-    // design doc for the full spec: .claude/agents/ideas/stellar-observatory-gravity-well-room.txt
+    // STELLAR_OBSERVATORY — true-circle rotunda landmark room (a special in the equal-chance pool, at most one
+    // per floor like every special). See .claude/agents/ideas/stellar-observatory-gravity-well-room.txt
     // -------------------------------------------------------------------------
 
     // Circle carve geometry (GENERATOR ALGORITHM step 2). RADIUS_MARGIN keeps a 1-tile gap
