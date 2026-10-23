@@ -56,7 +56,21 @@ cd .claude/skills/enemy-art
 python3 walls.py ../../../assets/textures/walls/generated outer_facility        # ship one region (~3 min)
 python3 walls.py /tmp/w --preview /tmp/w/preview outer_facility                  # + sheets, strips, GIF, seam report
 ```
-After ANY kit.py change, regenerate the enemies (`bestiary.py`, `effects.py`) into a scratch folder and `cmp`
+## Props (environment objects)
+
+`props.py` makes the environment objects (the generated-prop-art series): terminal, specimen tube (bio-pod) and
+exit portal so far. THE METHOD is section 14 of `docs/sprite-art-creation-guide.txt` (the neon inks, the canvas,
+the smooth bake, the bloom, the frame-grid sheet, the runtime). Shipped per prop, in
+`assets/textures/props/generated/`: `<id>.prop.png` (body frames), `<id>.glow.png` (glow + bloom frames, same
+grid), `<id>.prop.json`.
+
+```bash
+cd .claude/skills/enemy-art
+python3 props.py ../../../assets/textures/props/generated                     # ship every prop (~2 min)
+python3 props.py /tmp/p --preview /tmp/p/preview portal                        # + GIF, still, sheet.png
+```
+
+After ANY kit.py change, regenerate the enemies (`bestiary.py`, `effects.py`), the walls and the props into a scratch folder and `cmp`
 every committed file — they must be byte-identical. `walls_prototype.py` is the record of the 2026-10-22
 prototypes (`python3 walls_prototype.py /tmp/w [A_ C_ ...]`), deleted by series order 4.
 

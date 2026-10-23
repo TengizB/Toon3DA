@@ -42,8 +42,8 @@ same commit. Never `git add -A`.
       DONE WHEN: `python3 props.py <dir>` writes the 9 files twice cmp-identical; bestiary/effects/walls regenerate identical.
 - [x] **CP2** — render/propvisual + PropRenderer sheet path + constants; old generators deleted.
       DONE WHEN: mirror build green; game draws the three props from their sheets.
-- [ ] **CP3** — in-engine screenshots (default + one other mood) sent to the owner.
-- [ ] **CP4** — docs (guide §14, SKILL.md, tile-symbols, art-direction, tileset doc, CLAUDE.md).
+- [x] **CP3** — in-engine screenshots (default + one other mood) sent to the owner.
+- [x] **CP4** — docs (guide §14, SKILL.md, tile-symbols, art-direction, tileset doc, CLAUDE.md).
 - [ ] **CP5** — owner approval written into DECISIONS; STATUS IMPLEMENTED.
 
 ## NOTES CARRIED FORWARD
@@ -59,3 +59,6 @@ same commit. Never `git add -A`.
   TextureGeneratorRegistryTest updated (behaviour changed legitimately): generator ids == expectedGeneratorIds()
   = catalog minus GeneratedPropRegistry sprites. In-engine: lookat:T / lookat:& / lookat:> on seed 7 floor 1
   (kill:0 x8 first - enemies stand in front of the terminal; LEAVE IT 644,100 for the relic offer).
+- CP3: screenshots sent to the owner 2026-10-23 (cool_steel + amber_hot). CP4: guide section 14, SKILL.md, tile-symbols
+  T / & / >, art-direction section 5, environment-tileset-system PropRenderer note, CLAUDE.md package row.
+- CP5 waits on the OWNER: write their verdict into the idea file's DECISIONS; on yes, STATUS IMPLEMENTED + date.

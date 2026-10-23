@@ -630,6 +630,12 @@ SECTION PLACEHOLDERS (each filled by its order, in the same commit that ships th
      * Opacity masks (enemy occlusion) still work: the set's prop textures are produced by the same
        generate* routines, which register a COLUMN_OPACITY mask via finalize(); EnvironmentTextureSet.dispose()
        routes through PropRenderer.disposeGeneratedTexture() to prune those masks (order-6), so no leak.
+     * GENERATED PROP SHEETS (generated-prop-art order 1): BEFORE the set is asked, PropRenderer asks the
+       render/propvisual GeneratedPropRegistry - by the char's SPRITE ID (prop_terminal, prop_biopod) or, for a
+       FIXED char, by the char itself (the portal '>'). A registered prop is drawn from its animated prop sheet
+       (body + ungraded glow frames, assets/textures/props/generated/) and has NO Pixmap generator: the set never
+       realizes it, and TilesetGfxBootstrap.expectedGeneratorIds() leaves it out of the generator/catalog
+       cross-check. Palettes, symbols and allocation are unchanged. See docs/sprite-art-creation-guide.txt 14.
 
    LEVEL CATEGORY PREDICATES (isWall / isColumn / isPropSolid / isPropDecal / isPropOccluder):
      * FIXED vs FLEXIBLE, still STATIC and PALETTE-FREE. A symbol's CATEGORY is symbol-intrinsic — a flexible
