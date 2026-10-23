@@ -25,8 +25,7 @@ IN
   - props.py in .claude/skills/enemy-art: the prop canvas, the smooth bake, the neon bloom, the frame grid
     packer, the manifest, previews (contact sheet + one GIF per prop).
   - New EMISSIVE kit materials appended last: phosphor (CRT green), neon_cyan, rad (radioactive lime),
-    neon_violet, and the translucent glass_cyan (glass over neon_cyan light). Enemies + walls regenerate
-    byte-identical (checked with cmp).
+    neon_violet. Enemies + walls regenerate byte-identical (checked with cmp).
   - Three prop sheets: terminal, bio_pod, portal (assets/textures/props/generated/).
   - render/propvisual (new subpackage, documented in CLAUDE.md): GeneratedPropSheet (one loaded sheet,
     Disposable), GeneratedPropRegistry (the register() rows), GeneratedPropSheets (the per-level owner).

@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "id": "portal",
+  "frameWidth": 224,
+  "frameHeight": 256,
+  "frameCount": 16,
+  "columns": 9,
+  "frameSeconds": 0.0833
+}

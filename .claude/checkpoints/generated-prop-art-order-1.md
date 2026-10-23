@@ -38,7 +38,7 @@ same commit. Never `git add -A`.
 ## STEP LEDGER
 
 - [x] **CP0** — this file + the idea files committed and pushed.
-- [ ] **CP1** — neon materials in kit.py, props.py, three sheets in assets/textures/props/generated/, previews sent.
+- [x] **CP1** — neon materials in kit.py, props.py, three sheets in assets/textures/props/generated/, previews sent.
       DONE WHEN: `python3 props.py <dir>` writes the 9 files twice cmp-identical; bestiary/effects/walls regenerate identical.
 - [ ] **CP2** — render/propvisual + PropRenderer sheet path + constants; old generators deleted.
       DONE WHEN: mirror build green; game draws the three props from their sheets.
@@ -47,3 +47,11 @@ same commit. Never `git add -A`.
 - [ ] **CP5** — owner approval written into DECISIONS; STATUS IMPLEMENTED.
 
 ## NOTES CARRIED FORWARD
+
+- CP1: `python3 props.py` writes the 9 files; two bakes cmp-identical. Kit change = 4 emissive inks appended
+  last (phosphor, neon_cyan, rad, neon_violet). Enemy regen check: the committed enemy atlases ALREADY differ
+  from what the HEAD kit bakes (pre-existing drift, likely the smooth-bake commit 62991f6); the HEAD kit and
+  the new kit bake identical files (crawler checked byte-for-byte), so this order changes nothing there.
+  Do NOT re-ship enemy atlases as part of this order.
+- Big glowing areas (fluid, vortex, screen text) are painted with numpy from the ink ramps; kit translucent
+  materials washed out to pale at that size (tried glass_cyan, removed).

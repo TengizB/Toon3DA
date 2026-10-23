@@ -123,6 +123,18 @@ MATERIALS = {
     # REDEYE: the tall gas-masked Ghoul's eyes behind its single visor (owner request, 2026-10-22 - the one place an
     # undead burns red instead of soul-white: a deliberate, owner-approved exception to G5 / N4)
     "redeye":     dict(ramp=ramp("3a0806", "6e0f0b", "a8180f", "e0301c", "ff7356", "ffd2c4"), emissive=True),
+    # NEON PROP INKS (generated-prop-art order 1, props.py; guide section 14). Appended LAST, like every addition
+    # before them, so each earlier material keeps its index and every enemy and wall regenerates byte-identical.
+    # The owner's exception to V5 for environment props (generated-prop-art.txt D1): bright accents on the
+    # emissive parts of a prop only - never on an enemy, never the keycard inks.
+    # phosphor: a CRT terminal's green text
+    "phosphor":    dict(ramp=ramp("021a08", "05401a", "0b7a2c", "19c24a", "7dff8c", "e8ffe8"), emissive=True),
+    # neon_cyan: specimen fluid, ring lights, backlit keys - brighter and more saturated than the facility cyan
+    "neon_cyan":   dict(ramp=ramp("003840", "00687a", "00a8c0", "1ae6ff", "8ef6ff", "effeff"), emissive=True),
+    # rad: the radioactive lime of hazard lamps and warning strips
+    "rad":         dict(ramp=ramp("263606", "4a6a0a", "80b014", "b8f020", "e2ff70", "faffdc"), emissive=True),
+    # neon_violet: the exit portal's energy
+    "neon_violet": dict(ramp=ramp("240634", "4a0c66", "8016b0", "b840ff", "e09cff", "fbeaff"), emissive=True),
 }
 
 # The wet sheen's glint colour: near-white with the slightest warmth (never pure white: the hit flash owns it).

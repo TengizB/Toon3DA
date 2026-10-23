@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "id": "bio_pod",
+  "frameWidth": 112,
+  "frameHeight": 256,
+  "frameCount": 24,
+  "columns": 18,
+  "frameSeconds": 0.125
+}
