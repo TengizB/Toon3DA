@@ -33,6 +33,28 @@ public final class LevelGenConstants {
     // Probability that a corridor-room boundary 'l' tile becomes a door ('d').
     // 0.75 = roughly 3 out of 4 room entries get a door; some stay open for flow variety.
     public static final float LEVEL_GEN_DOOR_CHANCE           = 0.75f;
+
+    // --- DOORWAYS AND CORRIDORS (level-generation-overhaul R9-R14) ---
+    // Door clearance zone of a socket: Chebyshev radius around it, plus this many tiles straight out along its
+    // passage axis on both sides. No solid prop or column may stand inside it (R18a, R26, R27).
+    public static final int   LEVEL_GEN_DOOR_CLEARANCE_RADIUS      = 1;
+    public static final int   LEVEL_GEN_DOOR_AXIS_CLEARANCE        = 2;
+    // A socket is >= this many tiles from either corner of its side, so both flank tiles are straight shell (R10).
+    public static final int   LEVEL_GEN_SOCKET_CORNER_MIN_DISTANCE = 2;
+    // Sockets on the same side of a room are at least this many tiles apart (R10).
+    public static final int   LEVEL_GEN_SOCKET_MIN_SPACING         = 3;
+    public static final int   LEVEL_GEN_MAX_SOCKETS_PER_ROOM       = 3;
+    public static final int   LEVEL_GEN_ENTRANCE_MAX_SOCKETS       = 2;
+    // A SPECIAL room's sockets always get a door leaf; every other socket rolls LEVEL_GEN_DOOR_CHANCE (R14).
+    public static final float LEVEL_GEN_SPECIAL_DOOR_CHANCE        = 1.0f;
+    // CorridorRouter step costs (R12): a tile beside another room's shell, an existing corridor tile (merging),
+    // and the per-tile tie-break jitter that makes the route seeded without biasing it.
+    public static final float LEVEL_GEN_ROUTE_SHELL_HUG_COST       = 4f;
+    public static final float LEVEL_GEN_ROUTE_MERGE_COST           = 0.5f;
+    public static final float LEVEL_GEN_ROUTE_BASE_COST            = 1f;
+    public static final float LEVEL_GEN_ROUTE_TIE_JITTER           = 0.001f;
+    // A 3-wide hall narrows to 1 wide for this many tiles before a socket (R13).
+    public static final int   LEVEL_GEN_WIDE_HALL_TAPER_TILES      = 2;
     // Probability that a wall tile adjacent to an explosive barrel ('E') becomes a hazard wall ('h').
     public static final float LEVEL_GEN_HAZARD_WALL_CHANCE    = 0.45f;
     // Maximum Manhattan distance (room-center to room-center) for optional loop corridors.

@@ -115,6 +115,11 @@ public final class SupplySlotSurvey {
         return inBounds(tileColumn, tileRow) && exitPath[tileRow][tileColumn];
     }
 
+    /** Whether the generator reserves this tile as a lane band or socket clearance (R26). */
+    public boolean isKeepClear(int tileColumn, int tileRow) {
+        return provider != null && inBounds(tileColumn, tileRow) && provider.isKeepClearTile(tileColumn, tileRow);
+    }
+
     /** The generator's room id for a tile ({@link SupplySlotProvider#CONNECTOR_REGION} without a provider). */
     public int regionAt(int tileColumn, int tileRow) {
         if (provider == null || !inBounds(tileColumn, tileRow)) return SupplySlotProvider.CONNECTOR_REGION;

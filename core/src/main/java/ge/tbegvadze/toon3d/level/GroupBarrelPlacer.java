@@ -24,7 +24,8 @@ import java.util.Map;
  * comes from the floor seed. Hand-made levels never come through here.
  *
  * <p>Exclusions: the start room, any tile closer to the start than
- * {@link BalanceConfig#FIRST_CONTACT_MIN_WALK_TILES} walking steps, a tile beside a door, and any tile whose
+ * {@link BalanceConfig#FIRST_CONTACT_MIN_WALK_TILES} walking steps, a tile beside a door, a tile in a door
+ * clearance zone or a room's lane band (level-generation-overhaul R26; a flush tile is preferred), and any tile whose
  * (solid) barrel would cut a reachable tile off — checked by re-surveying the grid, with and without keycards.
  */
 final class GroupBarrelPlacer {
@@ -162,6 +163,9 @@ final class GroupBarrelPlacer {
                 if (reservedTiles.contains(tileKey(tileColumn, tileRow))) continue;
                 if (survey.regionAt(tileColumn, tileRow) != room.regionId) continue;
                 if (SupplySlotSurvey.isAdjacentToDoor(grid, tileColumn, tileRow)) continue;
+                // R26 (level-generation-overhaul): never in a door clearance zone or a room's lane band.
+                if (DoorwayRules.isInDoorClearance(grid, tileColumn, tileRow)) continue;
+                if (survey.isKeepClear(tileColumn, tileRow)) continue;
                 int walk = survey.walkDistanceWithKeycards(tileColumn, tileRow);
                 if (walk == SupplySlotSurvey.UNREACHABLE || walk < BalanceConfig.FIRST_CONTACT_MIN_WALK_TILES) continue;
                 // The same two guards placeInRoom applies, so a room whose every tile would plug a passage is
@@ -177,6 +181,12 @@ final class GroupBarrelPlacer {
     private static int placeInRoom(char[][] grid, SupplySlotSurvey survey, GroupRoom room, int wanted, Random random) {
         List<int[]> candidates = new ArrayList<>(room.candidates);
         Collections.shuffle(candidates, random);
+        // R26: a barrel prefers to stand against a wall when a flush tile exists in its radius (stable, so the
+        // shuffled order — and every draw — is kept within each group).
+        List<int[]> ordered = new ArrayList<>();
+        for (int[] candidate : candidates) if (isFlush(grid, candidate[0], candidate[1])) ordered.add(candidate);
+        for (int[] candidate : candidates) if (!isFlush(grid, candidate[0], candidate[1])) ordered.add(candidate);
+        candidates = ordered;
         int placed = 0;
         for (int[] candidate : candidates) {
             if (placed >= wanted) break;
@@ -234,6 +244,18 @@ final class GroupBarrelPlacer {
                 && (survey.exitColumn < 0 || afterWithKeycards[survey.exitRow][survey.exitColumn]);
         grid[tileRow][tileColumn] = previous;
         return keeps;
+    }
+
+    /** A tile with a wall as an orthogonal neighbour. */
+    private static boolean isFlush(char[][] grid, int tileColumn, int tileRow) {
+        for (int direction = 0; direction < 4; direction++) {
+            int neighborColumn = tileColumn + STEP_COLUMNS[direction];
+            int neighborRow    = tileRow    + STEP_ROWS[direction];
+            if (neighborRow < 0 || neighborRow >= grid.length
+                    || neighborColumn < 0 || neighborColumn >= grid[0].length) return true;
+            if (Level.isWall(grid[neighborRow][neighborColumn])) return true;
+        }
+        return false;
     }
 
     private static final int[] STEP_COLUMNS = { 0, 0, 1, -1 };

@@ -161,8 +161,11 @@ class LevelGeneratorSnapshotTest {
     // placement (P4-P9) from the floor's region set on its own seeded stream. The walkable mask and every
     // fixed symbol are unchanged for every seed (R1, proven separately over 200 seeds x every generator x
     // depths 1-25 — see .claude/checkpoints/generated-wall-art-order-2.md). Stable across two JVM runs.
+    // RE-BASELINE (level-generation-overhaul CP3, 2026-10-23): GroupBarrelPlacer (R26) now refuses tiles in a
+    // door clearance zone and prefers flush tiles, so group barrels move on the seeds that had one near a door.
+    // No layout draw changed. The layout itself is rebuilt (and re-baselined again) at CP6. A deliberate change.
     private static final String EXPECTED_DIGEST =
-            "f00a581da9550a16febf055bb6d2916b308482f81d20c15de9a12f4d2591828e";
+            "4ad2b93d128716cdb63e60f4016cb5dc566bb4e7d179f24a751905b537570ab1";
 
     @Test
     void generatedGridsAreByteForByteStableAcrossSeedsAndDepths() {

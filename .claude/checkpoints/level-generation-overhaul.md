@@ -53,7 +53,7 @@ into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
 - [x] **CP2** — DONE WHEN: `level/LevelQualityAudit` runs headless on the UNCHANGED generators, writes
       `core/build/reports/level-audit/summary.txt`; BEFORE figures (I1-I16) recorded below; run command in the agent
       file; build + test green.
-- [ ] **CP3** — DONE WHEN: DoorSocket, DoorwayRules (validate + isInDoorClearance), CorridorRouter exist (headless);
+- [x] **CP3** — DONE WHEN: DoorSocket, DoorwayRules (validate + isInDoorClearance), CorridorRouter exist (headless);
       World.tryMakeMachineCandidate (R27) and GroupBarrelPlacer (R26) use clearance / lane rule; doorway/router
       constants in LevelGenConstants; generators not wired; test green (R-HAZARD incl.).
 - [ ] **CP4** — DONE WHEN: PropAnchor, PropKit/PropKitRow, RoomSizeWindow, LayoutRoom, RoomDresser exist; every
@@ -106,3 +106,21 @@ into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
   CAVERN     I2 68115 (chambers unwalled) | I3 9020 | I7 1292 | I8 5515 | I9 5515 / 410 floors no T | I10 0.27/floor,
              1178 floors <2 | I11 only medical_bay 197 + armory 124 | I14 2760 | I15 0.00 doors
   BOSS 1 door/floor clean; MED_BAY 2 non-flush T/floor; EVENT 1, GATE 1 non-flush T/floor; START clean.
+- CP3: `LayoutRoom` was pulled forward from CP4 (validate needs rooms): SHELL bounds, `role`
+  (`LevelLayoutReport.Role`), `blueprintId`, `sockets()`, `primarySocket()`, `sideOf(c,r)` (null on corners).
+  `DoorSocket(c, r, Side)`: Side NORTH/SOUTH/EAST/WEST carries the OUTWARD step; outer/inner tile helpers; Leaf DOOR/OPEN.
+  `DoorwayRules`: `canPlaceSocket(room, c, r, gridW, gridH)` (R10 incl. per-room cap, entrance 2) ->
+  `openSocket(grid, room, c, r)` carves 'l' and registers -> `hangDoor(grid, socket)`; `passesFlankRule`;
+  `validate(grid, rooms)` -> Validation{flankFailures, demotions, shellGaps} (demotes failing doors to 'l');
+  `isInDoorClearance(grid,c,r)` doors only / `(grid, rooms, c, r)` + sockets / `(Level, c, r)` + reported sockets;
+  `markClearance(mask, socket)`; `roomFootprintMask` / `nearRoomMask(rooms,w,h,dist)` for the router.
+  `CorridorRouter.route(grid, roomMask, hugMask, fromC, fromR, toC, toR, routeSeed)` -> path incl. endpoints (empty =
+  none; endpoints may be inside roomMask, nothing else); jitter is hashed from routeSeed (no Random draw).
+  `CorridorRouter.widen(grid, path, nearRoomMask(dist 1), LEVEL_GEN_WIDE_HALL_TAPER_TILES)` -> spine tiles.
+  The hug mask = tiles orthogonally next to a footprint: build as nearRoomMask(dist 1) minus roomFootprintMask
+  (Chebyshev; acceptable — diagonal hug costs too).
+  `SupplySlotProvider.isKeepClearTile(c,r)` (default false) is the R26 seam: generators with a lane model override it
+  (lane bands + socket clearance); `SupplySlotSurvey.isKeepClear` reads it; GroupBarrelPlacer rejects grid-door
+  clearance + keep-clear tiles and orders flush candidates first (after its unchanged shuffle).
+- CP3 DIVERGENCE: LevelGeneratorSnapshotTest re-baselined HERE too (barrels moved off door-adjacent tiles), dated
+  note in the test; CP6 re-baselines again for the layout. R-HAZARD stayed green -> barrel radius NOT touched.
