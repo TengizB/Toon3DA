@@ -4,6 +4,7 @@ import ge.tbegvadze.toon3d.util.RenderConstants;
 
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
@@ -14,7 +15,8 @@ import java.util.Set;
  * <p>Two kinds of row: an environment SPRITE ID (a tileset prop - its symbol is chosen per level by the palette,
  * so the binding follows the sprite, never the symbol) and a FIXED prop CHAR (a gameplay prop with a permanent
  * picture, like the exit portal). Migrating a prop is ONE row in {@link #bootstrap()} - never a switch - plus its
- * sheet files from {@code props.py}. A migrated prop has no other picture (PS6).
+ * sheet files from {@code props.py}. A prop that hangs from the ceiling registers with
+ * {@link #registerCeilingSprite} instead, which only adds the ceiling flag. A migrated prop has no other picture (PS6).
  *
  * <p>Headless (no LibGDX), static, idempotent bootstrap - the same idiom as the other render registries.
  */
@@ -23,6 +25,7 @@ public final class GeneratedPropRegistry {
     private static final Map<String, String>    SHEET_BY_SPRITE_ID = new HashMap<>();
     private static final Map<Character, String> SHEET_BY_FIXED_CHAR = new HashMap<>();
     private static final Set<String>            SHEET_IDS = new LinkedHashSet<>();
+    private static final Set<String>            CEILING_SHEET_IDS = new HashSet<>();
     private static boolean bootstrapped;
 
     private GeneratedPropRegistry() {
@@ -44,6 +47,8 @@ public final class GeneratedPropRegistry {
         registerSprite("prop_radioactive_barrel", "radioactive_barrel");
         registerFixedChar(RenderConstants.HAZARD_FIRE_CHAR,  "fire");
         registerFixedChar(RenderConstants.HAZARD_TOXIC_CHAR, "toxic");
+        // generated-prop-art order 5 - the first prop that HANGS from the ceiling
+        registerCeilingSprite("prop_camera", "camera");
         bootstrapped = true;
     }
 
@@ -52,6 +57,15 @@ public final class GeneratedPropRegistry {
             throw new IllegalStateException("prop sprite registered twice: " + spriteId);
         }
         SHEET_IDS.add(sheetId);
+    }
+
+    /**
+     * A CEILING-MOUNTED tileset prop (order 5): its sheet is full height with the object painted at the top and
+     * transparent below, so the prop renderer draws it without a floor contact shadow.
+     */
+    private static void registerCeilingSprite(String spriteId, String sheetId) {
+        registerSprite(spriteId, sheetId);
+        CEILING_SHEET_IDS.add(sheetId);
     }
 
     private static void registerFixedChar(char propChar, String sheetId) {
@@ -76,6 +90,12 @@ public final class GeneratedPropRegistry {
     /** True when the environment sprite is drawn from a generated sheet (and so needs no Pixmap generator). */
     public static boolean isGeneratedSprite(String spriteId) {
         return sheetForSprite(spriteId) != null;
+    }
+
+    /** True when the sheet hangs from the ceiling (no floor contact shadow). */
+    public static boolean isCeilingMounted(String sheetId) {
+        bootstrap();
+        return CEILING_SHEET_IDS.contains(sheetId);
     }
 
     /** Every registered sheet id, in registration order. */

@@ -325,6 +325,15 @@ public class PropRenderer implements Renderable, Disposable {
     }
 
     /**
+     * The contact-shadow width fraction for a prop: zero for a CEILING-MOUNTED sheet (generated-prop-art order 5,
+     * R2 - a hanging prop casts no floor shadow), else the tile's own fraction. Used by both prop passes.
+     */
+    private static float contactShadowFraction(char propChar, GeneratedPropSheet sheet) {
+        if (sheet != null && sheet.isCeilingMounted()) return 0f;
+        return contactShadowFractionForTile(propChar);
+    }
+
+    /**
      * Draws one billboard's contact shadow BEFORE its sprite (same per-column wall z-test). The sprite
      * loops afterwards re-draw nearer recorded slices via the occluder buffer; shadows themselves are
      * never recorded as occluders. Leaves the batch colour set to the shadow colour - callers set
@@ -637,7 +646,7 @@ public class PropRenderer implements Renderable, Disposable {
             float spriteBlue  = clampUnit(shade * bodyTintBlue) * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
             drawContactShadow(screenCenterColumn,
                     WALL_PROJECTION_SCREEN_HEIGHT / 2f - fullWallLineHeight / 2f, spriteScreenWidth,
-                    contactShadowFractionForTile(prop.propChar),
+                    contactShadowFraction(prop.propChar, sheet),
                     contactShadowAlphaScaleForTile(prop.propChar), depth, projectionColumnCount, columnWidth);
             batch.setColor(spriteRed, spriteGreen, spriteBlue, 1f);
 
@@ -1038,7 +1047,7 @@ public class PropRenderer implements Renderable, Disposable {
             float spriteBlue  = clampUnit(shade * bodyTintBlue) * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
             drawContactShadow(screenCenterColumn,
                     WALL_PROJECTION_SCREEN_HEIGHT / 2f - fullWallLineHeight / 2f, spriteScreenWidth,
-                    contactShadowFractionForTile(prop.propChar),
+                    contactShadowFraction(prop.propChar, sheet),
                     contactShadowAlphaScaleForTile(prop.propChar), depth, projectionColumnCount, columnWidth);
             batch.setColor(spriteRed, spriteGreen, spriteBlue, 1f);
 
@@ -1143,7 +1152,6 @@ public class PropRenderer implements Renderable, Disposable {
         // Solid props (registration order matches TilesetRegistries.registerSolidProps).
         registry.register("prop_locker",             PropRenderer::generateLockerTexture);
         registry.register("prop_crate",              PropRenderer::generateCrateTexture);
-        registry.register("prop_camera",             PropRenderer::generateCameraTexture);
         registry.register("prop_weapon_rack",        PropRenderer::generateWeaponRackTexture);
         registry.register("prop_vendor",             PropRenderer::generateVendorTexture);
         registry.register("prop_specimen_tank",      PropRenderer::generateSpecimenTankTexture);
@@ -2106,37 +2114,6 @@ public class PropRenderer implements Renderable, Disposable {
         hash = (hash ^ (hash >>> 13)) * 1274126177;
         hash = hash ^ (hash >>> 16);
         return ((int)(hash & 0xFFFF)) / 65535f;
-    }
-
-    private static Texture generateCameraTexture() {
-        Pixmap pixmap = new Pixmap(64, 64, Pixmap.Format.RGBA8888);
-        pixmap.setColor(0f, 0f, 0f, 0f);
-        pixmap.fill();
-        // Mounting post
-        pixmap.setColor(0.14f, 0.15f, 0.17f, 1f);
-        pixmap.fillRectangle(29, 40, 6, 22);
-        // Horizontal bracket arm
-        pixmap.setColor(0.22f, 0.23f, 0.26f, 1f);
-        pixmap.fillRectangle(20, 34, 24, 6);
-        // Camera housing body
-        pixmap.setColor(0.18f, 0.19f, 0.22f, 1f);
-        pixmap.fillRectangle(18, 16, 28, 19);
-        // Housing trim border
-        pixmap.setColor(0.30f, 0.32f, 0.36f, 1f);
-        pixmap.fillRectangle(18, 16, 28, 1);
-        pixmap.fillRectangle(18, 34, 28, 1);
-        pixmap.fillRectangle(18, 16, 1, 19);
-        pixmap.fillRectangle(45, 16, 1, 19);
-        // Lens disc (black)
-        pixmap.setColor(0.03f, 0.03f, 0.04f, 1f);
-        pixmap.fillCircle(31, 25, 5);
-        // Lens specular glint
-        pixmap.setColor(0.40f, 0.45f, 0.50f, 1f);
-        pixmap.drawPixel(28, 22);
-        // Red status LED
-        pixmap.setColor(0.95f, 0.20f, 0.18f, 1f);
-        pixmap.fillRectangle(39, 18, 3, 3);
-        return finalize(pixmap);
     }
 
     // Draws a single rifle standing vertically (barrel up) centred on slotColumn,
